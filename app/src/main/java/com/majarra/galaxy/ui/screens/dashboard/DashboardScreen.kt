@@ -38,7 +38,7 @@ import com.majarra.galaxy.domain.usecase.CheckAlertsUseCase
 import com.majarra.galaxy.domain.usecase.MarkAlertReadUseCase
 import com.majarra.galaxy.domain.usecase.MarkAllAlertsReadUseCase
 import com.majarra.galaxy.ui.components.GalaxyCard
-import com.majarra.galaxy.ui.components.GalaxyColors
+import com.majarra.galaxy.ui.theme.GalaxyColors
 import com.majarra.galaxy.ui.components.SectionTitle
 import com.majarra.galaxy.ui.components.StatCard
 import com.majarra.galaxy.ui.components.formatDateTime

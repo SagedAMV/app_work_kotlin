@@ -11,12 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -54,7 +55,7 @@ import com.majarra.galaxy.domain.repository.LinkRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.GalaxyCard
-import com.majarra.galaxy.ui.components.GalaxyColors
+import com.majarra.galaxy.ui.theme.GalaxyColors
 import com.majarra.galaxy.ui.components.StatusChip
 import com.majarra.galaxy.ui.theme.DangerRed
 import com.majarra.galaxy.ui.theme.NeonGreen
@@ -240,12 +241,12 @@ fun GalaxyScreen(
             ) {
                 Text("المجرة", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    AssistChip(
+                    FilterChip(
                         selected = !viewModel.is3D,
                         onClick = { viewModel.is3D = false },
                         label = { Text("2D") }
                     )
-                    AssistChip(
+                    FilterChip(
                         selected = viewModel.is3D,
                         onClick = { viewModel.is3D = true },
                         label = { Text("3D") }
@@ -264,7 +265,7 @@ fun GalaxyScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 LinkType.values().forEach { t ->
-                    AssistChip(
+                    FilterChip(
                         selected = t in typeFilter,
                         onClick = { viewModel.toggleType(t) },
                         label = { Text(t.label) }
@@ -279,14 +280,14 @@ fun GalaxyScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 NetworkClass.values().forEach { c ->
-                    AssistChip(
+                    FilterChip(
                         selected = c in classFilter,
                         onClick = { viewModel.toggleClass(c) },
                         label = { Text(c.label) }
                     )
                 }
                 LinkStatus.values().forEach { s ->
-                    AssistChip(
+                    FilterChip(
                         selected = statusFilter == s,
                         onClick = { viewModel.toggleStatus(s) },
                         label = { Text(s.label) }
@@ -481,7 +482,7 @@ private fun AddLinkDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     LinkType.values().forEach { t ->
-                        AssistChip(selected = type == t, onClick = { type = t }, label = { Text(t.label) })
+                        FilterChip(selected = type == t, onClick = { type = t }, label = { Text(t.label) })
                     }
                 }
                 Row(
@@ -489,7 +490,7 @@ private fun AddLinkDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     NetworkClass.values().forEach { c ->
-                        AssistChip(selected = networkClass == c, onClick = { networkClass = c }, label = { Text(c.label) })
+                        FilterChip(selected = networkClass == c, onClick = { networkClass = c }, label = { Text(c.label) })
                     }
                 }
                 Row(
@@ -497,7 +498,7 @@ private fun AddLinkDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     LinkPriority.values().forEach { p ->
-                        AssistChip(selected = priority == p, onClick = { priority = p }, label = { Text(p.label) })
+                        FilterChip(selected = priority == p, onClick = { priority = p }, label = { Text(p.label) })
                     }
                 }
 

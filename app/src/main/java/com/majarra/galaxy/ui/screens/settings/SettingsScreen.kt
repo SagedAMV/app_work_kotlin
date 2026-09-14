@@ -31,7 +31,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.majarra.galaxy.data.repository.SettingsRepository
+import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.usecase.ClearAuditUseCase
 import com.majarra.galaxy.domain.usecase.ObserveAuditUseCase
 import com.majarra.galaxy.security.BackupManager

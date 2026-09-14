@@ -209,8 +209,8 @@ fun LinkCalculatorScreen(
 private fun PairRow(
     label1: String,
     value1: String,
-    onValue1: (String) -> Unit,
-    pair: @Composable () -> Unit
+    pair: (@Composable () -> Unit)? = null,
+    onValue1: (String) -> Unit = {}
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedTextField(
@@ -220,7 +220,9 @@ private fun PairRow(
             singleLine = true,
             modifier = Modifier.weight(1f)
         )
-        androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) { pair() }
+        if (pair != null) {
+            androidx.compose.foundation.layout.Box(modifier = Modifier.weight(1f)) { pair() }
+        }
     }
 }
 

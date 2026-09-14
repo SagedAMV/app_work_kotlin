@@ -31,6 +31,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -233,7 +234,7 @@ fun SiteFormScreen(
             Text("حالة الموقع", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 SiteStatus.values().forEach { s ->
-                    androidx.compose.material3.AssistChip(
+                    androidx.compose.material3.FilterChip(
                         selected = viewModel.status == s,
                         onClick = { viewModel.status = s },
                         label = { Text(s.label) }

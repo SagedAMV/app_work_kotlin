@@ -205,7 +205,7 @@ fun GalaxyCanvas(
                 }
         ) {
             // خلفية نجوم خفيفة تعطي عمقًا بصريًا بدون إثقال الأداء
-            drawStarfield(width, height)
+            drawStarfield(size.width, size.height)
 
             // 1) الروابط تحت العقد
             for (link in links) {

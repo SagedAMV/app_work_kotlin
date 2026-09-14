@@ -17,7 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -248,7 +248,7 @@ fun NeedsScreen(viewModel: NeedsViewModel = hiltViewModel()) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 NeedsTab.values().forEach { t ->
-                    AssistChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
+                    FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                 }
             }
 
@@ -518,7 +518,7 @@ private fun CreateRequirementDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     RequirementType.values().forEach { t ->
-                        AssistChip(selected = type == t, onClick = { type = t }, label = { Text(t.label) })
+                        FilterChip(selected = type == t, onClick = { type = t }, label = { Text(t.label) })
                     }
                 }
 
@@ -534,13 +534,13 @@ private fun CreateRequirementDialog(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    AssistChip(
+                    FilterChip(
                         selected = pickedItem == null,
                         onClick = { pickedItem = null },
                         label = { Text("بند حر") }
                     )
                     inventory.forEach { inv ->
-                        AssistChip(
+                        FilterChip(
                             selected = pickedItem?.id == inv.id,
                             onClick = { pickedItem = inv },
                             label = { Text("${inv.name} (${inv.quantity})") }
@@ -641,7 +641,7 @@ private fun AddInventoryDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     InventoryUnit.values().forEach { u ->
-                        AssistChip(selected = unit == u, onClick = { unit = u }, label = { Text(u.label) })
+                        FilterChip(selected = unit == u, onClick = { unit = u }, label = { Text(u.label) })
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

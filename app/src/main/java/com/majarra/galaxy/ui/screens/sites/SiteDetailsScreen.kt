@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -65,7 +65,7 @@ import com.majarra.galaxy.domain.usecase.DeleteSiteResult
 import com.majarra.galaxy.domain.usecase.DeleteSiteUseCase
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.GalaxyCard
-import com.majarra.galaxy.ui.components.GalaxyColors
+import com.majarra.galaxy.ui.theme.GalaxyColors
 import com.majarra.galaxy.ui.components.StatusChip
 import com.majarra.galaxy.ui.components.formatDateTime
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -232,7 +232,7 @@ fun SiteDetailsScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 DetailsTab.values().forEach { t ->
-                    AssistChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
+                    FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                 }
             }
 
@@ -496,7 +496,7 @@ private fun AddEquipmentDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     EquipmentCategory.values().forEach { c ->
-                        AssistChip(
+                        FilterChip(
                             selected = category == c,
                             onClick = { category = c },
                             label = { Text(c.label) }

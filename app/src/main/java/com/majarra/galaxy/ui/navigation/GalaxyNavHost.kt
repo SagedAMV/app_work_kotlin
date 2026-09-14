@@ -46,7 +46,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.majarra.galaxy.data.repository.SettingsRepository
+import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.security.BiometricAuthHelper
 import com.majarra.galaxy.ui.screens.dashboard.DashboardScreen
 import com.majarra.galaxy.ui.screens.galaxy.GalaxyScreen

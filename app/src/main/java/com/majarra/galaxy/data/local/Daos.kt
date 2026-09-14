@@ -198,6 +198,9 @@ interface TicketDao {
     @Query("SELECT * FROM tickets ORDER BY openedAt DESC")
     fun observeAll(): Flow<List<Ticket>>
 
+    @Query("SELECT * FROM tickets WHERE id = :id")
+    suspend fun getById(id: Long): Ticket?
+
     @Query("SELECT * FROM tickets WHERE siteId = :siteId ORDER BY openedAt DESC")
     fun observeBySite(siteId: Long): Flow<List<Ticket>>
 

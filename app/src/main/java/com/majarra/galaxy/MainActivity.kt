@@ -8,7 +8,7 @@ import com.majarra.galaxy.ui.theme.GalaxyTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.activity.compose.setContent
-import com.majarra.galaxy.data.repository.SettingsRepository
+import com.majarra.galaxy.domain.repository.SettingsRepository
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 

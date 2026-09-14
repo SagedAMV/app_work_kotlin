@@ -63,7 +63,7 @@ class GalaxyApplication : Application(), Configuration.Provider {
         )
     }
 
-    override fun getWorkManagerConfiguration(): Configuration =
+    override val workManagerConfiguration: Configuration =
         Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .setMinimumLoggingLevel(Log.INFO)

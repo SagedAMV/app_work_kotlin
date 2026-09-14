@@ -16,7 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -59,7 +59,7 @@ import com.majarra.galaxy.domain.usecase.SaveWorkOrderUseCase
 import com.majarra.galaxy.domain.usecase.StartTicketUseCase
 import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.ui.components.GalaxyCard
-import com.majarra.galaxy.ui.components.GalaxyColors
+import com.majarra.galaxy.ui.theme.GalaxyColors
 import com.majarra.galaxy.ui.components.StatusChip
 import com.majarra.galaxy.ui.components.formatDateTime
 import com.majarra.galaxy.ui.theme.DangerRed
@@ -200,7 +200,7 @@ fun MaintenanceScreen(viewModel: MaintenanceViewModel = hiltViewModel()) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 MaintTab.values().forEach { t ->
-                    AssistChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
+                    FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                 }
             }
 
@@ -412,7 +412,7 @@ private fun NewTicketDialog(viewModel: MaintenanceViewModel, onDismiss: () -> Un
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     TicketSeverity.values().forEach { s ->
-                        AssistChip(selected = severity == s, onClick = { severity = s }, label = { Text(s.label) })
+                        FilterChip(selected = severity == s, onClick = { severity = s }, label = { Text(s.label) })
                     }
                 }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -500,5 +500,5 @@ private fun NewWorkOrderDialog(viewModel: MaintenanceViewModel, onDismiss: () ->
             }) { Text("إنشاء") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
-    }
+)
 }

@@ -15,7 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AssistChip
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +38,7 @@ import com.majarra.galaxy.domain.model.SiteStatus
 import com.majarra.galaxy.domain.usecase.ObserveSitesUseCase
 import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.ui.components.GalaxyCard
-import com.majarra.galaxy.ui.components.GalaxyColors
+import com.majarra.galaxy.ui.theme.GalaxyColors
 import com.majarra.galaxy.ui.components.StatusChip
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -120,13 +120,13 @@ fun SitesScreen(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                AssistChip(
+                FilterChip(
                     selected = statusFilter == null,
                     onClick = { statusFilter = null },
                     label = { Text("الكل (${sites.size})") }
                 )
                 SiteStatus.values().forEach { s ->
-                    AssistChip(
+                    FilterChip(
                         selected = statusFilter == s,
                         onClick = { statusFilter = if (statusFilter == s) null else s },
                         label = { Text("${s.label} (${sites.count { it.status == s }})") }
