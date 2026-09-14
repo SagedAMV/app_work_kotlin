@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">مجرة</string>
+    <string name="lock_title">التطبيق مقفل</string>
+    <string name="lock_subtitle">استخدم البصمة أو الوجه للمتابعة</string>
+    <string name="lock_button">فتح القفل</string>
+</resources>

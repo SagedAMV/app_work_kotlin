@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- السمة الأصلية: خلفية سوداء عميقة حسب الهوية البصرية في ملف التعليمات -->
+    <style name="Theme.Majarra" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/night_bg</item>
+        <item name="android:statusBarColor">@color/night_bg</item>
+        <item name="android:navigationBarColor">@color/night_bg</item>
+    </style>
+</resources>
