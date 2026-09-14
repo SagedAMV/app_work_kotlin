@@ -114,7 +114,7 @@ class FulfillRequirementUseCaseTest {
         }
 
         val useCase = FulfillRequirementUseCase(requirements, inventory, audit, alerts)
-        return useCase to Triple(inventory, requirements, alerts) to (reqId to invId)
+        return Triple(useCase, Triple(inventory, requirements, alerts), reqId to invId)
     }
 
     @Test
