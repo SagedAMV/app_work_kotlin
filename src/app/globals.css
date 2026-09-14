@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/* 🎨 هوية مجرة البصرية — فضاء عميق + أزرق سماوي + أخضر نيون */
+@theme {
+  --color-abyss: #05080f;
+  --color-panel: #0b1220;
+  --color-panel2: #101a2e;
+  --color-edge: #1d2b45;
+  --color-sky: #56ccf2;
+  --color-neon: #3af08f;
+  --color-danger: #ff5470;
+  --color-warn: #f5b841;
+  --color-ink: #e8eef9;
+  --color-dim: #8e9bb3;
+  --font-cairo: "Cairo", "Tajawal", "Segoe UI", sans-serif;
+}
+
+html {
+  font-family: var(--font-cairo);
+}
+
+body {
+  background-color: var(--color-abyss);
+  color: var(--color-ink);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(86, 204, 242, 0.13), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 110%, rgba(58, 240, 143, 0.06), transparent);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* نجوم خفيفة في الخلفية */
+.starfield {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(232, 238, 249, 0.5) 50%, transparent 51%),
+    radial-gradient(1px 1px at 70% 15%, rgba(232, 238, 249, 0.35) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 45% 70%, rgba(86, 204, 242, 0.4) 50%, transparent 51%),
+    radial-gradient(1px 1px at 85% 60%, rgba(232, 238, 249, 0.3) 50%, transparent 51%),
+    radial-gradient(1px 1px at 10% 85%, rgba(58, 240, 143, 0.3) 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 60% 40%, rgba(232, 238, 249, 0.25) 50%, transparent 51%);
+  animation: twinkle 7s ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+
+/* ــــ أنيميشنات المجرة ــــ */
+@keyframes edge-flow {
+  to { stroke-dashoffset: -24; }
+}
+.edge-active {
+  stroke-dasharray: 8 4;
+  animation: edge-flow 1.2s linear infinite;
+}
+@keyframes edge-blink {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 0.2; }
+}
+.edge-down {
+  stroke-dasharray: 4 6;
+  animation: edge-blink 0.9s ease-in-out infinite;
+}
+@keyframes node-pulse {
+  0% { r: 7; opacity: 0.8; }
+  70% { r: 18; opacity: 0; }
+  100% { r: 18; opacity: 0; }
+}
+.node-pulse {
+  animation: node-pulse 2.2s ease-out infinite;
+}
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.float-y { animation: float-y 4s ease-in-out infinite; }
+
+/* دخول العناصر */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.rise-in { animation: rise-in 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in { animation: fade-in 0.35s ease both; }
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.pop-in { animation: pop-in 0.3s cubic-bezier(0.2, 0.7, 0.3, 1.2) both; }
+
+/* توهج العناصر المهمة */
+.glow-neon { box-shadow: 0 0 22px rgba(58, 240, 143, 0.22); }
+.glow-sky { box-shadow: 0 0 22px rgba(86, 204, 242, 0.2); }
+.glow-danger { box-shadow: 0 0 18px rgba(255, 84, 112, 0.25); }
+
+/* أشرطة الإحصاء */
+@keyframes bar-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.bar-grow {
+  transform-origin: right;
+  animation: bar-grow 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* تمرير مخفي أنيق */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1d2b45; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #2a3d61; }
+
+/* حقول الإدخال الموحدة */
+.field {
+  width: 100%;
+  background: #0b1220;
+  border: 1px solid #1d2b45;
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.8rem;
+  color: #e8eef9;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.field:focus {
+  border-color: #56ccf2;
+  box-shadow: 0 0 0 3px rgba(86, 204, 242, 0.15);
+}
+.field::placeholder { color: #55617a; }
+select.field option { background: #0b1220; }
