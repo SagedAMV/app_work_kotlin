@@ -63,8 +63,16 @@ class GalaxyApplication : Application(), Configuration.Provider {
         )
     }
 
-    override val workManagerConfiguration: Configuration =
-        Configuration.Builder()
+    // ملاحظة حرجة (سبب الكراش عند فتح التطبيق):
+    // كانت هذه الخاصية معرَّفة كـ "val" بمهيّئ مباشر، أي أنها كانت تُنفَّذ
+    // ضمن بانية الكائن (constructor) فور إنشاء GalaxyApplication — أي قبل أن
+    // يقوم Hilt بحقن `workerFactory` (الحقن الفعلي يحدث داخل onCreate()).
+    // هذا يسبب UninitializedPropertyAccessException فورًا عند إنشاء التطبيق
+    // (كراش قبل ظهور أي واجهة مستخدم). الحل: تحويلها إلى خاصية تُحسب عند
+    // الطلب (get) بحيث لا تُقرأ قيمة workerFactory إلا عند أول استدعاء فعلي
+    // لـ WorkManager.getInstance() (أي بعد اكتمال onCreate() وحقن Hilt بالكامل).
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .setMinimumLoggingLevel(Log.INFO)
             .build()
