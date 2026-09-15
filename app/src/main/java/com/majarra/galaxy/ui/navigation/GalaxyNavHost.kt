@@ -40,9 +40,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -140,6 +140,9 @@ fun GalaxyRoot(
 private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) {
     var pin by rememberSaveable { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    // تُقرأ النصوص هنا في سياق التركيب؛ لا يمكن استدعاء stringResource
+    // داخل لامدا النقر لأنها دالة @Composable.
+    val wrongPinMessage = stringResource(R.string.lock_wrong_pin)
 
     Box(
         modifier = Modifier
@@ -188,7 +191,7 @@ private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) 
             }
             Button(
                 onClick = {
-                    if (verifyPin(pin)) onUnlock() else error = stringResource(R.string.lock_wrong_pin)
+                    if (verifyPin(pin)) onUnlock() else error = wrongPinMessage
                 },
                 enabled = pin.length >= 4,
                 modifier = Modifier.fillMaxWidth()
