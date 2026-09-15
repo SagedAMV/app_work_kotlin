@@ -145,16 +145,6 @@ fun SiteFormScreen(
     val saving by viewModel.saving.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        if (result.values.any { it }) {
-            fillFromGps()
-        } else {
-            scope.launch { snackbar.showSnackbar("تم رفض إذن الموقع — أدخل الإحداثيات يدويًا") }
-        }
-    }
-
     /**
      * قراءة آخر موقع معروف.
      * - لا نستدعي مزوّد الموقع قبل التحقق من الإذن (كان التحقق مُلتفًّا عليه بـ
@@ -191,6 +181,16 @@ fun SiteFormScreen(
         }
         viewModel.applyLocation(location.latitude, location.longitude)
         scope.launch { snackbar.showSnackbar("تم تحديث الإحداثيات من الجهاز") }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result ->
+        if (result.values.any { it }) {
+            fillFromGps()
+        } else {
+            scope.launch { snackbar.showSnackbar("تم رفض إذن الموقع — أدخل الإحداثيات يدويًا") }
+        }
     }
 
     Scaffold(

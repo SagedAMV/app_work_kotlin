@@ -22,7 +22,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -92,7 +91,7 @@ private enum class MaintTab(val label: String) {
 class MaintenanceViewModel @Inject constructor(
     siteRepo: SiteRepository,
     ticketRepo: TicketRepository,
-    workOrderRepo: WorkOrderRepository,
+    private val workOrderRepo: WorkOrderRepository,
     private val maintenanceRepo: MaintenanceRepository,
     private val equipmentRepo: EquipmentRepository,
     private val openTicket: OpenTicketUseCase,

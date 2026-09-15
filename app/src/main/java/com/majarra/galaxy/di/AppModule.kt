@@ -34,7 +34,9 @@ import com.majarra.galaxy.domain.repository.SiteHistoryRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.TicketRepository
 import com.majarra.galaxy.domain.repository.TransactionRunner
+import com.majarra.galaxy.domain.repository.UriPermissionVault
 import com.majarra.galaxy.domain.repository.WorkOrderRepository
+import com.majarra.galaxy.security.UriPermissionVaultImpl
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -125,4 +127,7 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindTransactionRunner(impl: RoomTransactionRunner): TransactionRunner
+
+    @Binds @Singleton
+    abstract fun bindUriPermissionVault(impl: UriPermissionVaultImpl): UriPermissionVault
 }
