@@ -247,9 +247,8 @@ private fun GalaxyNavHost(
         composable(
             route = Routes.SITE_DETAILS,
             arguments = listOf(navArgument("siteId") { type = NavType.LongType })
-        ) { entry ->
+        ) {
             SiteDetailsScreen(
-                siteId = entry.arguments?.getLong("siteId") ?: 0L,
                 onBack = { navController.popBackStack() },
                 snackbarHostState = snackbarHostState
             )

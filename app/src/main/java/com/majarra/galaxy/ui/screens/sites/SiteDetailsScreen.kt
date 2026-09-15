@@ -265,11 +265,14 @@ class SiteDetailsViewModel @Inject constructor(
     }
 }
 
-/** تفاصيل موقع: بيانات + مواد + سجل صيانة + مرفقات */
+/**
+ * تفاصيل موقع: بيانات + مواد + سجل صيانة + مرفقات.
+ * لا يُمرَّر معرف الموقع كمعامل: الـ ViewModel يقرأه من SavedStateHandle
+ * مباشرة (مرتبط بمدخل التنقل الحالي عبر hiltViewModel).
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SiteDetailsScreen(
-    siteId: Long,
     onBack: () -> Unit,
     snackbarHostState: SnackbarHostState,
     viewModel: SiteDetailsViewModel = hiltViewModel()
