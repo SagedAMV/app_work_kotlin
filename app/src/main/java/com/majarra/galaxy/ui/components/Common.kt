@@ -1,7 +1,6 @@
 package com.majarra.galaxy.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,20 +21,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
+import com.majarra.galaxy.util.DateFormats
 
 /* ============================================================
  * مكونات مشتركة تُستخدم في كل الشاشات للحفاظ على الاتساق.
  * ============================================================ */
 
-/** تنسيق التاريخ والوقت بالعربية */
-fun Long.formatDateTime(): String =
-    SimpleDateFormat("yyyy/MM/dd  HH:mm", Locale("ar")).format(Date(this))
+/**
+ * تنسيق التاريخ والوقت بالعربية.
+ * التفاصيل (المنطقة الزمنية، الأمان بين الخيوط، Locale الصحيح، صيغة المدة)
+ * في DateFormats حتى لا تُنشأ SimpleDateFormat جديدة مع كل عنصر قائمة.
+ */
+fun Long.formatDateTime(): String = DateFormats.dateTime(this)
 
-fun Long.formatDate(): String =
-    SimpleDateFormat("yyyy/MM/dd", Locale("ar")).format(Date(this))
+fun Long.formatDate(): String = DateFormats.date(this)
+
+fun Long.formatTime(): String = DateFormats.time(this)
+
+/** مدة مقروءة (دقائق) لزمن معالجة التذاكر */
+fun Long.formatDurationMinutes(): String = DateFormats.duration(this)
 
 /** بطاقة عامة بخلفية السطح */
 @Composable
@@ -44,13 +48,18 @@ fun GalaxyCard(
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        onClick = onClick ?: {}
-    ) {
-        content()
+    val shape = RoundedCornerShape(16.dp)
+    val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    if (onClick != null) {
+        // بطاقة قابلة للنقر فقط عند وجود فعل حقيقي — كان تمرير onClick فارغًا
+        // يجعل كل بطاقة تستهلك النقرات وتُظهر تأثيرًا وهميًا.
+        Card(modifier = modifier.fillMaxWidth(), shape = shape, colors = colors, onClick = onClick) {
+            content()
+        }
+    } else {
+        Card(modifier = modifier.fillMaxWidth(), shape = shape, colors = colors) {
+            content()
+        }
     }
 }
 
@@ -66,13 +75,8 @@ fun StatusChip(text: String, color: Color) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .padding(0.dp)
-            ) {
-                Surface(shape = RoundedCornerShape(50), color = color, modifier = Modifier.size(8.dp)) {}
-            }
+            // نقطة الحالة: Surface بحجم ثابت مباشرة (بدل Box وسيط بحشو صفري)
+            Surface(shape = RoundedCornerShape(50), color = color, modifier = Modifier.size(8.dp)) {}
             Text(text, style = MaterialTheme.typography.labelSmall, color = color)
         }
     }

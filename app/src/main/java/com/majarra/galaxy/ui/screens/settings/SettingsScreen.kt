@@ -19,13 +19,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -34,9 +35,12 @@ import androidx.lifecycle.viewModelScope
 import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.usecase.ClearAuditUseCase
 import com.majarra.galaxy.domain.usecase.ObserveAuditUseCase
+import com.majarra.galaxy.security.AppRestarter
 import com.majarra.galaxy.security.BackupManager
+import com.majarra.galaxy.security.BackupResult
 import com.majarra.galaxy.security.BiometricAuthHelper
 import com.majarra.galaxy.security.SafeWipe
+import com.majarra.galaxy.util.DateFormats
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
@@ -66,6 +70,10 @@ class SettingsViewModel @Inject constructor(
 
     val message = MutableStateFlow<String?>(null)
 
+    /** يُرفع بعد نجاح الاستيراد أو المسح: Room لا يعيد فتح قاعدة أُغلق كائنها */
+    private val _restartRequired = MutableStateFlow(false)
+    val restartRequired = _restartRequired
+
     fun setDarkMode(enabled: Boolean) = viewModelScope.launch { settings.setDarkMode(enabled) }
 
     fun setBiometricLock(activity: FragmentActivity, enabled: Boolean) {
@@ -78,25 +86,41 @@ class SettingsViewModel @Inject constructor(
 
     fun exportBackup(uri: android.net.Uri) {
         viewModelScope.launch {
-            val ok = backup.exportBackup(uri)
-            message.value = if (ok) "تم تصدير النسخة الاحتياطية بنجاح" else "فشل تصدير النسخة الاحتياطية"
+            message.value = when (val result = backup.exportBackup(uri)) {
+                is BackupResult.Exported -> "تم تصدير النسخة الاحتياطية بنجاح"
+                is BackupResult.Failure -> result.reason
+                is BackupResult.Imported -> "تم التصدير"
+            }
         }
     }
 
     fun importBackup(uri: android.net.Uri) {
         viewModelScope.launch {
-            val ok = backup.importBackup(uri)
-            message.value = if (ok) "تم الاستيراد — أعد تشغيل التطبيق لتطبيق البيانات" else "فشل الاستيراد"
+            when (val result = backup.importBackup(uri)) {
+                is BackupResult.Imported -> {
+                    message.value = "تم استيراد النسخة الاحتياطية. أعد تشغيل التطبيق لتطبيق البيانات."
+                    _restartRequired.value = true
+                }
+                is BackupResult.Failure -> message.value = result.reason
+                is BackupResult.Exported -> message.value = "تم الاستيراد"
+            }
         }
     }
 
     fun wipeAll(onDone: () -> Unit) {
         viewModelScope.launch {
-            val ok = wipe.wipeAll()
-            message.value = if (ok) "تم المسح الكامل — أعد تشغيل التطبيق" else "فشل المسح"
-            if (ok) onDone()
+            when (val result = wipe.wipeAll()) {
+                is BackupResult.Failure -> message.value = result.reason
+                else -> {
+                    message.value = "تم المسح الكامل لكل البيانات والتفضيلات. أعد تشغيل التطبيق."
+                    _restartRequired.value = true
+                    onDone()
+                }
+            }
         }
     }
+
+    fun restartApp(context: android.content.Context) = AppRestarter.restart(context)
 
     fun clearAuditLog() = viewModelScope.launch { clearAudit() }
 
@@ -114,10 +138,12 @@ fun SettingsScreen(
     activity: FragmentActivity,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
-    val prefs by viewModel.prefs.collectAsState()
-    val auditLogs by viewModel.auditLogs.collectAsState()
-    val message by viewModel.message.collectAsState()
+    val prefs by viewModel.prefs.collectAsStateWithLifecycle()
+    val auditLogs by viewModel.auditLogs.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val restartRequired by viewModel.restartRequired.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var wipeStep by remember { mutableStateOf(0) } // 0 لا، 1 تحذير، 2 كتابة كلمة حذف، 3 نهائي
     var wipeWord by remember { mutableStateOf("") }
@@ -197,7 +223,12 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = { exportLauncher.launch("majarra-backup.db") }, modifier = Modifier.weight(1f)) {
+                    Button(
+                        onClick = {
+                            exportLauncher.launch("majarra-backup-${DateFormats.backupStamp()}.db")
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text("تصدير")
                     }
                     OutlinedButton(
@@ -268,7 +299,16 @@ fun SettingsScreen(
             onDismissRequest = { viewModel.dismissMessage() },
             text = { Text(msg) },
             confirmButton = {
-                TextButton(onClick = { viewModel.dismissMessage() }) { Text("حسنًا") }
+                if (restartRequired) {
+                    Button(onClick = { viewModel.restartApp(context) }) { Text("إعادة التشغيل الآن") }
+                } else {
+                    TextButton(onClick = { viewModel.dismissMessage() }) { Text("حسنًا") }
+                }
+            },
+            dismissButton = {
+                if (restartRequired) {
+                    TextButton(onClick = { viewModel.dismissMessage() }) { Text("لاحقًا") }
+                }
             }
         )
     }

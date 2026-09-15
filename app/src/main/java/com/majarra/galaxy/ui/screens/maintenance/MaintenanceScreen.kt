@@ -4,6 +4,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,7 +20,9 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenu
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -31,24 +34,28 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.majarra.galaxy.data.local.Equipment
 import com.majarra.galaxy.data.local.MaintenanceSchedule
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.Ticket
 import com.majarra.galaxy.data.local.WorkOrder
 import com.majarra.galaxy.domain.model.TicketSeverity
 import com.majarra.galaxy.domain.model.TicketStatus
+import com.majarra.galaxy.domain.model.MaintenanceType
 import com.majarra.galaxy.domain.model.WorkOrderStatus
 import com.majarra.galaxy.domain.repository.AuditRepository
+import com.majarra.galaxy.domain.repository.EquipmentRepository
 import com.majarra.galaxy.domain.repository.MaintenanceRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.TicketRepository
@@ -62,10 +69,13 @@ import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.theme.GalaxyColors
 import com.majarra.galaxy.ui.components.StatusChip
 import com.majarra.galaxy.ui.components.formatDateTime
+import com.majarra.galaxy.ui.components.formatDurationMinutes
+import com.majarra.galaxy.util.daysFromNow
 import com.majarra.galaxy.ui.theme.DangerRed
 import com.majarra.galaxy.ui.theme.NeonGreen
 import com.majarra.galaxy.ui.theme.WarnAmber
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -83,12 +93,12 @@ class MaintenanceViewModel @Inject constructor(
     siteRepo: SiteRepository,
     ticketRepo: TicketRepository,
     workOrderRepo: WorkOrderRepository,
-    maintenanceRepo: MaintenanceRepository,
+    private val maintenanceRepo: MaintenanceRepository,
+    private val equipmentRepo: EquipmentRepository,
     private val openTicket: OpenTicketUseCase,
     private val startTicket: StartTicketUseCase,
     private val closeTicket: CloseTicketUseCase,
     private val saveWorkOrder: SaveWorkOrderUseCase,
-    private val maintenanceRepository: MaintenanceRepository,
     private val auditRepo: AuditRepository
 ) : ViewModel() {
 
@@ -102,6 +112,66 @@ class MaintenanceViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun siteName(id: Long): String = sites.value.find { it.id == id }?.name ?: "موقع $id"
+
+    /** معدات الموقع المختار لجدولة الصيانة الوقائية */
+    private val _equipment = MutableStateFlow<List<Equipment>>(emptyList())
+    val equipment: StateFlow<List<Equipment>> = _equipment
+
+    fun loadEquipment(siteId: Long) {
+        viewModelScope.launch {
+            _equipment.value = if (siteId > 0) equipmentRepo.getBySite(siteId) else emptyList()
+        }
+    }
+
+    /** جدولة صيانة وقائية — كان مسار الإضافة في المستودع غير مستخدم إطلاقًا */
+    fun addSchedule(
+        siteId: Long,
+        equipmentId: Long,
+        type: MaintenanceType,
+        intervalDays: Int,
+        onDone: (String?) -> Unit
+    ) {
+        if (siteId <= 0) {
+            onDone("اختر موقعًا")
+            return
+        }
+        if (equipmentId <= 0) {
+            onDone("اختر معدة من الموقع")
+            return
+        }
+        if (intervalDays !in 1..MAX_INTERVAL_DAYS) {
+            onDone("الفاصل الزمني يجب أن يكون بين 1 و $MAX_INTERVAL_DAYS يومًا")
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val id = maintenanceRepo.insert(
+                MaintenanceSchedule(
+                    siteId = siteId,
+                    equipmentId = equipmentId,
+                    type = type,
+                    intervalDays = intervalDays,
+                    lastDone = now,
+                    nextDue = now + intervalDays * DAY_MS
+                )
+            )
+            auditRepo.log("CREATE", "MaintenanceSchedule", id, "كل $intervalDays يومًا — ${type.label}")
+            onDone(null)
+        }
+    }
+
+    /** حذف أمر شغل (يُستخدم مسار الحذف في المستودع) */
+    fun deleteWorkOrder(order: WorkOrder) {
+        viewModelScope.launch {
+            workOrderRepo.delete(order)
+            auditRepo.log("DELETE", "WorkOrder", order.id, order.assignedTo)
+        }
+    }
+
+    private companion object {
+        const val DAY_MS = 24L * 3600 * 1000
+        const val MAX_INTERVAL_DAYS = 3650
+    }
 
     fun openNewTicket(siteId: Long, title: String, description: String, severity: TicketSeverity, onDone: (String?) -> Unit) {
         viewModelScope.launch {
@@ -152,8 +222,12 @@ class MaintenanceViewModel @Inject constructor(
     fun markMaintenanceDone(schedule: MaintenanceSchedule) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            val nextDue = now + schedule.intervalDays * 24L * 3600 * 1000
-            maintenanceRepository.update(schedule.copy(lastDone = now, nextDue = nextDue))
+            // الفاصل يجب ألا يكون صفريًا/سالبًا وإلا صار الجدول مستحقًا في نفس اللحظة
+            val interval = schedule.intervalDays.coerceIn(1, MAX_INTERVAL_DAYS)
+            val nextDue = now + interval * DAY_MS
+            maintenanceRepo.update(
+                schedule.copy(intervalDays = interval, lastDone = now, nextDue = nextDue)
+            )
             auditRepo.log("MAINTENANCE", "MaintenanceSchedule", schedule.id, "تمت ${schedule.type.label}")
         }
     }
@@ -218,7 +292,7 @@ fun MaintenanceScreen(viewModel: MaintenanceViewModel = hiltViewModel()) {
 
 @Composable
 private fun TicketsTab(viewModel: MaintenanceViewModel, snackbar: SnackbarHostState) {
-    val tickets by viewModel.tickets.collectAsState()
+    val tickets by viewModel.tickets.collectAsStateWithLifecycle()
     if (tickets.isEmpty()) {
         EmptyState(Icons.Filled.Build, "لا توجد تذاكر", "افتح تذكرة عطل جديدة من الزر العائم")
         return
@@ -244,7 +318,7 @@ private fun TicketsTab(viewModel: MaintenanceViewModel, snackbar: SnackbarHostSt
                     )
                     if (t.status == TicketStatus.CLOSED) {
                         Text(
-                            "زمن المعالجة: ${t.resolutionTimeMinutes ?: 0} دقيقة",
+                            "زمن المعالجة: ${(t.resolutionTimeMinutes ?: 0L).formatDurationMinutes()}",
                             style = MaterialTheme.typography.labelSmall,
                             color = NeonGreen
                         )
@@ -268,7 +342,7 @@ private fun TicketsTab(viewModel: MaintenanceViewModel, snackbar: SnackbarHostSt
 
 @Composable
 private fun WorkOrdersTab(viewModel: MaintenanceViewModel) {
-    val orders by viewModel.workOrders.collectAsState()
+    val orders by viewModel.workOrders.collectAsStateWithLifecycle()
     if (orders.isEmpty()) {
         EmptyState(Icons.Filled.Build, "لا توجد أوامر شغل", "أنشئ أمر شغل جديدًا")
         return
@@ -304,6 +378,27 @@ private fun WorkOrdersTab(viewModel: MaintenanceViewModel) {
                             Text(if (w.status == WorkOrderStatus.SCHEDULED) "بدء التنفيذ" else "إتمام")
                         }
                     }
+                    // حذف أمر الشغل — يمنع تراكم صفوف معلّقة بلا إمكانية إدارة
+                    var confirmDeleteOrder by remember { mutableStateOf(false) }
+                    TextButton(onClick = { confirmDeleteOrder = true }) {
+                        Text("حذف الأمر", color = DangerRed)
+                    }
+                    if (confirmDeleteOrder) {
+                        AlertDialog(
+                            onDismissRequest = { confirmDeleteOrder = false },
+                            title = { Text("حذف أمر الشغل") },
+                            text = { Text("سيتم حذف أمر شغل «${w.assignedTo}». هل أنت متأكد؟") },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    confirmDeleteOrder = false
+                                    viewModel.deleteWorkOrder(w)
+                                }) { Text("حذف", color = DangerRed) }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { confirmDeleteOrder = false }) { Text("إلغاء") }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -312,61 +407,221 @@ private fun WorkOrdersTab(viewModel: MaintenanceViewModel) {
 
 @Composable
 private fun PreventiveTab(viewModel: MaintenanceViewModel) {
-    val schedules by viewModel.schedules.collectAsState()
+    val schedules by viewModel.schedules.collectAsStateWithLifecycle()
     val now = System.currentTimeMillis()
     val weekMs = 7L * 24 * 3600 * 1000
 
-    if (schedules.isEmpty()) {
-        EmptyState(Icons.Filled.Build, "لا جداول صيانة وقائية")
-        return
-    }
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        items(schedules, key = { it.id }) { s ->
-            val overdue = s.nextDue <= now
-            val soon = !overdue && s.nextDue <= now + weekMs
-            GalaxyCard {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("${s.type.label} — ${viewModel.siteName(s.siteId)}", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            when {
-                                overdue -> "متأخرة!"
-                                soon -> "خلال 7 أيام"
-                                else -> "مجدولة"
-                            },
-                            color = when {
-                                overdue -> DangerRed
-                                soon -> WarnAmber
-                                else -> NeonGreen
-                            },
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                    Text(
-                        "الاستحقاق: ${s.nextDue.formatDateTime()} • كل ${s.intervalDays} يومًا",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(onClick = { viewModel.markMaintenanceDone(s) }) {
-                        Text("تمت الصيانة اليوم")
+    var showAdd by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = { showAdd = true }) {
+                Icon(Icons.Filled.Add, contentDescription = "جدولة صيانة")
+            }
+        }
+    ) { padding ->
+        Box(Modifier.padding(padding)) {
+            if (schedules.isEmpty()) {
+                EmptyState(
+                    Icons.Filled.Build,
+                    "لا جداول صيانة وقائية",
+                    "أضف جدولًا من زر الجدولة أسفل الشاشة"
+                )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(schedules, key = { it.id }) { item ->
+                        MaintenanceCard(viewModel, item, now, weekMs)
                     }
                 }
             }
         }
     }
+
+    if (showAdd) {
+        NewScheduleDialog(
+            viewModel = viewModel,
+            onDismiss = { showAdd = false },
+            onDone = { error ->
+                showAdd = false
+                scope.launch { snackbar.showSnackbar(error ?: "تمت جدولة الصيانة الوقائية") }
+            }
+        )
+    }
+}
+
+/** بطاقة جدول صيانة واحد — تُظهر المتأخر والمستحق والمدة المتبقية */
+@Composable
+private fun MaintenanceCard(
+    viewModel: MaintenanceViewModel,
+    schedule: MaintenanceSchedule,
+    now: Long,
+    weekMs: Long
+) {
+    val overdue = schedule.nextDue <= now
+    val soon = !overdue && schedule.nextDue <= now + weekMs
+    val days = schedule.nextDue.daysFromNow(now)
+    GalaxyCard {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "${schedule.type.label} — ${viewModel.siteName(schedule.siteId)}",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    when {
+                        overdue -> "متأخرة!"
+                        soon -> "خلال 7 أيام"
+                        else -> "مجدولة"
+                    },
+                    color = when {
+                        overdue -> DangerRed
+                        soon -> WarnAmber
+                        else -> NeonGreen
+                    },
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+            Text(
+                "الاستحقاق: ${schedule.nextDue.formatDateTime()} • كل ${schedule.intervalDays} يومًا",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                if (overdue) "متأخرة ${-days} يومًا" else "متبقٍ $days يومًا",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(onClick = { viewModel.markMaintenanceDone(schedule) }) {
+                Text("تمت الصيانة اليوم")
+            }
+        }
+    }
+}
+
+/** حوار جدولة صيانة وقائية لمعدة في موقع */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NewScheduleDialog(
+    viewModel: MaintenanceViewModel,
+    onDismiss: () -> Unit,
+    onDone: (String?) -> Unit
+) {
+    val sites by viewModel.sites.collectAsStateWithLifecycle()
+    val equipment by viewModel.equipment.collectAsStateWithLifecycle()
+    var siteId by remember { mutableStateOf(0L) }
+    var equipmentId by remember { mutableStateOf(0L) }
+    var type by remember { mutableStateOf(MaintenanceType.PREVENTIVE) }
+    var intervalText by remember { mutableStateOf("90") }
+    var siteMenu by remember { mutableStateOf(false) }
+    var equipmentMenu by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("جدولة صيانة وقائية") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ExposedDropdownMenuBox(expanded = siteMenu, onExpandedChange = { siteMenu = it }) {
+                    OutlinedTextField(
+                        value = sites.firstOrNull { it.id == siteId }?.name ?: "اختر موقعًا",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("الموقع") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = siteMenu, onDismissRequest = { siteMenu = false }) {
+                        sites.forEach { site ->
+                            DropdownMenuItem(
+                                text = { Text(site.name) },
+                                onClick = {
+                                    siteId = site.id
+                                    equipmentId = 0L
+                                    viewModel.loadEquipment(site.id)
+                                    siteMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                ExposedDropdownMenuBox(expanded = equipmentMenu, onExpandedChange = { equipmentMenu = it }) {
+                    OutlinedTextField(
+                        value = equipment.firstOrNull { it.id == equipmentId }
+                            ?.let { "${it.category.label} ${it.model}" } ?: "اختر معدة",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("المعدة") },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor()
+                    )
+                    ExposedDropdownMenu(expanded = equipmentMenu, onDismissRequest = { equipmentMenu = false }) {
+                        equipment.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text("${item.category.label} — ${item.model}") },
+                                onClick = {
+                                    equipmentId = item.id
+                                    equipmentMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    MaintenanceType.values().forEach { t ->
+                        FilterChip(
+                            selected = type == t,
+                            onClick = { type = t },
+                            label = { Text(t.label) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = intervalText,
+                    onValueChange = { intervalText = it.filter(Char::isDigit).take(4) },
+                    label = { Text("كل كم يومًا؟") },
+                    singleLine = true
+                )
+
+                error?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val interval = intervalText.toIntOrNull()
+                if (interval == null) {
+                    error = "أدخل فاصلًا رقميًا صحيحًا"
+                } else {
+                    viewModel.addSchedule(siteId, equipmentId, type, interval) { message ->
+                        if (message == null) onDone(null) else error = message
+                    }
+                }
+            }) { Text("جدولة") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
 }
 
 /** حوار تذكرة جديدة */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewTicketDialog(viewModel: MaintenanceViewModel, onDismiss: () -> Unit) {
-    val sites by viewModel.sites.collectAsState()
+    val sites by viewModel.sites.collectAsStateWithLifecycle()
     var site by remember { mutableStateOf<Site?>(null) }
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
@@ -438,7 +693,7 @@ private fun NewTicketDialog(viewModel: MaintenanceViewModel, onDismiss: () -> Un
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewWorkOrderDialog(viewModel: MaintenanceViewModel, onDismiss: () -> Unit) {
-    val sites by viewModel.sites.collectAsState()
+    val sites by viewModel.sites.collectAsStateWithLifecycle()
     var site by remember { mutableStateOf<Site?>(null) }
     var assignedTo by remember { mutableStateOf("") }
     var tasks by remember { mutableStateOf("") }

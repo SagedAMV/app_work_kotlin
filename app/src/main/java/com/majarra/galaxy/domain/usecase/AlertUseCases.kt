@@ -16,6 +16,9 @@ import javax.inject.Inject
  * 2) معدة انتهى عمرها الافتراضي (تاريخ التركيب + العمر).
  * 3) مخزون وصل للحد الأدنى.
  * تُستخدم من عامل WorkManager الدوري ومن زر «افحص الآن».
+ *
+ * ملاحظة أداء: الأصناف المنخفضة تُقرأ باستعلام SQL مفهرس
+ * (quantity <= minThreshold) بدل تحميل كل المخزون في الذاكرة.
  */
 class CheckAlertsUseCase @Inject constructor(
     private val maintenanceRepo: MaintenanceRepository,
@@ -28,7 +31,7 @@ class CheckAlertsUseCase @Inject constructor(
         val now = System.currentTimeMillis()
 
         // 1) صيانة تستحق خلال 7 أيام (قاعدة رقم 5)
-        val cutoff = now + 7L * 24 * 3600 * 1000
+        val cutoff = now + DUE_WINDOW_MS
         for (m in maintenanceRepo.getDueBefore(cutoff)) {
             if (!alertRepo.hasUnreadFor(AlertType.MAINTENANCE_DUE.name, m.id)) {
                 alertRepo.insert(
@@ -45,7 +48,7 @@ class CheckAlertsUseCase @Inject constructor(
         // 2) انتهاء عمر المعدات (قاعدة رقم 6)
         for (e in equipmentRepo.getAll()) {
             if (e.lifespanMonths > 0 && e.status != EquipmentStatus.RETIRED) {
-                val endOfLife = e.installDate + e.lifespanMonths * 30L * 24 * 3600 * 1000
+                val endOfLife = e.installDate + e.lifespanMonths * AVG_MONTH_MS
                 if (now >= endOfLife && !alertRepo.hasUnreadFor(AlertType.END_OF_LIFE.name, e.id)) {
                     val name = e.model.ifBlank { e.category.label }
                     alertRepo.insert(
@@ -61,8 +64,8 @@ class CheckAlertsUseCase @Inject constructor(
         }
 
         // 3) نقص المخزون (قاعدة رقم 4)
-        for (i in inventoryRepo.getAll()) {
-            if (i.quantity <= i.minThreshold && !alertRepo.hasUnreadFor(AlertType.LOW_STOCK.name, i.id)) {
+        for (i in inventoryRepo.getBelowThreshold()) {
+            if (!alertRepo.hasUnreadFor(AlertType.LOW_STOCK.name, i.id)) {
                 alertRepo.insert(
                     Alert(
                         type = AlertType.LOW_STOCK,
@@ -75,6 +78,11 @@ class CheckAlertsUseCase @Inject constructor(
         }
 
         return created
+    }
+
+    private companion object {
+        const val DUE_WINDOW_MS = 7L * 24 * 3600 * 1000
+        const val AVG_MONTH_MS = 30L * 24 * 3600 * 1000
     }
 }
 
@@ -98,4 +106,18 @@ class MarkAllAlertsReadUseCase @Inject constructor(
     private val repo: AlertRepository
 ) {
     suspend operator fun invoke() = repo.markAllRead()
+}
+
+/** حذف تنبيه واحد (تجاهل) — يستخدم مسار الحذف في المستودع */
+class DismissAlertUseCase @Inject constructor(
+    private val repo: AlertRepository
+) {
+    suspend operator fun invoke(id: Long) = repo.delete(id)
+}
+
+/** مسح كل التنبيهات */
+class ClearAlertsUseCase @Inject constructor(
+    private val repo: AlertRepository
+) {
+    suspend operator fun invoke() = repo.deleteAll()
 }

@@ -33,10 +33,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +71,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.majarra.galaxy.util.formatDecimals
+
+/** نطاق ترددات معقول لكل أنواع روابط المجرة (ميجاهرتز) */
+private const val MIN_FREQ_MHZ = 1.0
+private const val MAX_FREQ_MHZ = 100_000.0
 
 @HiltViewModel
 class GalaxyViewModel @Inject constructor(
@@ -143,20 +149,42 @@ class GalaxyViewModel @Inject constructor(
         _statusFilter.value = if (_statusFilter.value == s) null else s
     }
 
-    /** إضافة رابط جديد — المسافة تُحسب تلقائيًا من إحداثيات الموقعين */
+    /**
+     * إضافة رابط جديد — المسافة تُحسب تلقائيًا من إحداثيات الموقعين.
+     * كل حالات الرفض تُرجع رسالة واضحة (كان الرفض بـ `return` صامت فيرى
+     * المستخدم أن الزر لا يفعل شيئًا)، ونمنع إنشاء رابط مكرر بين نفس الموقعين،
+     * ونفرض نطاقًا منطقيًا للتردد.
+     */
     fun addLink(
         sourceId: Long,
         targetId: Long,
         type: LinkType,
         networkClass: NetworkClass,
         priority: LinkPriority,
-        frequencyMHz: Double
+        frequencyMHz: Double,
+        onResult: (String?) -> Unit = {}
     ) {
-        val src = sites.value.find { it.id == sourceId } ?: return
-        val dst = sites.value.find { it.id == targetId } ?: return
-        if (sourceId == targetId) return
+        if (sourceId == targetId) {
+            onResult("لا يمكن ربط الموقع بنفسه")
+            return
+        }
+        if (!frequencyMHz.isFinite() || frequencyMHz !in MIN_FREQ_MHZ..MAX_FREQ_MHZ) {
+            onResult("التردد يجب أن يكون بين $MIN_FREQ_MHZ و $MAX_FREQ_MHZ ميجاهرتز")
+            return
+        }
+        val src = sites.value.find { it.id == sourceId }
+        val dst = sites.value.find { it.id == targetId }
+        if (src == null || dst == null) {
+            onResult("تعذّر تحديد الموقعين — أعد تحميل الشاشة")
+            return
+        }
         val distance = RadioMath.haversineKm(src.latitude, src.longitude, dst.latitude, dst.longitude)
+
         viewModelScope.launch {
+            if (linkRepository.countBetween(sourceId, targetId) > 0) {
+                onResult("يوجد رابط مسجَّل بين ${src.name} و${dst.name} بالفعل")
+                return@launch
+            }
             val id = linkRepository.insert(
                 Link(
                     sourceSiteId = sourceId,
@@ -203,17 +231,18 @@ fun GalaxyScreen(
     onOpenCalculator: (Long?) -> Unit,
     viewModel: GalaxyViewModel = hiltViewModel()
 ) {
-    val sites by viewModel.sites.collectAsState()
-    val links by viewModel.visibleLinks.collectAsState()
-    val typeFilter by viewModel.typeFilter.collectAsState()
-    val classFilter by viewModel.classFilter.collectAsState()
-    val statusFilter by viewModel.statusFilter.collectAsState()
-    val selectedSite by viewModel.selectedSite.collectAsState()
-    val selectedLink by viewModel.selectedLink.collectAsState()
+    val sites by viewModel.sites.collectAsStateWithLifecycle()
+    val links by viewModel.visibleLinks.collectAsStateWithLifecycle()
+    val typeFilter by viewModel.typeFilter.collectAsStateWithLifecycle()
+    val classFilter by viewModel.classFilter.collectAsStateWithLifecycle()
+    val statusFilter by viewModel.statusFilter.collectAsStateWithLifecycle()
+    val selectedSite by viewModel.selectedSite.collectAsStateWithLifecycle()
+    val selectedLink by viewModel.selectedLink.collectAsStateWithLifecycle()
 
     var showAddLink by remember { mutableStateOf(false) }
     var linkToDelete by remember { mutableStateOf<Link?>(null) }
     val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
@@ -345,7 +374,7 @@ fun GalaxyScreen(
                                 StatusChip(link.status.label, GalaxyColors.linkStatusColor(link.status))
                             }
                             Text(
-                                "الأولوية: ${link.priority.label} • التردد: ${link.frequencyMHz} م.هـ • المسافة: ${"%.2f".format(link.distanceKm)} كم",
+                                "الأولوية: ${link.priority.label} • التردد: ${link.frequencyMHz} م.هـ • المسافة: ${link.distanceKm.formatDecimals(2)} كم",
                                 style = MaterialTheme.typography.bodySmall
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -380,8 +409,13 @@ fun GalaxyScreen(
             sites = sites,
             onDismiss = { showAddLink = false },
             onConfirm = { source, target, type, cls, priority, freq ->
-                viewModel.addLink(source, target, type, cls, priority, freq)
-                showAddLink = false
+                viewModel.addLink(source, target, type, cls, priority, freq) { error ->
+                    if (error == null) {
+                        showAddLink = false
+                    } else {
+                        scope.launch { snackbar.showSnackbar(error) }
+                    }
+                }
             }
         )
     }
@@ -522,7 +556,10 @@ private fun AddLinkDialog(
                 when {
                     s == null || t == null -> error = "اختر الموقعين أولًا"
                     s.id == t.id -> error = "لا يمكن ربط الموقع بنفسه"
-                    freq == null || freq <= 0 -> error = "تردد غير صالح"
+                    freq == null || !freq.isFinite() ->
+                        error = "أدخل ترددًا رقميًا صحيحًا"
+                    freq < MIN_FREQ_MHZ || freq > MAX_FREQ_MHZ ->
+                        error = "التردد المسموح $MIN_FREQ_MHZ – $MAX_FREQ_MHZ ميجاهرتز"
                     else -> onConfirm(s.id, t.id, type, networkClass, priority, freq)
                 }
             }) { Text("إضافة") }

@@ -3,12 +3,15 @@ package com.majarra.galaxy
 import android.app.Application
 import android.util.Log
 import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.BackoffPolicy
 import androidx.work.Configuration
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.majarra.galaxy.data.local.GalaxyDatabase
 import com.majarra.galaxy.data.seed.DemoDataSeeder
+import com.majarra.galaxy.notify.GalaxyNotifications
 import com.majarra.galaxy.worker.AlertWorker
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -21,8 +24,9 @@ import javax.inject.Inject
 /**
  * نقطة بداية التطبيق.
  * 1) تهيّئ WorkManager يدويًا مع Hilt (تهيئة عند الطلب).
- * 2) تزرع البيانات التجريبية (50 موقعًا) عند أول تشغيل فقط.
- * 3) تجدول عامل التنبيهات الدوري (كل 12 ساعة).
+ * 2) تنشئ قناة الإشعارات (Android 8+ تحتاجها قبل أي نشر).
+ * 3) تزرع البيانات التجريبية (50 موقعًا) عند أول تشغيل فقط.
+ * 4) تجدول عامل التنبيهات الدوري (كل 12 ساعة) بقيود موفّرة للبطارية.
  */
 @HiltAndroidApp
 class GalaxyApplication : Application(), Configuration.Provider {
@@ -36,6 +40,7 @@ class GalaxyApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        GalaxyNotifications.ensureChannels(this)
         seedIfEmpty()
         scheduleAlertWorker()
     }
@@ -52,9 +57,20 @@ class GalaxyApplication : Application(), Configuration.Provider {
         }
     }
 
-    /** جدولة عامل التنبيهات: صيانة مستحقة + أعمار المعدات + نقص المخزون */
+    /**
+     * جدولة عامل التنبيهات: صيانة مستحقة + أعمار المعدات + نقص المخزون.
+     * - قيد «البطارية غير منخفضة» حتى لا يعمل الفحص في ظروف حرجة.
+     * - تأجيل خطّي (30 ثانية تصاعديًا) بدل إعادة فورية عند الفشل.
+     * - KEEP: لا تُكرَّر الجدولة عند كل فتح للتطبيق.
+     */
     private fun scheduleAlertWorker() {
         val request = PeriodicWorkRequestBuilder<AlertWorker>(12, TimeUnit.HOURS)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
+            )
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 30, TimeUnit.SECONDS)
             .build()
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
             AlertWorker.UNIQUE_NAME,
@@ -68,9 +84,7 @@ class GalaxyApplication : Application(), Configuration.Provider {
     // ضمن بانية الكائن (constructor) فور إنشاء GalaxyApplication — أي قبل أن
     // يقوم Hilt بحقن `workerFactory` (الحقن الفعلي يحدث داخل onCreate()).
     // هذا يسبب UninitializedPropertyAccessException فورًا عند إنشاء التطبيق
-    // (كراش قبل ظهور أي واجهة مستخدم). الحل: تحويلها إلى خاصية تُحسب عند
-    // الطلب (get) بحيث لا تُقرأ قيمة workerFactory إلا عند أول استدعاء فعلي
-    // لـ WorkManager.getInstance() (أي بعد اكتمال onCreate() وحقن Hilt بالكامل).
+    // (كراش قبل ظهور أي واجهة مستخدم). الحل: خاصية تُحسب عند الطلب (get).
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)

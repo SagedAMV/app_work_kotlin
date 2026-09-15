@@ -2,7 +2,9 @@ package com.majarra.galaxy.di
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import com.majarra.galaxy.data.local.GalaxyDatabase
+import com.majarra.galaxy.data.local.GalaxyMigrations
 import com.majarra.galaxy.data.repository.AlertRepositoryImpl
 import com.majarra.galaxy.data.repository.AttachmentRepositoryImpl
 import com.majarra.galaxy.data.repository.AuditRepositoryImpl
@@ -12,6 +14,7 @@ import com.majarra.galaxy.data.repository.InventoryRepositoryImpl
 import com.majarra.galaxy.data.repository.LinkRepositoryImpl
 import com.majarra.galaxy.data.repository.MaintenanceRepositoryImpl
 import com.majarra.galaxy.data.repository.RequirementRepositoryImpl
+import com.majarra.galaxy.data.repository.RoomTransactionRunner
 import com.majarra.galaxy.data.repository.SettingsRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteHistoryRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteRepositoryImpl
@@ -30,6 +33,7 @@ import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.repository.SiteHistoryRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.TicketRepository
+import com.majarra.galaxy.domain.repository.TransactionRunner
 import com.majarra.galaxy.domain.repository.WorkOrderRepository
 import dagger.Binds
 import dagger.Module
@@ -48,8 +52,12 @@ object AppModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): GalaxyDatabase =
         Room.databaseBuilder(context, GalaxyDatabase::class.java, GalaxyDatabase.DB_NAME)
-            // تطبيق شخصي بمستخدم واحد: إعادة البناء عند تغيير المخطط مقبولة
-            .fallbackToDestructiveMigration()
+            // ترحيلات حقيقية غير مدمّرة (فهارس الأداء) — لا حذف لبيانات المستخدم
+            .addMigrations(*GalaxyMigrations.ALL)
+            // الحذف التدميري يبقى فقط للتدهور لإصدار أقدم (لا يمكن ترحيله بأمان)
+            .fallbackToDestructiveMigrationOnDowngrade()
+            // WAL: قراءة وكتابة بلا قفل كامل + checkpoint أسهل قبل النسخ الاحتياطي
+            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
             .build()
 
     @Provides fun provideSiteDao(db: GalaxyDatabase) = db.siteDao()
@@ -114,4 +122,7 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindSettingsRepo(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds @Singleton
+    abstract fun bindTransactionRunner(impl: RoomTransactionRunner): TransactionRunner
 }

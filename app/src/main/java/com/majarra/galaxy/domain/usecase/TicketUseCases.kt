@@ -23,8 +23,20 @@ class OpenTicketUseCase @Inject constructor(
     private val auditRepo: AuditRepository
 ) {
     suspend operator fun invoke(ticket: Ticket): Long {
-        require(ticket.title.isNotBlank()) { "عنوان التذكرة مطلوب" }
-        val id = repo.insert(ticket.copy(status = TicketStatus.OPEN))
+        val title = ticket.title.trim()
+        require(title.isNotBlank()) { "عنوان التذكرة مطلوب" }
+        require(title.length <= 120) { "عنوان التذكرة طويل جدًا (الحد 120 حرفًا)" }
+        require(ticket.siteId > 0L) { "يجب اختيار موقع للتذكرة" }
+        val id = repo.insert(
+            ticket.copy(
+                title = title,
+                description = ticket.description.trim().take(1000),
+                status = TicketStatus.OPEN,
+                openedAt = System.currentTimeMillis(),
+                closedAt = null,
+                resolutionTimeMinutes = null
+            )
+        )
         auditRepo.log("CREATE", "Ticket", id, ticket.title)
         return id
     }
@@ -35,11 +47,12 @@ class StartTicketUseCase @Inject constructor(
     private val repo: TicketRepository,
     private val auditRepo: AuditRepository
 ) {
-    suspend operator fun invoke(ticketId: Long) {
-        val t = repo.getById(ticketId) ?: return
-        if (t.status == TicketStatus.CLOSED) return
+    suspend operator fun invoke(ticketId: Long): Boolean {
+        val t = repo.getById(ticketId) ?: return false
+        if (t.status == TicketStatus.CLOSED || t.status == TicketStatus.IN_PROGRESS) return false
         repo.update(t.copy(status = TicketStatus.IN_PROGRESS))
         auditRepo.log("UPDATE", "Ticket", ticketId, "بدء المعالجة")
+        return true
     }
 }
 
@@ -81,6 +94,7 @@ class SaveWorkOrderUseCase @Inject constructor(
     private val auditRepo: AuditRepository
 ) {
     suspend operator fun invoke(order: WorkOrder): Long {
+        require(order.tasks.isNotBlank()) { "مهام أمر الشغل مطلوبة" }
         return if (order.id == 0L) {
             require(order.assignedTo.isNotBlank()) { "اسم المنفذ مطلوب" }
             val id = repo.insert(order)

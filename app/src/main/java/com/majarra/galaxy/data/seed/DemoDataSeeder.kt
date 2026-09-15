@@ -27,6 +27,7 @@ import com.majarra.galaxy.domain.model.SiteStatus
 import com.majarra.galaxy.domain.model.TicketSeverity
 import com.majarra.galaxy.domain.model.TicketStatus
 import com.majarra.galaxy.domain.model.WorkOrderStatus
+import androidx.room.withTransaction
 import com.majarra.galaxy.util.RadioMath
 import java.util.Random
 import javax.inject.Inject
@@ -40,7 +41,15 @@ import javax.inject.Singleton
 class DemoDataSeeder @Inject constructor(
     private val db: GalaxyDatabase
 ) {
-    suspend fun seed() {
+    /**
+     * الزرع داخل معاملة واحدة: كان يُنفَّذ كعمليات منفصلة، فأي فشل في المنتصف
+     * (مثلًا عند المعدات) يترك قاعدة بيانات نصف مزروعة: مواقع بلا معدات ولا
+     * روابط، ولا يُعاد الزرع لاحقًا لأن الشرط `count > 0` يتحقق. المعاملة
+     * تجعل الزرع كاملًا أو لا شيء.
+     */
+    suspend fun seed() = db.withTransaction { seedInternal() }
+
+    private suspend fun seedInternal() {
         if (db.siteDao().countSync() > 0) return
         val rnd = Random(42)
         val day = 24L * 3600 * 1000

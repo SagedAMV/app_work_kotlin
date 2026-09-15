@@ -6,7 +6,7 @@ import androidx.room.TypeConverters
 
 /**
  * قاعدة بيانات «مجرة» — أوفلاين بالكامل (Room).
- * الإصدار 1، بدون تصدير مخطط (تطبيق شخصي).
+ * الإصدار 2: أُضيفت فهارس أداء (انظر GalaxyMigrations) مع ترحيل غير مدمّر.
  */
 @Database(
     entities = [
@@ -26,7 +26,7 @@ import androidx.room.TypeConverters
         Alert::class,
         AuditLog::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 @TypeConverters(GalaxyConverters::class)

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  قواعد سحب البيانات (Android 12+): منع النسخ السحابي ومنع النقل بين الأجهزة
+  لكل ما يحتويه التطبيق، لأن البيانات محلية وحساسة، والنسخ الاحتياطي يتم
+  يدويًا عبر SAF من داخل التطبيق (ملف .db يختاره المستخدم).
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="file" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

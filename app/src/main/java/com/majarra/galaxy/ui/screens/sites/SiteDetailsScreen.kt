@@ -35,10 +35,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -62,7 +63,10 @@ import com.majarra.galaxy.domain.repository.LinkRepository
 import com.majarra.galaxy.domain.repository.SiteHistoryRepository
 import com.majarra.galaxy.domain.repository.TicketRepository
 import com.majarra.galaxy.domain.usecase.DeleteSiteResult
+import com.majarra.galaxy.domain.repository.UriPermissionVault
 import com.majarra.galaxy.domain.usecase.DeleteSiteUseCase
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.theme.GalaxyColors
@@ -73,6 +77,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.majarra.galaxy.util.formatDecimals
 
 private enum class DetailsTab(val label: String) {
     INFO("بيانات"),
@@ -96,8 +101,15 @@ class SiteDetailsViewModel @Inject constructor(
     private val equipmentRepository: EquipmentRepository,
     private val attachmentRepository: AttachmentRepository,
     private val historyRepository: SiteHistoryRepository,
-    private val deleteSite: DeleteSiteUseCase
+    private val deleteSite: DeleteSiteUseCase,
+    private val uriVault: UriPermissionVault
 ) : ViewModel() {
+
+    /** رسالة قصيرة للواجهة (نجاح/فشل إضافة مرفق) */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message
+
+    fun clearMessage() { _message.value = null }
 
     val siteId: Long = savedStateHandle.get<Long>("siteId") ?: 0L
 
@@ -134,17 +146,25 @@ class SiteDetailsViewModel @Inject constructor(
 
     fun addAttachment(uri: android.net.Uri, type: AttachmentType, caption: String) {
         viewModelScope.launch {
+            // الإذن الدائم شرط بقاء المرفق صالحًا بعد إعادة التشغيل
+            val persisted = uriVault.persist(uri.toString())
             val id = attachmentRepository.insert(
                 Attachment(siteId = siteId, type = type, uri = uri.toString(), caption = caption)
             )
             historyRepository.record(siteId, "إضافة مرفق", "", caption.ifBlank { type.label })
             auditRepo.log("CREATE", "Attachment", id, caption)
+            _message.value = if (persisted) {
+                "تم إضافة المرفق"
+            } else {
+                "تم إضافة المرفق، لكن النظام لم يمنح إذنًا دائمًا — قد لا يظهر بعد إعادة التشغيل"
+            }
         }
     }
 
     fun deleteAttachment(a: Attachment) {
         viewModelScope.launch {
             attachmentRepository.delete(a)
+            uriVault.release(listOf(a.uri))
             auditRepo.log("DELETE", "Attachment", a.id, a.caption)
         }
     }
@@ -158,7 +178,9 @@ class SiteDetailsViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = deleteSite(current)) {
                 is DeleteSiteResult.Blocked -> onDone(
-                    "لا يمكن الحذف: الموقع يحتوي ${result.equipmentCount} معدة و${result.activeLinks} رابط نشط"
+                    "لا يمكن الحذف (قاعدة العمل رقم 1): الموقع يحتوي " +
+                        "${result.equipmentCount} معدة و${result.activeLinks} رابط نشط — " +
+                        "احذف المعدات والروابط أولًا"
                 )
                 DeleteSiteResult.Deleted -> onDone(null)
             }
@@ -175,12 +197,12 @@ fun SiteDetailsScreen(
     onEdit: (Long) -> Unit,
     viewModel: SiteDetailsViewModel = hiltViewModel()
 ) {
-    val site by viewModel.site.collectAsState()
-    val equipment by viewModel.equipment.collectAsState()
-    val attachments by viewModel.attachments.collectAsState()
-    val history by viewModel.history.collectAsState()
-    val links by viewModel.links.collectAsState()
-    val tickets by viewModel.tickets.collectAsState()
+    val site by viewModel.site.collectAsStateWithLifecycle()
+    val equipment by viewModel.equipment.collectAsStateWithLifecycle()
+    val attachments by viewModel.attachments.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
+    val links by viewModel.links.collectAsStateWithLifecycle()
+    val tickets by viewModel.tickets.collectAsStateWithLifecycle()
 
     var tab by remember { mutableStateOf(DetailsTab.INFO) }
     var showAddEquipment by remember { mutableStateOf(false) }
@@ -191,12 +213,25 @@ fun SiteDetailsScreen(
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
 
-    // منتقيا المرفقات: صورة أو PDF — أوفلاين بالكامل
-    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) viewModel.addAttachment(uri, AttachmentType.IMAGE, "صورة")
+    val scope = rememberCoroutineScope()
+    val attachmentMessage by viewModel.message.collectAsStateWithLifecycle()
+
+    // منتقيا المرفقات: صورة أو PDF — أوفلاين بالكامل.
+    // نستخدم OpenDocument (لا GetContent) لأنه يمنح إذنًا قابلًا للتثبيت، ثم
+    // يُثبَّت الإذن في ViewModel حتى لا يظهر المرفق مكسورًا بعد إعادة التشغيل.
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            viewModel.addAttachment(uri, AttachmentType.IMAGE, "صورة")
+        } else {
+            scope.launch { snackbar.showSnackbar("لم يتم اختيار صورة") }
+        }
     }
-    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) viewModel.addAttachment(uri, AttachmentType.PDF, "مخطط")
+    val pdfPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            viewModel.addAttachment(uri, AttachmentType.PDF, "مخطط")
+        } else {
+            scope.launch { snackbar.showSnackbar("لم يتم اختيار مستند") }
+        }
     }
 
     Scaffold(
@@ -253,7 +288,7 @@ fun SiteDetailsScreen(
                                         Text(s.code, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                                         StatusChip(s.status.label, GalaxyColors.siteStatusColor(s.status))
                                     }
-                                    Text("الإحداثيات: ${"%.5f".format(s.latitude)} , ${"%.5f".format(s.longitude)}")
+                                    Text("الإحداثيات: ${s.latitude.formatDecimals(5)} , ${s.longitude.formatDecimals(5)}")
                                     Text("أُنشئ: ${s.createdAt.formatDateTime()}", style = MaterialTheme.typography.bodySmall)
                                     Text("آخر تحديث: ${s.updatedAt.formatDateTime()}", style = MaterialTheme.typography.bodySmall)
                                     if (s.notes.isNotBlank()) Text("ملاحظات: ${s.notes}")
@@ -306,11 +341,11 @@ fun SiteDetailsScreen(
                     DetailsTab.ATTACHMENTS -> {
                         item {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(onClick = { imagePicker.launch("image/*") }) {
+                                Button(onClick = { imagePicker.launch(arrayOf("image/*")) }) {
                                     Icon(Icons.Filled.AddAPhoto, contentDescription = null)
                                     Text("صورة", modifier = Modifier.padding(start = 6.dp))
                                 }
-                                Button(onClick = { pdfPicker.launch("application/pdf") }) {
+                                Button(onClick = { pdfPicker.launch(arrayOf("application/pdf")) }) {
                                     Icon(Icons.Filled.Description, contentDescription = null)
                                     Text("PDF", modifier = Modifier.padding(start = 6.dp))
                                 }
@@ -356,7 +391,7 @@ fun SiteDetailsScreen(
                                         StatusChip(l.status.label, GalaxyColors.linkStatusColor(l.status))
                                     }
                                     Text(
-                                        "التردد: ${l.frequencyMHz} م.هـ • المسافة: ${"%.2f".format(l.distanceKm)} كم",
+                                        "التردد: ${l.frequencyMHz} م.هـ • المسافة: ${l.distanceKm.formatDecimals(2)} كم",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
@@ -460,6 +495,16 @@ fun SiteDetailsScreen(
                 }
             },
             onDismiss = { confirmDeleteSiteStep = 0 }
+        )
+    }
+
+    attachmentMessage?.let { msg ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.clearMessage() },
+            text = { Text(msg) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearMessage() }) { Text("حسنًا") }
+            }
         )
     }
 

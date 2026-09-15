@@ -1,7 +1,6 @@
 package com.majarra.galaxy.ui.screens.sites
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -31,10 +30,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -51,6 +51,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.majarra.galaxy.util.formatDecimals
 
 @HiltViewModel
 class SiteFormViewModel @Inject constructor(
@@ -112,10 +113,12 @@ class SiteFormViewModel @Inject constructor(
                     )
                 )
                 onDone(null)
-            } catch (_: android.database.sqlite.SQLiteConstraintException) {
-                onDone("رمز الموقع مستخدم مسبقًا — اختر رمزًا آخر")
+            } catch (e: IllegalArgumentException) {
+                // رسائل التحقق الواضحة: اسم ناقص، إحداثيات خارج النطاق، رمز مكرر…
+                onDone(e.message ?: "بيانات غير صالحة")
             } catch (t: Throwable) {
-                onDone("تعذر الحفظ: ${t.message}")
+                android.util.Log.e("SiteForm", "save failed", t)
+                onDone("تعذر الحفظ: ${t.localizedMessage ?: t.javaClass.simpleName}")
             } finally {
                 saving.value = false
             }
@@ -123,8 +126,8 @@ class SiteFormViewModel @Inject constructor(
     }
 
     fun applyLocation(lat: Double, lng: Double) {
-        latitude = "%.6f".format(lat)
-        longitude = "%.6f".format(lng)
+        latitude = lat.formatDecimals(6)
+        longitude = lng.formatDecimals(6)
     }
 }
 
@@ -139,24 +142,55 @@ fun SiteFormScreen(
 ) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
-    val saving by viewModel.saving.collectAsState()
-
-    fun fillFromGps() {
-        @SuppressLint("MissingPermission")
-        val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        val loc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-            ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-        if (loc != null) {
-            viewModel.applyLocation(loc.latitude, loc.longitude)
-        } else {
-            viewModel.applyLocation(33.3152, 44.3661) // موقع افتراضي عند غياب آخر قراءة
-        }
-    }
+    val saving by viewModel.saving.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { result ->
-        if (result.values.all { it }) fillFromGps()
+        if (result.values.any { it }) {
+            fillFromGps()
+        } else {
+            scope.launch { snackbar.showSnackbar("تم رفض إذن الموقع — أدخل الإحداثيات يدويًا") }
+        }
+    }
+
+    /**
+     * قراءة آخر موقع معروف.
+     * - لا نستدعي مزوّد الموقع قبل التحقق من الإذن (كان التحقق مُلتفًّا عليه بـ
+     *   @SuppressLint فيرمي SecurityException عند رفض الإذن).
+     * - لا نخترع إحداثيات افتراضية عند غياب قراءة، لأن ذلك يحفظ موقعًا خاطئًا
+     *   بصمت. الآن نُبلغ المستخدم بوضوح.
+     */
+    fun fillFromGps() {
+        val fine = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!fine && !coarse) return
+
+        val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+        if (lm == null) {
+            scope.launch { snackbar.showSnackbar("خدمة الموقع غير متوفرة على هذا الجهاز") }
+            return
+        }
+        val location = try {
+            lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+        } catch (e: SecurityException) {
+            null
+        }
+        if (location == null) {
+            scope.launch {
+                snackbar.showSnackbar("لا توجد قراءة موقع محفوظة — شغّل GPS ثم أعد المحاولة")
+            }
+            return
+        }
+        viewModel.applyLocation(location.latitude, location.longitude)
+        scope.launch { snackbar.showSnackbar("تم تحديث الإحداثيات من الجهاز") }
     }
 
     Scaffold(

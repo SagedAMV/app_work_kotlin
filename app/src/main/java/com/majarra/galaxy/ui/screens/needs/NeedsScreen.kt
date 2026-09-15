@@ -26,13 +26,14 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,10 +57,12 @@ import com.majarra.galaxy.domain.repository.InventoryRepository
 import com.majarra.galaxy.domain.repository.RequirementRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.usecase.AssessRequirementUseCase
+import com.majarra.galaxy.domain.usecase.CancelRequirementUseCase
 import com.majarra.galaxy.domain.usecase.CreateRequirementUseCase
 import com.majarra.galaxy.domain.usecase.DraftItem
 import com.majarra.galaxy.domain.usecase.FulfillRequirementUseCase
 import com.majarra.galaxy.domain.usecase.FulfillResult
+import com.majarra.galaxy.domain.usecase.DeleteRequirementUseCase
 import com.majarra.galaxy.domain.usecase.RequirementDraft
 import com.majarra.galaxy.domain.usecase.StockAssessment
 import com.majarra.galaxy.ui.components.EmptyState
@@ -88,25 +91,24 @@ private enum class NeedsTab(val label: String) {
 @HiltViewModel
 class NeedsViewModel @Inject constructor(
     siteRepo: SiteRepository,
-    requirementRepo: RequirementRepository,
-    inventoryRepo: InventoryRepository,
-    boqRepo: BoqRepository,
     private val requirementRepository: RequirementRepository,
     private val inventoryRepository: InventoryRepository,
     private val boqRepository: BoqRepository,
     private val createRequirement: CreateRequirementUseCase,
     private val fulfillRequirement: FulfillRequirementUseCase,
     private val assessRequirement: AssessRequirementUseCase,
+    private val cancelRequirementUseCase: CancelRequirementUseCase,
+    private val deleteRequirementUseCase: DeleteRequirementUseCase,
     private val auditRepo: AuditRepository
 ) : ViewModel() {
 
     val sites: StateFlow<List<Site>> = siteRepo.observeSites()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val requirements: StateFlow<List<Requirement>> = requirementRepo.observeAll()
+    val requirements: StateFlow<List<Requirement>> = requirementRepository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val inventory: StateFlow<List<InventoryItem>> = inventoryRepo.observeAll()
+    val inventory: StateFlow<List<InventoryItem>> = inventoryRepository.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val boqs: StateFlow<List<BoqDocument>> = boqRepo.observeDocuments()
+    val boqs: StateFlow<List<BoqDocument>> = boqRepository.observeDocuments()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _expandedReqId = MutableStateFlow<Long?>(null)
@@ -132,6 +134,22 @@ class NeedsViewModel @Inject constructor(
             if (r.status != RequirementStatus.PENDING) return@launch
             requirementRepository.update(r.copy(status = RequirementStatus.APPROVED))
             auditRepo.log("UPDATE", "Requirement", id, "اعتماد الاحتياج")
+        }
+    }
+
+    /** إلغاء احتياج (مسودة/قيد الاعتماد/معتمد) */
+    fun cancelRequirement(id: Long, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val ok = cancelRequirementUseCase(id)
+            onResult(if (ok) "تم إلغاء الاحتياج" else "لا يمكن إلغاء احتياج مصروف")
+        }
+    }
+
+    /** حذف احتياج غير مصروف (بنوده ووثيقة BOQ تُحذف بالتسلسل) */
+    fun deleteRequirement(id: Long, onResult: (String) -> Unit) {
+        viewModelScope.launch {
+            val ok = deleteRequirementUseCase(id)
+            onResult(if (ok) "تم حذف الاحتياج" else "لا يمكن حذف احتياج مصروف")
         }
     }
 
@@ -169,22 +187,52 @@ class NeedsViewModel @Inject constructor(
         location: String,
         onResult: (String?) -> Unit
     ) {
-        if (name.isBlank()) {
+        val cleanName = name.trim().replace(Regex("\\s+"), " ")
+        if (cleanName.isEmpty()) {
             onResult("اسم الصنف مطلوب")
+            return
+        }
+        if (cleanName.length > MAX_ITEM_NAME) {
+            onResult("اسم الصنف طويل جدًا (الحد $MAX_ITEM_NAME حرفًا)")
+            return
+        }
+        if (quantity !in 0..MAX_QUANTITY || threshold !in 0..MAX_QUANTITY) {
+            onResult("الكمية والحد الأدنى يجب أن يكونا بين 0 و $MAX_QUANTITY")
             return
         }
         viewModelScope.launch {
             val id = inventoryRepository.insert(
                 InventoryItem(
-                    name = name,
+                    name = cleanName,
                     unit = unit,
-                    quantity = quantity.coerceAtLeast(0),
-                    minThreshold = threshold.coerceAtLeast(0),
-                    location = location
+                    quantity = quantity,
+                    minThreshold = threshold,
+                    location = location.trim().take(60)
                 )
             )
-            auditRepo.log("CREATE", "InventoryItem", id, name)
+            auditRepo.log("CREATE", "InventoryItem", id, cleanName)
             onResult(null)
+        }
+    }
+
+    /**
+     * تعديل كمية صنف (استلام أو صرف يدوي) — يستخدم مسار التحديث في المستودع
+     * الذي كان غير مستخدم إطلاقًا، ويُسجَّل في سجل التدقيق.
+     */
+    fun adjustStock(item: InventoryItem, delta: Int) {
+        viewModelScope.launch {
+            val newQty = (item.quantity + delta).coerceIn(0, MAX_QUANTITY)
+            if (newQty == item.quantity) return@launch
+            inventoryRepository.update(item.copy(quantity = newQty))
+            auditRepo.log("UPDATE", "InventoryItem", item.id, "${item.name}: ${item.quantity} ← $newQty")
+        }
+    }
+
+    /** حذف صنف من المخزون مع تسجيل العملية */
+    fun deleteInventory(item: InventoryItem) {
+        viewModelScope.launch {
+            inventoryRepository.delete(item)
+            auditRepo.log("DELETE", "InventoryItem", item.id, item.name)
         }
     }
 
@@ -206,6 +254,11 @@ class NeedsViewModel @Inject constructor(
     }
 
     fun siteName(id: Long): String = sites.value.find { it.id == id }?.name ?: "موقع $id"
+
+    private companion object {
+        const val MAX_ITEM_NAME = 80
+        const val MAX_QUANTITY = 1_000_000
+    }
 }
 
 /** شاشة الاحتياج والمخزون وجداول الكميات */
@@ -281,9 +334,9 @@ private fun RequirementsTab(
     viewModel: NeedsViewModel,
     snackbar: SnackbarHostState
 ) {
-    val requirements by viewModel.requirements.collectAsState()
-    val expandedId by viewModel.expandedReqId.collectAsState()
-    val assessment by viewModel.assessment.collectAsState()
+    val requirements by viewModel.requirements.collectAsStateWithLifecycle()
+    val expandedId by viewModel.expandedReqId.collectAsStateWithLifecycle()
+    val assessment by viewModel.assessment.collectAsStateWithLifecycle()
 
     if (requirements.isEmpty()) {
         EmptyState(Icons.Filled.Add, "لا توجد احتياجات", "أنشئ احتياجًا جديدًا من الزر العائم")
@@ -348,6 +401,23 @@ private fun RequirementsTab(
                                 }) {
                                     Text("صرف من المخزون")
                                 }
+                                // إلغاء/حذف: متاحان فقط للاحتياجات غير المصروفة
+                                if (req.status != RequirementStatus.FULFILLED) {
+                                    OutlinedButton(onClick = {
+                                        viewModel.cancelRequirement(req.id) { msg ->
+                                            viewModel.viewModelScope.launch { snackbar.showSnackbar(msg) }
+                                        }
+                                    }) {
+                                        Text("إلغاء")
+                                    }
+                                    TextButton(onClick = {
+                                        viewModel.deleteRequirement(req.id) { msg ->
+                                            viewModel.viewModelScope.launch { snackbar.showSnackbar(msg) }
+                                        }
+                                    }) {
+                                        Text("حذف", color = DangerRed)
+                                    }
+                                }
                             }
                         }
                     }
@@ -371,7 +441,7 @@ private fun InventoryTab(
     viewModel: NeedsViewModel,
     snackbar: SnackbarHostState
 ) {
-    val inventory by viewModel.inventory.collectAsState()
+    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
 
     if (inventory.isEmpty()) {
         EmptyState(Icons.Filled.Warning, "المخزون فارغ", "أضف أصنافًا من الزر العائم")
@@ -384,32 +454,60 @@ private fun InventoryTab(
     ) {
         items(inventory, key = { it.id }) { item ->
             val low = item.quantity <= item.minThreshold
+            var confirmDeleteItem by remember { mutableStateOf(false) }
             GalaxyCard {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(item.name, style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "${item.location} • الحد الأدنى: ${item.minThreshold}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(item.name, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "${item.location} • الحد الأدنى: ${item.minThreshold}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Column {
+                            Text(
+                                "${item.quantity} ${item.unit.label}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (low) DangerRed else NeonGreen
+                            )
+                            if (low) {
+                                Text("تحت الحد!", color = DangerRed, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
                     }
-                    Column {
-                        Text(
-                            "${item.quantity} ${item.unit.label}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = if (low) DangerRed else NeonGreen
-                        )
-                        if (low) {
-                            Text("تحت الحد!", color = DangerRed, style = MaterialTheme.typography.labelSmall)
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(onClick = { viewModel.adjustStock(item, -1) }) { Text("−1") }
+                        OutlinedButton(onClick = { viewModel.adjustStock(item, 1) }) { Text("+1") }
+                        OutlinedButton(onClick = { viewModel.adjustStock(item, 10) }) { Text("+10") }
+                        TextButton(onClick = { confirmDeleteItem = true }) {
+                            Text("حذف", color = DangerRed)
                         }
                     }
                 }
+            }
+            if (confirmDeleteItem) {
+                AlertDialog(
+                    onDismissRequest = { confirmDeleteItem = false },
+                    title = { Text("حذف صنف المخزون") },
+                    text = { Text("سيتم حذف «${item.name}» من المخزون. هل أنت متأكد؟") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            confirmDeleteItem = false
+                            viewModel.deleteInventory(item)
+                        }) { Text("حذف", color = DangerRed) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmDeleteItem = false }) { Text("إلغاء") }
+                    }
+                )
             }
         }
     }
@@ -418,9 +516,9 @@ private fun InventoryTab(
 /** تبويب جداول الكميات المولدة تلقائيًا */
 @Composable
 private fun BoqTab(viewModel: NeedsViewModel) {
-    val boqs by viewModel.boqs.collectAsState()
-    val expandedId by viewModel.expandedBoqId.collectAsState()
-    val lines by viewModel.boqLines.collectAsState()
+    val boqs by viewModel.boqs.collectAsStateWithLifecycle()
+    val expandedId by viewModel.expandedBoqId.collectAsStateWithLifecycle()
+    val lines by viewModel.boqLines.collectAsStateWithLifecycle()
 
     if (boqs.isEmpty()) {
         EmptyState(Icons.Filled.CheckCircle, "لا توجد جداول كميات", "تُولَّد تلقائيًا عند إنشاء احتياج")
@@ -465,8 +563,8 @@ private fun CreateRequirementDialog(
     onDismiss: () -> Unit,
     onCreated: () -> Unit
 ) {
-    val sites by viewModel.sites.collectAsState()
-    val inventory by viewModel.inventory.collectAsState()
+    val sites by viewModel.sites.collectAsStateWithLifecycle()
+    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
 
     var selectedSite by remember { mutableStateOf<Site?>(null) }
     var type by remember { mutableStateOf(RequirementType.MATERIALS) }

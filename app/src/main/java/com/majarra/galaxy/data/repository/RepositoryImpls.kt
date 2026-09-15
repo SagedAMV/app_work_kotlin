@@ -40,7 +40,6 @@ import com.majarra.galaxy.domain.repository.InventoryRepository
 import com.majarra.galaxy.domain.repository.LinkRepository
 import com.majarra.galaxy.domain.repository.MaintenanceRepository
 import com.majarra.galaxy.domain.repository.RequirementRepository
-import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.repository.SiteHistoryRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.TicketRepository
@@ -59,6 +58,9 @@ class SiteRepositoryImpl @Inject constructor(
     private val dao: SiteDao
 ) : SiteRepository {
     override fun observeSites(): Flow<List<Site>> = dao.observeAll()
+    override suspend fun findByCode(code: String): Site? = dao.findByCode(code)
+    override suspend fun findByCodeExcept(code: String, excludeId: Long): Site? =
+        dao.findByCodeExcept(code, excludeId)
     override fun searchSites(q: String): Flow<List<Site>> = dao.search(q)
     override fun observeSite(id: Long): Flow<Site?> = dao.observeById(id)
     override suspend fun getSite(id: Long): Site? = dao.getById(id)
@@ -87,6 +89,7 @@ class AttachmentRepositoryImpl @Inject constructor(
     private val dao: AttachmentDao
 ) : AttachmentRepository {
     override fun observeBySite(siteId: Long): Flow<List<Attachment>> = dao.observeBySite(siteId)
+    override suspend fun getBySite(siteId: Long): List<Attachment> = dao.getBySite(siteId)
     override suspend fun insert(a: Attachment): Long = dao.insert(a)
     override suspend fun delete(a: Attachment) = dao.delete(a)
 }
@@ -107,6 +110,7 @@ class InventoryRepositoryImpl @Inject constructor(
 ) : InventoryRepository {
     override fun observeAll(): Flow<List<InventoryItem>> = dao.observeAll()
     override suspend fun getAll(): List<InventoryItem> = dao.getAll()
+    override suspend fun getBelowThreshold(): List<InventoryItem> = dao.getBelowThreshold()
     override suspend fun getById(id: Long): InventoryItem? = dao.getById(id)
     override suspend fun count(): Int = dao.countSync()
     override suspend fun insert(i: InventoryItem): Long = dao.insert(i)
@@ -152,6 +156,7 @@ class LinkRepositoryImpl @Inject constructor(
     override suspend fun getById(id: Long): Link? = dao.getById(id)
     override fun observeBySite(siteId: Long): Flow<List<Link>> = dao.observeBySite(siteId)
     override suspend fun countActiveBySite(siteId: Long): Int = dao.countActiveBySite(siteId)
+    override suspend fun countBetween(a: Long, b: Long): Int = dao.countBetween(a, b)
     override suspend fun insert(l: Link): Long = dao.insert(l)
     override suspend fun update(l: Link) = dao.update(l)
     override suspend fun delete(l: Link) = dao.delete(l)
@@ -175,8 +180,11 @@ class WorkOrderRepositoryImpl @Inject constructor(
     private val dao: WorkOrderDao
 ) : WorkOrderRepository {
     override fun observeAll(): Flow<List<WorkOrder>> = dao.observeAll()
+    override fun observeBySite(siteId: Long): Flow<List<WorkOrder>> = dao.observeBySite(siteId)
+    override suspend fun getAll(): List<WorkOrder> = dao.getAll()
     override suspend fun insert(w: WorkOrder): Long = dao.insert(w)
     override suspend fun update(w: WorkOrder) = dao.update(w)
+    override suspend fun delete(w: WorkOrder) = dao.delete(w)
 }
 
 @Singleton
@@ -200,6 +208,8 @@ class AlertRepositoryImpl @Inject constructor(
         dao.countUnreadByRef(type, refId) > 0
     override suspend fun insert(a: Alert) = dao.insert(a)
     override suspend fun markRead(id: Long) = dao.markRead(id)
+    override suspend fun delete(id: Long) = dao.deleteById(id)
+    override suspend fun countAll(): Int = dao.countAll()
     override suspend fun markAllRead() = dao.markAllRead()
     override suspend fun deleteAll() = dao.deleteAll()
 }
@@ -222,39 +232,3 @@ class AuditRepositoryImpl @Inject constructor(
     override suspend fun clear() = dao.clear()
 }
 
-/**
- * تفضيلات المستخدم عبر SharedPreferences (بدون مكتبات إضافية).
- */
-@Singleton
-class SettingsRepositoryImpl @Inject constructor(
-    @ApplicationContext private val context: Context
-) : SettingsRepository {
-
-    private val prefs by lazy {
-        context.getSharedPreferences("galaxy_settings", Context.MODE_PRIVATE)
-    }
-
-    private val flow = kotlinx.coroutines.flow.MutableStateFlow(readPrefs())
-
-    private fun readPrefs() = SettingsRepository.Prefs(
-        darkMode = prefs.getBoolean(KEY_DARK, true),
-        biometricLock = prefs.getBoolean(KEY_LOCK, false)
-    )
-
-    override val preferences: Flow<SettingsRepository.Prefs> get() = flow
-
-    override suspend fun setDarkMode(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_DARK, enabled).apply()
-        flow.value = readPrefs()
-    }
-
-    override suspend fun setBiometricLock(enabled: Boolean) {
-        prefs.edit().putBoolean(KEY_LOCK, enabled).apply()
-        flow.value = readPrefs()
-    }
-
-    companion object {
-        private const val KEY_DARK = "dark_mode"
-        private const val KEY_LOCK = "biometric_lock"
-    }
-}

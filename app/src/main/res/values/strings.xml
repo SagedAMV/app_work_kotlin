@@ -4,4 +4,8 @@
     <string name="lock_title">التطبيق مقفل</string>
     <string name="lock_subtitle">استخدم البصمة أو الوجه للمتابعة</string>
     <string name="lock_button">فتح القفل</string>
+    <string name="lock_no_sensor">لا يتوفر مستشعر بيومتري مسجل على هذا الجهاز</string>
+    <string name="lock_error">فشل التحقق البيومتري</string>
+    <string name="alerts_channel_name">تنبيهات مجرة</string>
+    <string name="alerts_channel_desc">تنبيهات الصيانة الوقائية ونقص المخزون وانتهاء عمر المعدات</string>
 </resources>

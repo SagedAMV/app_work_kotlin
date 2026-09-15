@@ -2,6 +2,7 @@ package com.majarra.galaxy.ui.screens.reports
 
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import com.majarra.galaxy.util.formatDecimals
 
 /** أنواع التقارير الستة المطلوبة */
 enum class ReportType(val title: String, val description: String) {
@@ -99,7 +101,7 @@ class ReportsViewModel @Inject constructor(
                     listOf(
                         siteName(l.sourceSiteId), siteName(l.targetSiteId), l.type.label,
                         l.networkClass.label, l.status.label,
-                        l.frequencyMHz.toString(), "%.2f".format(l.distanceKm)
+                        l.frequencyMHz.toString(), l.distanceKm.formatDecimals(2)
                     )
                 }
                 ReportData(
@@ -145,32 +147,41 @@ class ReportsViewModel @Inject constructor(
         }
     }
 
-    /** كتابة التقرير إلى ملف اختاره المستخدم عبر SAF */
-    suspend fun exportTo(context: Context, type: ReportType, format: ExportFormat, uri: Uri): Boolean =
+    /**
+     * كتابة التقرير إلى ملف اختاره المستخدم عبر SAF.
+     * تُعيد null عند النجاح أو نص سبب الفشل — سابقًا كان أي استثناء يُبتلع
+     * ويعود `false` فقط فيرى المستخدم «فشل التصدير» بلا أي تفسير.
+     */
+    suspend fun exportTo(
+        context: Context,
+        type: ReportType,
+        format: ExportFormat,
+        uri: Uri
+    ): String? =
         withContext(Dispatchers.IO) {
             try {
                 val data = buildReport(type)
-                when (format) {
-                    ExportFormat.CSV -> {
-                        val text = CsvExporter.build(data.headers, data.rows)
-                        context.contentResolver.openOutputStream(uri)?.use {
-                            it.write(text.toByteArray(Charsets.UTF_8))
-                        }
-                    }
-                    ExportFormat.EXCEL -> {
-                        val xml = ExcelXmlExporter.build(type.title, data.headers, data.rows)
-                        context.contentResolver.openOutputStream(uri)?.use {
-                            it.write(xml.toByteArray(Charsets.UTF_8))
-                        }
-                    }
-                    ExportFormat.PDF -> {
-                        val bytes = PdfReportExporter.build("${type.title} — مجرة", data.headers, data.rows)
-                        context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
-                    }
+                if (data.rows.isEmpty()) return@withContext "لا توجد بيانات في هذا التقرير"
+
+                val bytes: ByteArray = when (format) {
+                    ExportFormat.CSV ->
+                        CsvExporter.build(data.headers, data.rows).toByteArray(Charsets.UTF_8)
+                    ExportFormat.EXCEL ->
+                        ExcelXmlExporter.build(type.title, data.headers, data.rows).toByteArray(Charsets.UTF_8)
+                    ExportFormat.PDF ->
+                        PdfReportExporter.build("${type.title} — مجرة", data.headers, data.rows)
                 }
-                true
-            } catch (_: Exception) {
-                false
+
+                val stream = context.contentResolver.openOutputStream(uri, "wt")
+                    ?: return@withContext "تعذّر فتح الملف المحدد للكتابة"
+                stream.use { out ->
+                    out.write(bytes)
+                    out.flush()
+                }
+                null
+            } catch (e: Exception) {
+                Log.e("ReportsVM", "export failed: $type/$format", e)
+                "فشل التصدير: ${e.localizedMessage ?: e.javaClass.simpleName}"
             }
         }
 
@@ -190,8 +201,8 @@ fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     fun doExport(type: ReportType, format: ExportFormat, uri: Uri?) {
         if (uri == null) return
         scope.launch {
-            val ok = viewModel.exportTo(context, type, format, uri)
-            snackbar.showSnackbar(if (ok) "تم تصدير ${type.title} بصيغة ${format.label}" else "فشل التصدير")
+            val failure = viewModel.exportTo(context, type, format, uri)
+            snackbar.showSnackbar(failure ?: "تم تصدير ${type.title} بصيغة ${format.label}")
         }
     }
 

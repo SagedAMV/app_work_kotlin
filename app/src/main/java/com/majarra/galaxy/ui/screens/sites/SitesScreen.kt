@@ -23,7 +23,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -48,6 +48,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import com.majarra.galaxy.util.formatDecimals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -75,8 +76,8 @@ fun SitesScreen(
     onAddSite: () -> Unit,
     viewModel: SitesViewModel = hiltViewModel()
 ) {
-    val sites by viewModel.sites.collectAsState()
-    val query by viewModel.query.collectAsState()
+    val sites by viewModel.sites.collectAsStateWithLifecycle()
+    val query by viewModel.query.collectAsStateWithLifecycle()
     var statusFilter by rememberSaveable { mutableStateOf<SiteStatus?>(null) }
 
     val filtered = if (statusFilter == null) sites else sites.filter { it.status == statusFilter }
@@ -156,7 +157,7 @@ fun SitesScreen(
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(site.name, style = MaterialTheme.typography.titleMedium)
                                     Text(
-                                        "${site.code}  •  ${"%.4f".format(site.latitude)}, ${"%.4f".format(site.longitude)}",
+                                        "${site.code}  •  ${site.latitude.formatDecimals(4)}, ${site.longitude.formatDecimals(4)}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

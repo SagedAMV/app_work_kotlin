@@ -4,6 +4,10 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextDirectionHeuristics
+import android.text.TextPaint
 
 /**
  * نظام التصدير — بدون أي مكتبة خارجية تتطلب إنترنت:
@@ -12,19 +16,24 @@ import android.graphics.pdf.PdfDocument
  * - PDF: عبر PdfDocument المدمج في أندرويد.
  */
 
-/** بناء ملف CSV من رؤوس وصفوف */
+/** إزالة محارف التحكم غير المسموح بها في XML/CSV (تسبب فشل الفتح في إكسل) */
+private fun String.stripControlChars(): String =
+    this.filter { ch -> ch == '\n' || ch == '\t' || (ch >= ' ' && ch != '\u007F') }
+
 object CsvExporter {
     fun build(headers: List<String>, rows: List<List<String>>): String {
         val sb = StringBuilder("\uFEFF") // BOM لدعم العربية في إكسل
-        sb.appendLine(headers.joinToString(",") { escape(it) })
-        for (row in rows) {
-            sb.appendLine(row.joinToString(",") { escape(it) })
-        }
+        sb.appendLine(encodeRow(headers))
+        rows.forEach { sb.appendLine(encodeRow(it)) }
         return sb.toString()
     }
 
+    private fun encodeRow(cells: List<String>): String =
+        cells.joinToString(",") { escape(it.stripControlChars().replace("\n", " ")) }
+
     private fun escape(value: String): String {
-        val needs = value.contains(',') || value.contains('"') || value.contains('\n')
+        val needs = value.contains(',') || value.contains('"') || value.contains(';') ||
+            value.startsWith(" ") || value.endsWith(" ")
         return if (needs) "\"${value.replace("\"", "\"\"")}\"" else value
     }
 }
@@ -39,98 +48,162 @@ object ExcelXmlExporter {
             "<Workbook xmlns=\"urn:schemas-microsoft-com:office:spreadsheet\" " +
                 "xmlns:ss=\"urn:schemas-microsoft-com:office:spreadsheet\">"
         )
+        sb.appendLine(
+            " <Styles><Style ss:ID=\"hdr\"><Font ss:Bold=\"1\"/>" +
+                "<Interior ss:Color=\"#0B3B54\" ss:Pattern=\"Solid\"/>" +
+                "<Font ss:Color=\"#FFFFFF\" ss:Bold=\"1\"/></Style></Styles>"
+        )
         sb.appendLine(" <Worksheet ss:Name=\"${xml(sheetName)}\"><Table>")
-        sb.appendLine(rowXml(headers))
+        repeat(headers.size.coerceAtLeast(1)) { sb.appendLine("  <Column ss:Width=\"140\"/>") }
+        sb.appendLine(rowXml(headers, header = true))
         rows.forEach { sb.appendLine(rowXml(it)) }
         sb.appendLine(" </Table></Worksheet>")
         sb.appendLine("</Workbook>")
         return sb.toString()
     }
 
-    private fun rowXml(cells: List<String>): String =
-        "  <Row>" + cells.joinToString("") {
-            "<Cell><Data ss:Type=\"String\">${xml(it)}</Data></Cell>"
+    private fun rowXml(cells: List<String>, header: Boolean = false): String {
+        val style = if (header) " ss:StyleID=\"hdr\"" else ""
+        return "  <Row>" + cells.joinToString("") {
+            "<Cell$style><Data ss:Type=\"String\">${xml(it)}</Data></Cell>"
         } + "</Row>"
+    }
 
-    private fun xml(s: String): String = s
+    private fun xml(s: String): String = s.stripControlChars()
         .replace("&", "&amp;")
         .replace("<", "&lt;")
         .replace(">", "&gt;")
         .replace("\"", "&quot;")
+        .replace("'", "&apos;")
 }
 
-/** بناء تقرير PDF بصفحات A4 مع دعم التفاف النصوص ومحاذاة يمينًا (RTL) */
+/**
+ * بناء تقرير PDF بصفحات A4 بدعم عربي حقيقي.
+ *
+ * تصليب جلسة الفحص: الرسم السابق كان يستخدم `canvas.drawText` مباشرة، وهي
+ * لا تُشكّل الحروف العربية ولا تعالج الاتجاه ثنائي الاتجاه، فكان النص العربي
+ * يظهر مفككًا ومعكوسًا. الحل: StaticLayout + TextDirectionHeuristics.RTL الذي
+ * يمرّ على محرك تشكيل النصوص ويطبّق التفاف النص تلقائيًا. كذلك أُضيف ترقيم
+ * الصفحات وإعادة رسم الترويسة عند استمرار الجدول على عدة صفحات.
+ */
 object PdfReportExporter {
 
     private const val PAGE_W = 595
     private const val PAGE_H = 842
-    private const val MARGIN = 42f
-    private const val ROW_HEIGHT = 20f
+    private const val MARGIN = 30f
+    private const val CELL_PAD = 5f
+    private const val MIN_ROW_H = 24f
+    private const val HEADER_BG = "#0B3B54"
+    private const val ZEBRA_BG = "#F1F5F9"
+    private const val GRID = "#CBD5E1"
 
     fun build(title: String, headers: List<String>, rows: List<List<String>>): ByteArray {
         val document = PdfDocument()
-        val pageInfo = PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, 1).create()
-        var page = document.startPage(pageInfo)
-        var canvas = page.canvas
-        var y = 56f
-
-        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 20f
-            color = Color.BLACK
-            textAlign = Paint.Align.RIGHT
-            typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
-        }
-        val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 12f
-            color = Color.WHITE
-            textAlign = Paint.Align.CENTER
-        }
-        val headerBg = Paint().apply { color = Color.parseColor("#0B3B54") }
-        val bodyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 11f
-            color = Color.BLACK
-            textAlign = Paint.Align.CENTER
-        }
-
-        canvas.drawText(title, PAGE_W - MARGIN, y, titlePaint)
-        y += 30f
-
         val colCount = headers.size.coerceAtLeast(1)
-        val colWidth = (PAGE_W - MARGIN * 2) / colCount
+        val tableWidth = PAGE_W - MARGIN * 2
+        val colWidth = tableWidth / colCount
 
-        fun drawHeaderRow() {
-            canvas.drawRect(MARGIN, y - 14f, PAGE_W - MARGIN, y + 4f, headerBg)
-            headers.forEachIndexed { i, h ->
+        val titlePaint = textPaint(16f, bold = true, color = Color.BLACK)
+        val headerPaint = textPaint(10f, bold = true, color = Color.WHITE)
+        val bodyPaint = textPaint(9.5f, color = Color.BLACK)
+        val footerPaint = textPaint(8f, color = Color.parseColor("#64748B"))
+        val headerBg = Paint().apply { color = Color.parseColor(HEADER_BG) }
+        val zebraBg = Paint().apply { color = Color.parseColor(ZEBRA_BG) }
+        val gridPaint = Paint().apply {
+            color = Color.parseColor(GRID)
+            strokeWidth = 0.6f
+            style = Paint.Style.STROKE
+        }
+
+        var pageNumber = 1
+        var page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, 1).create())
+        var canvas = page.canvas
+        var y = MARGIN + 4f
+
+        fun drawFooter() {
+            val layout = rtlLayout("مجرة — صفحة $pageNumber", footerPaint, tableWidth.toInt())
+            canvas.save()
+            canvas.translate(MARGIN, PAGE_H - MARGIN + 2f)
+            layout.draw(canvas)
+            canvas.restore()
+        }
+
+        fun newPage() {
+            drawFooter()
+            document.finishPage(page)
+            pageNumber++
+            page = document.startPage(PdfDocument.PageInfo.Builder(PAGE_W, PAGE_H, pageNumber).create())
+            canvas = page.canvas
+            y = MARGIN + 4f
+        }
+
+        fun drawRow(cells: List<String>, paint: TextPaint, background: Paint?, isHeader: Boolean) {
+            val layouts = cells.map { cell ->
+                rtlLayout(cell.stripControlChars(), paint, (colWidth - CELL_PAD * 2).toInt())
+            }
+            val rowHeight = (layouts.maxOf { it.height.toFloat() } + CELL_PAD * 2)
+                .coerceAtLeast(MIN_ROW_H)
+            if (y + rowHeight > PAGE_H - MARGIN - 14f) {
+                newPage()
+                if (!isHeader) drawRow(headers, headerPaint, headerBg, isHeader = true)
+            }
+            background?.let { canvas.drawRect(MARGIN, y, PAGE_W - MARGIN, y + rowHeight, it) }
+            canvas.drawRect(MARGIN, y, PAGE_W - MARGIN, y + rowHeight, gridPaint)
+            layouts.forEachIndexed { index, layout ->
                 // الرسم من اليمين إلى اليسار: أول عمود في أقصى اليمين
-                val cx = PAGE_W - MARGIN - colWidth * (i + 0.5f)
-                canvas.drawText(truncate(h, 22), cx, y, headerPaint)
+                canvas.save()
+                canvas.translate(PAGE_W - MARGIN - colWidth * (index + 1) + CELL_PAD, y + CELL_PAD)
+                layout.draw(canvas)
+                canvas.restore()
+                val dividerX = PAGE_W - MARGIN - colWidth * (index + 1)
+                canvas.drawLine(dividerX, y, dividerX, y + rowHeight, gridPaint)
             }
-            y += ROW_HEIGHT + 8f
+            y += rowHeight
         }
 
-        drawHeaderRow()
-        for (row in rows) {
-            if (y > PAGE_H - MARGIN) {
-                document.finishPage(page)
-                page = document.startPage(pageInfo)
-                canvas = page.canvas
-                y = 56f
-                drawHeaderRow()
-            }
-            row.forEachIndexed { i, cell ->
-                val cx = PAGE_W - MARGIN - colWidth * (i + 0.5f)
-                canvas.drawText(truncate(cell, 26), cx, y, bodyPaint)
-            }
-            y += ROW_HEIGHT
+        val titleLayout = rtlLayout(title, titlePaint, tableWidth.toInt())
+        canvas.save()
+        canvas.translate(MARGIN, y)
+        titleLayout.draw(canvas)
+        canvas.restore()
+        y += titleLayout.height + 10f
+
+        drawRow(headers, headerPaint, headerBg, isHeader = true)
+        rows.forEachIndexed { index, row ->
+            drawRow(
+                List(colCount) { i -> row.getOrElse(i) { "" } },
+                bodyPaint,
+                if (index % 2 == 1) zebraBg else null,
+                isHeader = false
+            )
         }
 
+        drawFooter()
         document.finishPage(page)
+
         val out = java.io.ByteArrayOutputStream()
-        document.writeTo(out)
-        document.close()
+        try {
+            document.writeTo(out)
+        } finally {
+            document.close()
+        }
         return out.toByteArray()
     }
 
-    private fun truncate(s: String, max: Int): String =
-        if (s.length <= max) s else s.take(max - 1) + "…"
+    private fun textPaint(size: Float, bold: Boolean = false, color: Int): TextPaint =
+        TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            textSize = size
+            this.color = color
+            typeface = Typeface.create(Typeface.SANS_SERIF, if (bold) Typeface.BOLD else Typeface.NORMAL)
+        }
+
+    /** تخطيط نص عربي RTL مع التفاف تلقائي داخل عرض محدد */
+    private fun rtlLayout(text: String, paint: TextPaint, width: Int): StaticLayout =
+        StaticLayout.Builder
+            .obtain(text, 0, text.length, paint, width.coerceAtLeast(16))
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setTextDirection(TextDirectionHeuristics.RTL)
+            .setIncludePad(false)
+            .setLineSpacing(1.15f, 1f)
+            .build()
 }

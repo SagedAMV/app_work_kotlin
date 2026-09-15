@@ -41,6 +41,14 @@ interface SiteDao {
 
     @Query("SELECT COUNT(*) FROM sites")
     suspend fun countSync(): Int
+
+    /** للتحقق من تفرد الرمز قبل الحفظ (بدل الاعتماد على استثناء قيد SQLite) */
+    @Query("SELECT * FROM sites WHERE code = :code LIMIT 1")
+    suspend fun findByCode(code: String): Site?
+
+    /** للتحقق من تفرد الرمز عند التعديل (باستثناء الموقع نفسه) */
+    @Query("SELECT * FROM sites WHERE code = :code AND id != :excludeId LIMIT 1")
+    suspend fun findByCodeExcept(code: String, excludeId: Long): Site?
 }
 
 @Dao
@@ -75,6 +83,9 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments WHERE siteId = :siteId ORDER BY addedAt DESC")
     fun observeBySite(siteId: Long): Flow<List<Attachment>>
 
+    @Query("SELECT * FROM attachments WHERE siteId = :siteId")
+    suspend fun getBySite(siteId: Long): List<Attachment>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(a: Attachment): Long
 
@@ -101,6 +112,10 @@ interface InventoryItemDao {
 
     @Query("SELECT * FROM inventory_items WHERE id = :id")
     suspend fun getById(id: Long): InventoryItem?
+
+    /** الأصناف التي وصلت أو نزلت تحت الحد الأدنى — تُستخدم في فحص التنبيهات */
+    @Query("SELECT * FROM inventory_items WHERE quantity <= minThreshold ORDER BY name COLLATE NOCASE ASC")
+    suspend fun getBelowThreshold(): List<InventoryItem>
 
     @Query("SELECT COUNT(*) FROM inventory_items")
     suspend fun countSync(): Int
@@ -183,6 +198,13 @@ interface LinkDao {
     @Query("SELECT COUNT(*) FROM links WHERE status = 'ACTIVE' AND (sourceSiteId = :siteId OR targetSiteId = :siteId)")
     suspend fun countActiveBySite(siteId: Long): Int
 
+    /** فحص وجود رابط بين نفس الموقعين (في أي اتجاه) لمنع التكرار */
+    @Query(
+        "SELECT COUNT(*) FROM links WHERE " +
+            "(sourceSiteId = :a AND targetSiteId = :b) OR (sourceSiteId = :b AND targetSiteId = :a)"
+    )
+    suspend fun countBetween(a: Long, b: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(l: Link): Long
 
@@ -225,11 +247,20 @@ interface WorkOrderDao {
     @Query("SELECT * FROM work_orders ORDER BY scheduledAt DESC")
     fun observeAll(): Flow<List<WorkOrder>>
 
+    @Query("SELECT * FROM work_orders WHERE siteId = :siteId ORDER BY scheduledAt DESC")
+    fun observeBySite(siteId: Long): Flow<List<WorkOrder>>
+
+    @Query("SELECT * FROM work_orders ORDER BY scheduledAt DESC")
+    suspend fun getAll(): List<WorkOrder>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(w: WorkOrder): Long
 
     @Update
     suspend fun update(w: WorkOrder)
+
+    @Delete
+    suspend fun delete(w: WorkOrder)
 }
 
 @Dao
@@ -266,6 +297,12 @@ interface AlertDao {
 
     @Query("UPDATE alerts SET isRead = 1 WHERE id = :id")
     suspend fun markRead(id: Long)
+
+    @Query("DELETE FROM alerts WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("SELECT COUNT(*) FROM alerts")
+    suspend fun countAll(): Int
 
     @Query("UPDATE alerts SET isRead = 1")
     suspend fun markAllRead()

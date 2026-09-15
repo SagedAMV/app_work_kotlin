@@ -29,15 +29,21 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -46,6 +52,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.majarra.galaxy.R
 import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.security.BiometricAuthHelper
 import com.majarra.galaxy.ui.screens.dashboard.DashboardScreen
@@ -99,11 +106,23 @@ fun GalaxyRoot(
     activity: FragmentActivity,
     prefs: SettingsRepository.Prefs
 ) {
-    var unlocked by remember { mutableStateOf(!prefs.biometricLock) }
+    // القيمة الابتدائية تأتي من التخزين الفعلي (SettingsRepository.current)
+    var unlocked by rememberSaveable { mutableStateOf(!prefs.biometricLock) }
 
-    // إذا أُلغي القفل من الإعدادات تُفتح الشاشة فورًا
+    // تغيير إعداد القفل يُطبَّق فورًا في الاتجاهين (تفعيل ⇒ قفل، إلغاء ⇒ فتح)
     LaunchedEffect(prefs.biometricLock) {
-        if (!prefs.biometricLock) unlocked = true
+        unlocked = !prefs.biometricLock
+    }
+
+    // إعادة القفل عند انتقال التطبيق للخلفية: تطبيق إدارة مواقع لا يبقى مفتوحًا
+    // إذا تركه المستخدم وانتقل لتطبيق آخر.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, prefs.biometricLock) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP && prefs.biometricLock) unlocked = false
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (!unlocked) {
@@ -137,7 +156,10 @@ fun GalaxyRoot(
 /** شاشة القفل البيومتري */
 @Composable
 private fun LockScreen(activity: FragmentActivity, onUnlock: () -> Unit) {
+    // المساعد بلا حالة (stateless) فلا حاجة لإعادة إنشائه مع كل إعادة تركيب
     val helper = remember { BiometricAuthHelper() }
+    val noSensorMessage = stringResource(R.string.lock_no_sensor)
+    val failedMessage = stringResource(R.string.lock_error)
     var error by remember { mutableStateOf<String?>(null) }
 
     Box(
@@ -163,9 +185,9 @@ private fun LockScreen(activity: FragmentActivity, onUnlock: () -> Unit) {
                     modifier = Modifier.size(40.dp)
                 )
             }
-            Text("التطبيق مقفل", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.lock_title), style = MaterialTheme.typography.headlineSmall)
             Text(
-                "استخدم البصمة أو الوجه للمتابعة",
+                stringResource(R.string.lock_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -174,12 +196,16 @@ private fun LockScreen(activity: FragmentActivity, onUnlock: () -> Unit) {
             }
             Button(onClick = {
                 if (helper.canAuthenticate(activity)) {
-                    helper.authenticate(activity, onSuccess = onUnlock, onError = { error = it })
+                    helper.authenticate(
+                        activity,
+                        onSuccess = onUnlock,
+                        onError = { message -> error = message.ifBlank { failedMessage } }
+                    )
                 } else {
-                    error = "لا يتوفر مستشعر بيومتري مسجل"
+                    error = noSensorMessage
                 }
             }) {
-                Text("فتح القفل")
+                Text(stringResource(R.string.lock_button))
             }
         }
     }

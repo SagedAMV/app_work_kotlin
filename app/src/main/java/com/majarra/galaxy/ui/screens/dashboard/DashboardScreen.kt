@@ -14,9 +14,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,9 +36,13 @@ import com.majarra.galaxy.domain.repository.AlertRepository
 import com.majarra.galaxy.domain.repository.LinkRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.TicketRepository
+import android.util.Log
 import com.majarra.galaxy.domain.usecase.CheckAlertsUseCase
+import com.majarra.galaxy.domain.usecase.ClearAlertsUseCase
+import com.majarra.galaxy.domain.usecase.DismissAlertUseCase
 import com.majarra.galaxy.domain.usecase.MarkAlertReadUseCase
 import com.majarra.galaxy.domain.usecase.MarkAllAlertsReadUseCase
+import com.majarra.galaxy.notify.AlertNotifier
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.theme.GalaxyColors
 import com.majarra.galaxy.ui.components.SectionTitle
@@ -73,7 +79,10 @@ class DashboardViewModel @Inject constructor(
     alertRepo: AlertRepository,
     private val checkAlerts: CheckAlertsUseCase,
     private val markRead: MarkAlertReadUseCase,
-    private val markAllRead: MarkAllAlertsReadUseCase
+    private val markAllRead: MarkAllAlertsReadUseCase,
+    private val dismissAlert: DismissAlertUseCase,
+    private val clearAlerts: ClearAlertsUseCase,
+    private val notifier: AlertNotifier
 ) : ViewModel() {
 
     /** الإحصائيات تُحسب لحظيًا من المصادر الثلاثة — قاعدة العمل رقم 8 */
@@ -102,16 +111,36 @@ class DashboardViewModel @Inject constructor(
     private val _checking = MutableStateFlow(false)
     val checking = _checking
 
+    /** رسالة الفحص اليدوي (العدد المُنشأ أو سبب الفشل الحقيقي) */
+    private val _status = MutableStateFlow<String?>(null)
+    val status = _status
+
     fun checkNow() {
         viewModelScope.launch {
             _checking.value = true
-            runCatching { checkAlerts() }
+            _status.value = try {
+                val created = checkAlerts()
+                if (created > 0) {
+                    notifier.notifyNewAlerts(created, unreadCount.value)
+                    "تم إنشاء $created تنبيه جديد"
+                } else {
+                    "لا توجد تنبيهات جديدة"
+                }
+            } catch (t: Throwable) {
+                // لا نُخفي السبب: runCatching سابقًا كان يبتلع الخطأ ويترك الزر بلا نتيجة
+                Log.e("DashboardVM", "alert check failed", t)
+                "فشل الفحص: ${t.localizedMessage ?: t.javaClass.simpleName}"
+            }
             _checking.value = false
         }
     }
 
+    fun dismissStatus() { _status.value = null }
+
     fun read(alert: Alert) = viewModelScope.launch { markRead(alert.id) }
     fun readAll() = viewModelScope.launch { markAllRead() }
+    fun dismiss(alert: Alert) = viewModelScope.launch { dismissAlert(alert.id) }
+    fun clearAll() = viewModelScope.launch { clearAlerts() }
 }
 
 /** لوحة المؤشرات — الشاشة الرئيسية */
@@ -121,10 +150,12 @@ fun DashboardScreen(
     onOpenGalaxy: () -> Unit,
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val stats by viewModel.stats.collectAsState()
-    val alerts by viewModel.alerts.collectAsState()
-    val unread by viewModel.unreadCount.collectAsState()
-    val checking by viewModel.checking.collectAsState()
+    val stats by viewModel.stats.collectAsStateWithLifecycle()
+    val alerts by viewModel.alerts.collectAsStateWithLifecycle()
+    val unread by viewModel.unreadCount.collectAsStateWithLifecycle()
+    val checking by viewModel.checking.collectAsStateWithLifecycle()
+    val status by viewModel.status.collectAsStateWithLifecycle()
+    var confirmClearAlerts by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -188,13 +219,25 @@ fun DashboardScreen(
 
         // التنبيهات الأخيرة
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                SectionTitle("أحدث التنبيهات")
-                Button(onClick = viewModel::checkNow, enabled = !checking) {
-                    Text(if (checking) "جارٍ الفحص…" else "افحص الآن")
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    SectionTitle("أحدث التنبيهات")
+                    Button(onClick = viewModel::checkNow, enabled = !checking) {
+                        Text(if (checking) "جارٍ الفحص…" else "افحص الآن")
+                    }
+                }
+                if (unread > 0 || alerts.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (unread > 0) {
+                            TextButton(onClick = viewModel::readAll) { Text("تحديد الكل كمقروء") }
+                        }
+                        TextButton(onClick = { confirmClearAlerts = true }) {
+                            Text("مسح التنبيهات", color = DangerRed)
+                        }
+                    }
                 }
             }
         }
@@ -207,7 +250,8 @@ fun DashboardScreen(
                 )
             }
         }
-        items(alerts.take(6)) { alert ->
+        // مفتاح العنصر يمنع إعادة استخدام صف خاطئ عند تغيّر القائمة (قراءة/حذف)
+        items(alerts.take(6), key = { it.id }) { alert ->
             GalaxyCard(onClick = { viewModel.read(alert) }) {
                 Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
@@ -225,9 +269,38 @@ fun DashboardScreen(
                     if (!alert.isRead) {
                         Text("● غير مقروء", color = SkyBlue, style = MaterialTheme.typography.labelSmall)
                     }
+                    OutlinedButton(onClick = { viewModel.dismiss(alert) }) { Text("تجاهل") }
                 }
             }
         }
+    }
+
+    // نتيجة الفحص اليدوي (عدد التنبيهات المُنشأة أو سبب الفشل)
+    status?.let { message ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = viewModel::dismissStatus,
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissStatus) { Text("حسنًا") }
+            }
+        )
+    }
+
+    if (confirmClearAlerts) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmClearAlerts = false },
+            title = { Text("مسح كل التنبيهات") },
+            text = { Text("سيتم حذف كل التنبيهات نهائيًا. هل تريد المتابعة؟") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmClearAlerts = false
+                    viewModel.clearAll()
+                }) { Text("مسح", color = DangerRed) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearAlerts = false }) { Text("إلغاء") }
+            }
+        )
     }
 }
 

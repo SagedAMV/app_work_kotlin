@@ -3,6 +3,14 @@
   تطبيق «مجرة» — نظام إدارة مواقع الاتصالات
   قاعدة صارمة: التطبيق أوفلاين 100٪، لذلك لا يوجد إذن INTERNET إطلاقًا،
   وأي مكتبة تتطلب اتصالًا ممنوعة حسب ملف التعليمات.
+
+  تصليب جلسة الفحص:
+  - allowBackup=false + قواعد استخراج: قاعدة البيانات المحلية تحتوي بيانات
+    مواقع ومعدات، وقاعدة الأندرويد الافتراضية كانت تنسخها إلى النسخ السحابي
+    غير المشفّر. التطبيق يوفّر نسخته الاحتياطية الخاصة عبر SAF من الإعدادات.
+  - POST_NOTIFICATIONS: التنبيهات الدورية (الصيانة/نقص المخزون) تُرسل كإشعار
+    نظام منذ Android 13، والإذن مطلوب وقت التشغيل.
+  - localeConfig: التطبيق عربي فقط.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -11,20 +19,24 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".GalaxyApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.Majarra">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|uiMode"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|uiMode|keyboardHidden|density"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

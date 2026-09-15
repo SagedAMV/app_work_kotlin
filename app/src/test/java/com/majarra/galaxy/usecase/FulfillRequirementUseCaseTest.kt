@@ -1,8 +1,7 @@
 package com.majarra.galaxy.usecase
 
 import com.majarra.galaxy.data.local.Alert
-import com.majarra.galaxy.data.local.BoqDocument
-import com.majarra.galaxy.data.local.BoqLine
+import com.majarra.galaxy.data.local.AuditLog
 import com.majarra.galaxy.data.local.InventoryItem
 import com.majarra.galaxy.data.local.Requirement
 import com.majarra.galaxy.data.local.RequirementItem
@@ -13,13 +12,14 @@ import com.majarra.galaxy.domain.repository.AlertRepository
 import com.majarra.galaxy.domain.repository.AuditRepository
 import com.majarra.galaxy.domain.repository.InventoryRepository
 import com.majarra.galaxy.domain.repository.RequirementRepository
+import com.majarra.galaxy.domain.repository.TransactionRunner
 import com.majarra.galaxy.domain.usecase.FulfillRequirementUseCase
 import com.majarra.galaxy.domain.usecase.FulfillResult
-import com.majarra.galaxy.data.local.AuditLog
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,6 +33,8 @@ class FulfillRequirementUseCaseTest {
         private var nextId = 1L
         override fun observeAll(): Flow<List<InventoryItem>> = flowOf(items.values.toList())
         override suspend fun getAll(): List<InventoryItem> = items.values.toList()
+        override suspend fun getBelowThreshold(): List<InventoryItem> =
+            items.values.filter { it.quantity <= it.minThreshold }
         override suspend fun getById(id: Long): InventoryItem? = items[id]
         override suspend fun count(): Int = items.size
         override suspend fun insert(i: InventoryItem): Long {
@@ -60,7 +62,10 @@ class FulfillRequirementUseCaseTest {
             return saved.id
         }
         override suspend fun update(r: Requirement) { requirements[r.id] = r }
-        override suspend fun delete(r: Requirement) { requirements.remove(r.id) }
+        override suspend fun delete(r: Requirement) {
+            requirements.remove(r.id)
+            items.removeAll { it.requirementId == r.id }
+        }
         override suspend fun insertItems(newItems: List<RequirementItem>) { items += newItems }
         override suspend fun updateItem(item: RequirementItem) {
             val idx = items.indexOfFirst { it.id == item.id }
@@ -77,7 +82,9 @@ class FulfillRequirementUseCaseTest {
         override suspend fun insert(a: Alert) { inserted += a }
         override suspend fun markRead(id: Long) {}
         override suspend fun markAllRead() {}
-        override suspend fun deleteAll() {}
+        override suspend fun delete(id: Long) { inserted.removeAll { it.id == id } }
+        override suspend fun countAll(): Int = inserted.size
+        override suspend fun deleteAll() { inserted.clear() }
     }
 
     private class FakeAudit : AuditRepository {
@@ -86,74 +93,136 @@ class FulfillRequirementUseCaseTest {
         override suspend fun log(action: String, entityType: String, entityId: Long?, details: String) {
             logs += AuditLog(action = action, entityType = entityType, entityId = entityId, details = details)
         }
-        override suspend fun clear() {}
+        override suspend fun clear() { logs.clear() }
     }
 
-    /* ── تجهيز مشترك ── */
+    /** منفّذ معاملة وهمي — نتحقق أن العمليات الكتابية تُغلَّف فعلًا بمعاملة */
+    private class FakeTxRunner : TransactionRunner {
+        var started = 0
+        override suspend fun <T> inTransaction(block: suspend () -> T): T {
+            started++
+            return block()
+        }
+    }
 
-    private fun fixture(stockQuantity: Int, needed: Int): Triple<FulfillRequirementUseCase, Triple<FakeInventory, FakeRequirements, FakeAlerts>, Pair<Long, Long>> {
+    private data class Fixture(
+        val useCase: FulfillRequirementUseCase,
+        val inventory: FakeInventory,
+        val requirements: FakeRequirements,
+        val alerts: FakeAlerts,
+        val audit: FakeAudit,
+        val tx: FakeTxRunner,
+        val reqId: Long,
+        val invId: Long
+    )
+
+    private suspend fun fixture(
+        stockQuantity: Int,
+        needed: Int,
+        status: RequirementStatus = RequirementStatus.APPROVED,
+        minThreshold: Int = 2
+    ): Fixture {
         val inventory = FakeInventory()
         val requirements = FakeRequirements()
         val alerts = FakeAlerts()
         val audit = FakeAudit()
+        val tx = FakeTxRunner()
 
-        val invId = kotlinx.coroutines.runBlocking {
-            inventory.insert(InventoryItem(name = "كابل", quantity = stockQuantity, minThreshold = 2))
-        }
-        val reqId = kotlinx.coroutines.runBlocking {
-            requirements.insert(
-                Requirement(siteId = 1, type = RequirementType.MATERIALS, status = RequirementStatus.APPROVED)
-            )
-        }
-        kotlinx.coroutines.runBlocking {
-            requirements.insertItems(
-                listOf(
-                    RequirementItem(id = 100, requirementId = reqId, inventoryItemId = invId, description = "كابل", quantity = needed)
+        val invId = inventory.insert(
+            InventoryItem(name = "كابل", quantity = stockQuantity, minThreshold = minThreshold)
+        )
+        val reqId = requirements.insert(
+            Requirement(siteId = 1, type = RequirementType.MATERIALS, status = status)
+        )
+        requirements.insertItems(
+            listOf(
+                RequirementItem(
+                    id = 100,
+                    requirementId = reqId,
+                    inventoryItemId = invId,
+                    description = "كابل",
+                    quantity = needed
                 )
             )
-        }
-
-        val useCase = FulfillRequirementUseCase(requirements, inventory, audit, alerts)
-        return Triple(useCase, Triple(inventory, requirements, alerts), reqId to invId)
+        )
+        return Fixture(
+            FulfillRequirementUseCase(requirements, inventory, audit, alerts, tx),
+            inventory, requirements, alerts, audit, tx, reqId, invId
+        )
     }
 
     @Test
-    fun `الصرف يخصم المخزون ويسجل في التدقيق`() = runTest {
-        val (useCase, repos, ids) = fixture(stockQuantity = 10, needed = 4)
-        val (inventory, requirements, _) = repos
-        val (reqId, invId) = ids
+    fun `الصرف يخصم المخزون ويسجل في التدقيق داخل معاملة`() = runTest {
+        val f = fixture(stockQuantity = 10, needed = 4)
 
-        val result = useCase(reqId)
+        val result = f.useCase(f.reqId)
 
         assertTrue(result is FulfillResult.Success)
-        assertEquals(6, inventory.items[invId]?.quantity)
-        assertEquals(RequirementStatus.FULFILLED, requirements.requirements[reqId]?.status)
-        assertTrue(requirements.items.first().fulfilled)
+        assertEquals(6, f.inventory.items[f.invId]?.quantity)
+        assertEquals(RequirementStatus.FULFILLED, f.requirements.requirements[f.reqId]?.status)
+        assertTrue(f.requirements.items.first().fulfilled)
+        assertEquals(1, f.tx.started)
+        assertTrue(f.audit.logs.any { it.action == "DISPATCH" })
     }
 
     @Test
     fun `المخزون غير الكافي يمنع الصرف بالكامل`() = runTest {
-        val (useCase, repos, ids) = fixture(stockQuantity = 2, needed = 5)
-        val (inventory, requirements, _) = repos
-        val (reqId, invId) = ids
+        val f = fixture(stockQuantity = 2, needed = 5)
 
-        val result = useCase(reqId)
+        val result = f.useCase(f.reqId)
 
         assertTrue(result is FulfillResult.Failure)
         // لا خصم جزئي أبدًا
-        assertEquals(2, inventory.items[invId]?.quantity)
-        assertEquals(RequirementStatus.APPROVED, requirements.requirements[reqId]?.status)
+        assertEquals(2, f.inventory.items[f.invId]?.quantity)
+        assertEquals(RequirementStatus.APPROVED, f.requirements.requirements[f.reqId]?.status)
+        assertFalse(f.requirements.items.first().fulfilled)
+        // لم تُفتح معاملة إطلاقًا لأن الرفض حدث قبل أي كتابة
+        assertEquals(0, f.tx.started)
     }
 
     @Test
-    fun `الوصول للحد الأدنى ينشئ تنبيه نقص`() = runTest {
-        val (useCase, repos, ids) = fixture(stockQuantity = 4, needed = 2)
-        val (_, _, alerts) = repos
-        val (reqId, invId) = ids
+    fun `وصول المخزون للحد الأدنى ينشئ تنبيهًا واحدًا فقط`() = runTest {
+        val f = fixture(stockQuantity = 5, needed = 3, minThreshold = 2)
 
-        useCase(reqId)
+        f.useCase(f.reqId)
+        assertEquals(1, f.alerts.inserted.size)
+        assertEquals(AlertType.LOW_STOCK.name, f.alerts.inserted.first().type.name)
 
-        // المتبقي = 2 = الحد الأدنى → يجب إنشاء تنبيه
-        assertTrue(alerts.inserted.any { it.type == AlertType.LOW_STOCK && it.refId == invId })
+        // إعادة الصرف ممنوعة، فالتنبيه لا يتكرر
+        assertTrue(f.useCase(f.reqId) is FulfillResult.Failure)
+        assertEquals(1, f.alerts.inserted.size)
+    }
+
+    @Test
+    fun `لا يُصرف احتياج ملغي`() = runTest {
+        val f = fixture(stockQuantity = 10, needed = 1, status = RequirementStatus.CANCELLED)
+
+        assertTrue(f.useCase(f.reqId) is FulfillResult.Failure)
+        assertEquals(10, f.inventory.items[f.invId]?.quantity)
+        assertEquals(0, f.tx.started)
+    }
+
+    @Test
+    fun `لا يُصرف احتياج مصروف مسبقًا`() = runTest {
+        val f = fixture(stockQuantity = 10, needed = 1, status = RequirementStatus.FULFILLED)
+
+        assertTrue(f.useCase(f.reqId) is FulfillResult.Failure)
+        assertEquals(10, f.inventory.items[f.invId]?.quantity)
+    }
+
+    @Test
+    fun `احتياج غير موجود يعيد NotFound`() = runTest {
+        val f = fixture(stockQuantity = 10, needed = 1)
+
+        assertTrue(f.useCase(9999L) is FulfillResult.NotFound)
+    }
+
+    @Test
+    fun `بند مرتبط بصنف مخزون محذوف يُرفض برسالة واضحة`() = runTest {
+        val f = fixture(stockQuantity = 10, needed = 1)
+        f.inventory.items.remove(f.invId)
+
+        assertTrue(f.useCase(f.reqId) is FulfillResult.Failure)
+        assertEquals(0, f.tx.started)
     }
 }

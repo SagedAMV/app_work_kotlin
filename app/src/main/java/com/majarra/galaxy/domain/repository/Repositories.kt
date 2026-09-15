@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.Flow
 
 interface SiteRepository {
     fun observeSites(): Flow<List<Site>>
+    suspend fun findByCode(code: String): Site?
+    suspend fun findByCodeExcept(code: String, excludeId: Long): Site?
     fun searchSites(q: String): Flow<List<Site>>
     fun observeSite(id: Long): Flow<Site?>
     suspend fun getSite(id: Long): Site?
@@ -45,6 +47,7 @@ interface EquipmentRepository {
 
 interface AttachmentRepository {
     fun observeBySite(siteId: Long): Flow<List<Attachment>>
+    suspend fun getBySite(siteId: Long): List<Attachment>
     suspend fun insert(a: Attachment): Long
     suspend fun delete(a: Attachment)
 }
@@ -57,6 +60,7 @@ interface SiteHistoryRepository {
 interface InventoryRepository {
     fun observeAll(): Flow<List<InventoryItem>>
     suspend fun getAll(): List<InventoryItem>
+    suspend fun getBelowThreshold(): List<InventoryItem>
     suspend fun getById(id: Long): InventoryItem?
     suspend fun count(): Int
     suspend fun insert(i: InventoryItem): Long
@@ -90,6 +94,7 @@ interface LinkRepository {
     suspend fun getById(id: Long): Link?
     fun observeBySite(siteId: Long): Flow<List<Link>>
     suspend fun countActiveBySite(siteId: Long): Int
+    suspend fun countBetween(a: Long, b: Long): Int
     suspend fun insert(l: Link): Long
     suspend fun update(l: Link)
     suspend fun delete(l: Link)
@@ -107,8 +112,11 @@ interface TicketRepository {
 
 interface WorkOrderRepository {
     fun observeAll(): Flow<List<WorkOrder>>
+    fun observeBySite(siteId: Long): Flow<List<WorkOrder>>
+    suspend fun getAll(): List<WorkOrder>
     suspend fun insert(w: WorkOrder): Long
     suspend fun update(w: WorkOrder)
+    suspend fun delete(w: WorkOrder)
 }
 
 interface MaintenanceRepository {
@@ -125,6 +133,8 @@ interface AlertRepository {
     suspend fun hasUnreadFor(type: String, refId: Long): Boolean
     suspend fun insert(a: Alert)
     suspend fun markRead(id: Long)
+    suspend fun delete(id: Long)
+    suspend fun countAll(): Int
     suspend fun markAllRead()
     suspend fun deleteAll()
 }
@@ -140,6 +150,14 @@ interface SettingsRepository {
     data class Prefs(val darkMode: Boolean = true, val biometricLock: Boolean = false)
 
     val preferences: Flow<Prefs>
+
+    /**
+     * القيمة الحالية المخزَّنة فعليًا (قراءة متزامنة).
+     * تُستخدم كقيمة ابتدائية للواجهة، لأن الاعتماد على `Prefs()` افتراضيًا كان
+     * يجعل «القفل البيومتري = false» في اللحظة الأولى حتى لو كان مفعّلًا،
+     * أي تجاوز صامت للقفل.
+     */
+    val current: Prefs
     suspend fun setDarkMode(enabled: Boolean)
     suspend fun setBiometricLock(enabled: Boolean)
 }

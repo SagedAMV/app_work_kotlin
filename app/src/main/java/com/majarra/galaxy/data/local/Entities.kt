@@ -27,7 +27,10 @@ import com.majarra.galaxy.domain.model.WorkOrderStatus
  * ============================================================ */
 
 /** 3.1 المواقع */
-@Entity(tableName = "sites", indices = [Index(value = ["code"], unique = true)])
+@Entity(
+    tableName = "sites",
+    indices = [Index(value = ["code"], unique = true), Index("name")]
+)
 data class Site(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -105,7 +108,7 @@ data class SiteHistory(
 )
 
 /** 3.5 المخزون المركزي */
-@Entity(tableName = "inventory_items")
+@Entity(tableName = "inventory_items", indices = [Index("name")])
 data class InventoryItem(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
@@ -125,7 +128,7 @@ data class InventoryItem(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("siteId")]
+    indices = [Index("siteId"), Index("status")]
 )
 data class Requirement(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -207,7 +210,7 @@ data class BoqLine(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("sourceSiteId"), Index("targetSiteId")]
+    indices = [Index("sourceSiteId"), Index("targetSiteId"), Index("status")]
 )
 data class Link(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -231,7 +234,7 @@ data class Link(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("siteId")]
+    indices = [Index("siteId"), Index("status")]
 )
 data class Ticket(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -256,7 +259,7 @@ data class Ticket(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("siteId")]
+    indices = [Index("siteId"), Index("status")]
 )
 data class WorkOrder(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -278,7 +281,7 @@ data class WorkOrder(
             onDelete = ForeignKey.CASCADE
         )
     ],
-    indices = [Index("siteId")]
+    indices = [Index("siteId"), Index("nextDue")]
 )
 data class MaintenanceSchedule(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -292,7 +295,10 @@ data class MaintenanceSchedule(
 )
 
 /** 3.13 التنبيهات */
-@Entity(tableName = "alerts", indices = [Index(value = ["type", "refId"])])
+@Entity(
+    tableName = "alerts",
+    indices = [Index(value = ["type", "refId"]), Index("isRead"), Index("createdAt")]
+)
 data class Alert(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val type: AlertType,
