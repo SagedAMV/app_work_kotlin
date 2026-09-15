@@ -1,25 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  تطبيق «مجرة» — نظام إدارة مواقع الاتصالات
+  تطبيق «مجرة» — إدارة المواقع الشخصية (النسخة المبسطة 2.0)
   قاعدة صارمة: التطبيق أوفلاين 100٪، لذلك لا يوجد إذن INTERNET إطلاقًا،
   وأي مكتبة تتطلب اتصالًا ممنوعة حسب ملف التعليمات.
 
-  تصليب جلسة الفحص:
-  - allowBackup=false + قواعد استخراج: قاعدة البيانات المحلية تحتوي بيانات
-    مواقع ومعدات، وقاعدة الأندرويد الافتراضية كانت تنسخها إلى النسخ السحابي
-    غير المشفّر. التطبيق يوفّر نسخته الاحتياطية الخاصة عبر SAF من الإعدادات.
-  - POST_NOTIFICATIONS: التنبيهات الدورية (الصيانة/نقص المخزون) تُرسل كإشعار
-    نظام منذ Android 13، والإذن مطلوب وقت التشغيل.
-  - localeConfig: التطبيق عربي فقط.
+  الأذونات بعد التبسيط:
+  - POST_NOTIFICATIONS: تنبيه بسيط واحد عند قرب موعد الصيانة (Android 13+).
+  - WRITE_EXTERNAL_STORAGE: للنسخ الاحتياطية على الأجهزة القديمة فقط
+    (حتى Android 9)، وبعدها يُستخدم منتقي الملفات الآمن بلا إذن.
+  حُذفت أذونات الموقع (لا GPS في هذه النسخة) والبصمة (القفل بسيط برمز).
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- إذن البصمة + الموقع المحلي (GPS أوفلاين) — بدون أي أذون شبكة -->
-    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:name=".GalaxyApplication"
@@ -43,14 +39,5 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <!--
-          تعطيل التهيئة التلقائية لـ WorkManager عبر androidx.startup
-          لأننا نستخدم HiltWorkerFactory (تهيئة عند الطلب).
-        -->
-        <provider
-            android:name="androidx.startup.InitializationProvider"
-            android:authorities="${applicationId}.androidx-startup"
-            tools:node="remove" />
     </application>
 </manifest>

@@ -6,46 +6,30 @@ import androidx.room.TypeConverters
 
 /**
  * قاعدة بيانات «مجرة» — أوفلاين بالكامل (Room).
- * الإصدار 2: أُضيفت فهارس أداء (انظر GalaxyMigrations) مع ترحيل غير مدمّر.
+ *
+ * الإصدار 3: التبسيط الكبير حسب تعليمات.md — خمسة جداول فقط
+ * (مواقع، تفاصيل، سجل صيانة، مرفقات، إعدادات). الترحيل من 2 → 3
+ * في GalaxyMigrations يحافظ على بيانات المواقع والمرفقات.
  */
 @Database(
     entities = [
         Site::class,
-        Equipment::class,
+        SiteDetail::class,
+        MaintenanceLog::class,
         Attachment::class,
-        SiteHistory::class,
-        InventoryItem::class,
-        Requirement::class,
-        RequirementItem::class,
-        BoqDocument::class,
-        BoqLine::class,
-        Link::class,
-        Ticket::class,
-        WorkOrder::class,
-        MaintenanceSchedule::class,
-        Alert::class,
-        AuditLog::class
+        AppSetting::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(GalaxyConverters::class)
 abstract class GalaxyDatabase : RoomDatabase() {
 
     abstract fun siteDao(): SiteDao
-    abstract fun equipmentDao(): EquipmentDao
+    abstract fun siteDetailDao(): SiteDetailDao
+    abstract fun maintenanceLogDao(): MaintenanceLogDao
     abstract fun attachmentDao(): AttachmentDao
-    abstract fun siteHistoryDao(): SiteHistoryDao
-    abstract fun inventoryItemDao(): InventoryItemDao
-    abstract fun requirementDao(): RequirementDao
-    abstract fun requirementItemDao(): RequirementItemDao
-    abstract fun boqDao(): BoqDao
-    abstract fun linkDao(): LinkDao
-    abstract fun ticketDao(): TicketDao
-    abstract fun workOrderDao(): WorkOrderDao
-    abstract fun maintenanceScheduleDao(): MaintenanceScheduleDao
-    abstract fun alertDao(): AlertDao
-    abstract fun auditLogDao(): AuditLogDao
+    abstract fun appSettingDao(): AppSettingDao
 
     companion object {
         const val DB_NAME = "galaxy.db"

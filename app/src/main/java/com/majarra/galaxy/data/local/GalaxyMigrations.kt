@@ -6,14 +6,24 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 /**
  * ترحيلات قاعدة بيانات «مجرة».
  *
- * كان المشروع يستخدم الطريقة التدميرية فقط (fallbackToDestructiveMigration)،
- * أي أن أي تغيير في المخطط يؤدي إلى حذف بيانات المستخدم بالكامل (مواقع،
- * معدات، تذاكر…). الآن هناك ترحيل حقيقي غير مدمّر، ويبقى الحذف التدميري
- * للتدهور فقط لأن الرجوع لإصدار أقدم لا يمكن ترحيله بأمان.
+ * 1 → 2: إضافة فهارس أداء (بقيت لمن يرقّي من الإصدار الأول).
  *
- * 1 → 2: إضافة فهارس تُسرّع الاستعلامات الأكثر تكرارًا في التطبيق.
- * ملاحظة مهمة: أسماء الفهارس يجب أن تطابق ما يولّده Room من تعريفات الكيانات
- * (index_<الجدول>_<العمود>) وإلا فشل التحقق من المخطط.
+ * 2 → 3: التبسيط الكبير حسب تعليمات.md:
+ *   - إسقاط جداول: المعدات، سجل الموقع، المخزون، الاحتياج وبنوده،
+ *     وثائق BOQ وأسطرها، الروابط، التذاكر، أوامر الشغل، جداول الصيانة
+ *     الوقائية، التنبيهات، وسجل التدقيق.
+ *   - إعادة بناء المواقع بلا إحداثيات/رمز/حالة مع الحفاظ على البيانات
+ *     (الاسم والملاحظات وتواريخ الإنشاء/التعديل).
+ *   - إعادة بناء المرفقات بحقولها الجديدة (مسار الملف/النوع/تاريخ الرفع)
+ *     مع ترحيل الصفوف القديمة.
+ *   - إنشاء الجداول الجديدة: تفاصيل المواقع، سجل الصيانة، الإعدادات.
+ *
+ * ملاحظات تنفيذية (حماية من فقدان البيانات):
+ *   - المواقع والمرفقات تُنسخ أولًا إلى جداول *_new ثم تُسقط القديمة
+ *     ويُعاد التسمية، فلا تُفقد بيانات المستخدم.
+ *   - إسقاط الجداول يبدأ بالأبناء (بنود الاحتياج، أسطر BOQ) قبل الآباء.
+ *   - أسماء الفهارس تطابق ما يولّده Room (index_<الجدول>_<العمود>)
+ *     وإلا فشل التحقق من المخطط بعد الترحيل.
  */
 object GalaxyMigrations {
 
@@ -32,6 +42,104 @@ object GalaxyMigrations {
         }
     }
 
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+
+            // ── 1) الجداول الجديدة (مفاتيحها الخارجية تشير إلى sites القائمة) ──
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `site_details` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`siteId` INTEGER NOT NULL, " +
+                    "`availableMaterials` TEXT NOT NULL, " +
+                    "`neededMaterials` TEXT NOT NULL, " +
+                    "`maintenanceMaterials` TEXT NOT NULL, " +
+                    "`withdrawnMaterials` TEXT NOT NULL, " +
+                    "`nextMaintenanceDue` INTEGER, " +
+                    "FOREIGN KEY(`siteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_site_details_siteId` ON `site_details` (`siteId`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `maintenance_logs` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`siteId` INTEGER NOT NULL, " +
+                    "`maintenanceDate` INTEGER NOT NULL, " +
+                    "`notes` TEXT NOT NULL, " +
+                    "`performedBy` TEXT NOT NULL, " +
+                    "FOREIGN KEY(`siteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_maintenance_logs_siteId` ON `maintenance_logs` (`siteId`)"
+            )
+
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `app_settings` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`settingKey` TEXT NOT NULL, " +
+                    "`settingValue` TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_app_settings_settingKey` ON `app_settings` (`settingKey`)"
+            )
+
+            // ── 2) إعادة بناء المواقع بلا إحداثيات/رمز/حالة مع نسخ البيانات ──
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `sites_new` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`name` TEXT NOT NULL, " +
+                    "`notes` TEXT NOT NULL, " +
+                    "`createdDate` INTEGER NOT NULL, " +
+                    "`lastModified` INTEGER NOT NULL)"
+            )
+            db.execSQL(
+                "INSERT INTO `sites_new` (`id`, `name`, `notes`, `createdDate`, `lastModified`) " +
+                    "SELECT `id`, `name`, `notes`, `createdAt`, `updatedAt` FROM `sites`"
+            )
+
+            // ── 3) إعادة بناء المرفقات بالشكل الجديد مع ترحيل الصفوف ──
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `attachments_new` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`siteId` INTEGER NOT NULL, " +
+                    "`filePath` TEXT NOT NULL, " +
+                    "`fileType` TEXT NOT NULL, " +
+                    "`uploadedDate` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`siteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "INSERT INTO `attachments_new` (`id`, `siteId`, `filePath`, `fileType`, `uploadedDate`) " +
+                    "SELECT `id`, `siteId`, `uri`, `type`, `addedAt` FROM `attachments`"
+            )
+
+            // ── 4) إسقاط الجداول الملغاة (الأبناء أولًا) والجداول القديمة ──
+            db.execSQL("DROP TABLE IF EXISTS `requirement_items`")
+            db.execSQL("DROP TABLE IF EXISTS `boq_lines`")
+            db.execSQL("DROP TABLE IF EXISTS `boq_documents`")
+            db.execSQL("DROP TABLE IF EXISTS `requirements`")
+            db.execSQL("DROP TABLE IF EXISTS `equipments`")
+            db.execSQL("DROP TABLE IF EXISTS `site_history`")
+            db.execSQL("DROP TABLE IF EXISTS `inventory_items`")
+            db.execSQL("DROP TABLE IF EXISTS `links`")
+            db.execSQL("DROP TABLE IF EXISTS `tickets`")
+            db.execSQL("DROP TABLE IF EXISTS `work_orders`")
+            db.execSQL("DROP TABLE IF EXISTS `maintenance_schedules`")
+            db.execSQL("DROP TABLE IF EXISTS `alerts`")
+            db.execSQL("DROP TABLE IF EXISTS `audit_log`")
+            db.execSQL("DROP TABLE IF EXISTS `attachments`")
+            db.execSQL("DROP TABLE IF EXISTS `sites`")
+
+            // ── 5) إعادة التسمية ثم الفهارس بأسماء Room القياسية ──
+            db.execSQL("ALTER TABLE `sites_new` RENAME TO `sites`")
+            db.execSQL("ALTER TABLE `attachments_new` RENAME TO `attachments`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sites_name` ON `sites` (`name`)")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_attachments_siteId` ON `attachments` (`siteId`)"
+            )
+        }
+    }
+
     /** كل الترحيلات بالترتيب — تُمرَّر إلى Room.databaseBuilder */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 }

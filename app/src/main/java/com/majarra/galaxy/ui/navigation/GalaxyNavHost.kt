@@ -5,31 +5,29 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CellTower
-import androidx.compose.material.icons.filled.Hub
-import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.SpaceDashboard
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,12 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -54,79 +53,60 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.majarra.galaxy.R
 import com.majarra.galaxy.domain.repository.SettingsRepository
-import com.majarra.galaxy.security.BiometricAuthHelper
-import com.majarra.galaxy.ui.screens.dashboard.DashboardScreen
-import com.majarra.galaxy.ui.screens.galaxy.GalaxyScreen
-import com.majarra.galaxy.ui.screens.galaxy.LinkCalculatorScreen
-import com.majarra.galaxy.ui.screens.maintenance.MaintenanceScreen
-import com.majarra.galaxy.ui.screens.needs.NeedsScreen
-import com.majarra.galaxy.ui.screens.reports.ReportsScreen
 import com.majarra.galaxy.ui.screens.settings.SettingsScreen
 import com.majarra.galaxy.ui.screens.sites.SiteDetailsScreen
-import com.majarra.galaxy.ui.screens.sites.SiteFormScreen
 import com.majarra.galaxy.ui.screens.sites.SitesScreen
 
-/** مسارات التنقل */
+/** مسارات التنقل — ثلاثة فقط بعد التبسيط: المواقع، التفاصيل، الإعدادات */
 object Routes {
-    const val DASHBOARD = "dashboard"
     const val SITES = "sites"
-    const val GALAXY = "galaxy"
-    const val NEEDS = "needs"
-    const val MAINTENANCE = "maintenance"
-    const val REPORTS = "reports"
     const val SETTINGS = "settings"
     const val SITE_DETAILS = "site_details/{siteId}"
-    const val SITE_FORM = "site_form?siteId={siteId}"
-    const val LINK_CALCULATOR = "link_calculator?linkId={linkId}"
 
     fun siteDetails(id: Long) = "site_details/$id"
-    fun siteForm(id: Long? = null) = if (id == null) "site_form" else "site_form?siteId=$id"
-    fun linkCalculator(id: Long? = null) =
-        if (id == null) "link_calculator" else "link_calculator?linkId=$id"
 
-    val topLevel = setOf(DASHBOARD, SITES, GALAXY, NEEDS, MAINTENANCE, REPORTS, SETTINGS)
+    val topLevel = setOf(SITES, SETTINGS)
 }
 
 /** عنصر تبويب */
 private data class TabItem(val route: String, val label: String, val icon: ImageVector)
 
 private val tabs = listOf(
-    TabItem(Routes.DASHBOARD, "الرئيسية", Icons.Filled.SpaceDashboard),
     TabItem(Routes.SITES, "المواقع", Icons.Filled.CellTower),
-    TabItem(Routes.GALAXY, "المجرة", Icons.Filled.Hub),
-    TabItem(Routes.NEEDS, "الاحتياج", Icons.Filled.Inventory2),
-    TabItem(Routes.MAINTENANCE, "الصيانة", Icons.Filled.Build),
-    TabItem(Routes.REPORTS, "التقارير", Icons.Filled.Assessment),
     TabItem(Routes.SETTINGS, "الإعدادات", Icons.Filled.Settings)
 )
 
-/** جذر التطبيق: القفل البيومتري + الشريط السفلي + مضيف التنقل */
+/**
+ * جذر التطبيق: القفل البسيط (رمز سري) + الشريط السفلي + مضيف التنقل.
+ * `verifyPin` تُمرَّر من النشاط الرئيسي لأن التحقق يحتاج المستودع
+ * ولا نريد إنشاء ViewModel لشاشة القفل.
+ */
 @Composable
 fun GalaxyRoot(
-    activity: FragmentActivity,
-    prefs: SettingsRepository.Prefs
+    prefs: SettingsRepository.Prefs,
+    verifyPin: (String) -> Boolean
 ) {
     // القيمة الابتدائية تأتي من التخزين الفعلي (SettingsRepository.current)
-    var unlocked by rememberSaveable { mutableStateOf(!prefs.biometricLock) }
+    var unlocked by rememberSaveable { mutableStateOf(!prefs.lockEnabled) }
 
     // تغيير إعداد القفل يُطبَّق فورًا في الاتجاهين (تفعيل ⇒ قفل، إلغاء ⇒ فتح)
-    LaunchedEffect(prefs.biometricLock) {
-        unlocked = !prefs.biometricLock
+    LaunchedEffect(prefs.lockEnabled) {
+        unlocked = !prefs.lockEnabled
     }
 
-    // إعادة القفل عند انتقال التطبيق للخلفية: تطبيق إدارة مواقع لا يبقى مفتوحًا
-    // إذا تركه المستخدم وانتقل لتطبيق آخر.
+    // إعادة القفل عند انتقال التطبيق للخلفية: تطبيق إدارة مواقع لا يبقى
+    // مفتوحًا إذا تركه المستخدم وانتقل لتطبيق آخر.
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, prefs.biometricLock) {
+    DisposableEffect(lifecycleOwner, prefs.lockEnabled) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP && prefs.biometricLock) unlocked = false
+            if (event == Lifecycle.Event.ON_STOP && prefs.lockEnabled) unlocked = false
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     if (!unlocked) {
-        LockScreen(activity = activity, onUnlock = { unlocked = true })
+        PinLockScreen(verifyPin = verifyPin, onUnlock = { unlocked = true })
         return
     }
 
@@ -145,7 +125,6 @@ fun GalaxyRoot(
         }
     ) { padding ->
         GalaxyNavHost(
-            activity = activity,
             navController = navController,
             snackbarHostState = snackbarHostState,
             modifier = Modifier.padding(padding)
@@ -153,13 +132,13 @@ fun GalaxyRoot(
     }
 }
 
-/** شاشة القفل البيومتري */
+/**
+ * شاشة القفل البسيط — رمز سري من 4 إلى 8 أرقام (بدون بيومتري).
+ * الرمز يُقارن ببصمته المخزونة في جدول الإعدادات.
+ */
 @Composable
-private fun LockScreen(activity: FragmentActivity, onUnlock: () -> Unit) {
-    // المساعد بلا حالة (stateless) فلا حاجة لإعادة إنشائه مع كل إعادة تركيب
-    val helper = remember { BiometricAuthHelper() }
-    val noSensorMessage = stringResource(R.string.lock_no_sensor)
-    val failedMessage = stringResource(R.string.lock_error)
+private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) {
+    var pin by rememberSaveable { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
 
     Box(
@@ -170,7 +149,8 @@ private fun LockScreen(activity: FragmentActivity, onUnlock: () -> Unit) {
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(horizontal = 32.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -191,27 +171,35 @@ private fun LockScreen(activity: FragmentActivity, onUnlock: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            OutlinedTextField(
+                value = pin,
+                onValueChange = { value ->
+                    pin = value.filter { it.isDigit() }.take(8)
+                    error = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text(stringResource(R.string.lock_pin_label)) },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                visualTransformation = PasswordVisualTransformation()
+            )
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
-            Button(onClick = {
-                if (helper.canAuthenticate(activity)) {
-                    helper.authenticate(
-                        activity,
-                        onSuccess = onUnlock,
-                        onError = { message -> error = message.ifBlank { failedMessage } }
-                    )
-                } else {
-                    error = noSensorMessage
-                }
-            }) {
+            Button(
+                onClick = {
+                    if (verifyPin(pin)) onUnlock() else error = stringResource(R.string.lock_wrong_pin)
+                },
+                enabled = pin.length >= 4,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Text(stringResource(R.string.lock_button))
             }
         }
     }
 }
 
-/** الشريط السفلي — 7 شاشات رئيسية حسب التعليمات */
+/** الشريط السفلي — تبويبان فقط بعد التبسيط */
 @Composable
 private fun GalaxyBottomBar(navController: NavHostController, currentRoute: String?) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -237,41 +225,22 @@ private fun GalaxyBottomBar(navController: NavHostController, currentRoute: Stri
     }
 }
 
-/** مضيف التنقل الكامل */
+/** مضيف التنقل المبسط */
 @Composable
 private fun GalaxyNavHost(
-    activity: FragmentActivity,
     navController: NavHostController,
     snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
-        startDestination = Routes.DASHBOARD,
+        startDestination = Routes.SITES,
         modifier = modifier
     ) {
-        composable(Routes.DASHBOARD) {
-            DashboardScreen(
-                onOpenSites = { navController.navigate(Routes.SITES) },
-                onOpenGalaxy = { navController.navigate(Routes.GALAXY) }
-            )
-        }
         composable(Routes.SITES) {
-            SitesScreen(
-                onOpenSite = { navController.navigate(Routes.siteDetails(it)) },
-                onAddSite = { navController.navigate(Routes.siteForm()) }
-            )
+            SitesScreen(onOpenSite = { navController.navigate(Routes.siteDetails(it)) })
         }
-        composable(Routes.GALAXY) {
-            GalaxyScreen(
-                onOpenSite = { navController.navigate(Routes.siteDetails(it)) },
-                onOpenCalculator = { navController.navigate(Routes.linkCalculator(it)) }
-            )
-        }
-        composable(Routes.NEEDS) { NeedsScreen() }
-        composable(Routes.MAINTENANCE) { MaintenanceScreen() }
-        composable(Routes.REPORTS) { ReportsScreen() }
-        composable(Routes.SETTINGS) { SettingsScreen(activity) }
+        composable(Routes.SETTINGS) { SettingsScreen() }
         composable(
             route = Routes.SITE_DETAILS,
             arguments = listOf(navArgument("siteId") { type = NavType.LongType })
@@ -279,32 +248,7 @@ private fun GalaxyNavHost(
             SiteDetailsScreen(
                 siteId = entry.arguments?.getLong("siteId") ?: 0L,
                 onBack = { navController.popBackStack() },
-                onEdit = { navController.navigate(Routes.siteForm(it)) }
-            )
-        }
-        composable(
-            route = Routes.SITE_FORM,
-            arguments = listOf(navArgument("siteId") {
-                type = NavType.LongType
-                defaultValue = -1L
-            })
-        ) { entry ->
-            SiteFormScreen(
-                siteId = entry.arguments?.getLong("siteId") ?: -1L,
-                onBack = { navController.popBackStack() },
-                onSaved = { navController.popBackStack() }
-            )
-        }
-        composable(
-            route = Routes.LINK_CALCULATOR,
-            arguments = listOf(navArgument("linkId") {
-                type = NavType.LongType
-                defaultValue = -1L
-            })
-        ) { entry ->
-            LinkCalculatorScreen(
-                linkId = entry.arguments?.getLong("linkId") ?: -1L,
-                onBack = { navController.popBackStack() }
+                snackbarHostState = snackbarHostState
             )
         }
     }

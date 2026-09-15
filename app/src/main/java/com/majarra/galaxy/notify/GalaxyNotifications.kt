@@ -13,36 +13,27 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.majarra.galaxy.MainActivity
 import com.majarra.galaxy.R
-import dagger.hilt.android.qualifiers.ApplicationContext
-import javax.inject.Inject
-import javax.inject.Singleton
 
 /**
- * إشعارات مجرة — أوفلاين 100٪ (بلا FCM ولا أي شبكة).
- *
- * سبب الإضافة: كان التطبيق يُنشئ صفوف تنبيهات في قاعدة البيانات فقط، ولا تصل
- * أي إشعارات نظام للمستخدم (لا قناة، ولا إذن POST_NOTIFICATIONS، ولا نشر).
- * النتيجة: «محرك التنبيهات» موجود لكنه صامت عمليًا. الآن:
- *  - قناة إشعارات معرَّفة (إلزامية من Android 8+ وهدف التطبيق 34).
- *  - نشر إشعار مُلخَّص بعد كل فحص أنشأ تنبيهات جديدة.
- *  - فحص إذن POST_NOTIFICATIONS قبل النشر.
+ * إشعارات مجرة — النسخة المبسطة جدًا حسب تعليمات.md:
+ *  - قناة واحدة فقط (تنبيهات الصيانة)، بلا قنوات متعددة.
+ *  - بلا عمال (WorkManager) ولا جدولة دورية: الفحص يحدث عند فتح التطبيق.
+ *  - أوفلاين 100٪: لا FCM ولا أي شبكة.
  */
 object GalaxyNotifications {
 
-    const val CHANNEL_ALERTS = "galaxy_alerts"
-    internal const val ID_ALERT_SUMMARY = 1001
+    const val CHANNEL_MAINTENANCE = "galaxy_maintenance"
+    private const val ID_MAINTENANCE_DUE = 2001
 
-    /** يُنشئ القناة مرة واحدة — يُستدعى من GalaxyApplication.onCreate */
-    fun ensureChannels(context: Context) {
+    /** تُنشأ القناة مرة واحدة — تُستدعى من GalaxyApplication.onCreate */
+    fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         val channel = NotificationChannel(
-            CHANNEL_ALERTS,
-            context.getString(R.string.alerts_channel_name),
+            CHANNEL_MAINTENANCE,
+            context.getString(R.string.maintenance_channel_name),
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = context.getString(R.string.alerts_channel_desc)
-            enableLights(true)
-            enableVibration(true)
+            description = context.getString(R.string.maintenance_channel_desc)
         }
         manager.createNotificationChannel(channel)
     }
@@ -54,27 +45,18 @@ object GalaxyNotifications {
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
 
-    fun cancelAll(context: Context) {
-        NotificationManagerCompat.from(context).cancelAll()
-    }
-}
+    /**
+     * إشعار بسيط بقرب موعد صيانة موقع واحد أو أكثر.
+     * يعيد هل نُشر فعلًا (قد يُرفض الإذن أو تُسحب الصلاحية).
+     */
+    fun notifyMaintenanceDue(context: Context, dueSites: List<Pair<String, Long>>): Boolean {
+        if (dueSites.isEmpty() || !hasPermission(context)) return false
 
-/** ناشر التنبيهات — يُستخدم من العامل الدوري ومن زر «افحص الآن» */
-@Singleton
-class AlertNotifier @Inject constructor(
-    @ApplicationContext private val context: Context
-) {
-
-    /** ينشر إشعارًا مُلخَّصًا بعدد التنبيهات الجديدة؛ يعيد هل نُشر فعلًا */
-    fun notifyNewAlerts(created: Int, unreadTotal: Int = 0): Boolean {
-        if (created <= 0) return false
-        if (!GalaxyNotifications.hasPermission(context)) return false
-
-        val title = "مجرة — $created تنبيه جديد"
-        val body = if (unreadTotal > created) {
-            "إجمالي التنبيهات غير المقروءة: $unreadTotal"
+        val title = "مجرة — صيانة مستحقة"
+        val body = if (dueSites.size == 1) {
+            "موقع «${dueSites.first().first}» اقترب موعد صيانته"
         } else {
-            "صيانة مستحقة أو نقص مخزون أو انتهاء عمر معدة — افتح التطبيق للتفاصيل"
+            "${dueSites.size} مواقع اقتربت مواعيد صيانتها — افتح التطبيق للتفاصيل"
         }
 
         val intent = PendingIntent.getActivity(
@@ -86,7 +68,7 @@ class AlertNotifier @Inject constructor(
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        val notification = NotificationCompat.Builder(context, GalaxyNotifications.CHANNEL_ALERTS)
+        val notification = NotificationCompat.Builder(context, CHANNEL_MAINTENANCE)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(body)
@@ -97,12 +79,15 @@ class AlertNotifier @Inject constructor(
             .build()
 
         return try {
-            NotificationManagerCompat.from(context)
-                .notify(GalaxyNotifications.ID_ALERT_SUMMARY, notification)
+            NotificationManagerCompat.from(context).notify(ID_MAINTENANCE_DUE, notification)
             true
         } catch (e: SecurityException) {
             // يحدث إن سُحب الإذن بين الفحص والنشر
             false
         }
+    }
+
+    fun cancelAll(context: Context) {
+        NotificationManagerCompat.from(context).cancelAll()
     }
 }

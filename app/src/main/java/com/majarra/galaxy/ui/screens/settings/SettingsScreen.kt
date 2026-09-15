@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -19,33 +21,29 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.majarra.galaxy.domain.repository.SettingsRepository
-import com.majarra.galaxy.domain.usecase.ClearAuditUseCase
-import com.majarra.galaxy.domain.usecase.ObserveAuditUseCase
 import com.majarra.galaxy.security.AppRestarter
 import com.majarra.galaxy.security.BackupManager
 import com.majarra.galaxy.security.BackupResult
-import com.majarra.galaxy.security.BiometricAuthHelper
 import com.majarra.galaxy.security.SafeWipe
-import com.majarra.galaxy.util.DateFormats
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
-import com.majarra.galaxy.ui.components.formatDateTime
 import com.majarra.galaxy.ui.theme.DangerRed
+import com.majarra.galaxy.util.DateFormats
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -57,16 +55,11 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val settings: SettingsRepository,
     private val backup: BackupManager,
-    private val wipe: SafeWipe,
-    private val clearAudit: ClearAuditUseCase,
-    observeAudit: ObserveAuditUseCase
+    private val wipe: SafeWipe
 ) : ViewModel() {
 
     val prefs = settings.preferences
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsRepository.Prefs())
-
-    val auditLogs = observeAudit()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val message = MutableStateFlow<String?>(null)
 
@@ -76,13 +69,20 @@ class SettingsViewModel @Inject constructor(
 
     fun setDarkMode(enabled: Boolean) = viewModelScope.launch { settings.setDarkMode(enabled) }
 
-    fun setBiometricLock(activity: FragmentActivity, enabled: Boolean) {
-        if (enabled && !BiometricAuthHelper().canAuthenticate(activity)) {
-            message.value = "لا يمكن تفعيل القفل: لا يتوفر مستشعر بيومتري مسجل"
-            return
+    /** حفظ رمز سري جديد وتفعيل القفل معه */
+    fun setPin(pin: String) {
+        viewModelScope.launch {
+            try {
+                settings.setPin(pin)
+                message.value = "تم حفظ الرمز السري وتفعيل القفل"
+            } catch (e: IllegalArgumentException) {
+                message.value = e.message ?: "رمز غير صالح"
+            }
         }
-        viewModelScope.launch { settings.setBiometricLock(enabled) }
     }
+
+    /** إبطال القفل مع إبقاء الرمز محفوظًا لإعادة التفعيل لاحقًا */
+    fun disableLock() = viewModelScope.launch { settings.setLockEnabled(false) }
 
     fun exportBackup(uri: android.net.Uri) {
         viewModelScope.launch {
@@ -107,14 +107,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun wipeAll(onDone: () -> Unit) {
+    fun wipeAll() {
         viewModelScope.launch {
             when (val result = wipe.wipeAll()) {
                 is BackupResult.Failure -> message.value = result.reason
                 else -> {
-                    message.value = "تم المسح الكامل لكل البيانات والتفضيلات. أعد تشغيل التطبيق."
+                    message.value = "تم مسح كل البيانات. أعد تشغيل التطبيق."
                     _restartRequired.value = true
-                    onDone()
                 }
             }
         }
@@ -122,32 +121,27 @@ class SettingsViewModel @Inject constructor(
 
     fun restartApp(context: android.content.Context) = AppRestarter.restart(context)
 
-    fun clearAuditLog() = viewModelScope.launch { clearAudit() }
-
     fun dismissMessage() {
         message.value = null
     }
 }
 
 /**
- * شاشة الإعدادات:
- * الوضع الليلي + القفل البيومتري + النسخ الاحتياطي + سجل التدقيق + الحذف الآمن الثلاثي.
+ * شاشة الإعدادات — النسخة المبسطة:
+ * الوضع الليلي + قفل بسيط برمز سري + نسخة احتياطية محلية + مسح البيانات.
+ * (بلا سجل تدقيق ولا قفل بيومتري حسب تعليمات التبسيط)
  */
 @Composable
 fun SettingsScreen(
-    activity: FragmentActivity,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val prefs by viewModel.prefs.collectAsStateWithLifecycle()
-    val auditLogs by viewModel.auditLogs.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     val restartRequired by viewModel.restartRequired.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    var wipeStep by remember { mutableStateOf(0) } // 0 لا، 1 تحذير، 2 كتابة كلمة حذف، 3 نهائي
-    var wipeWord by remember { mutableStateOf("") }
-    var confirmClearAudit by remember { mutableStateOf(false) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var confirmWipe by remember { mutableStateOf(false) }
 
     // مشغلات SAF للنسخ الاحتياطي
     val exportLauncher = rememberLauncherForActivityResult(
@@ -190,7 +184,7 @@ fun SettingsScreen(
             }
         }
 
-        // القفل البيومتري
+        // القفل البسيط
         GalaxyCard {
             Row(
                 modifier = Modifier
@@ -199,16 +193,23 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("القفل البيومتري", style = MaterialTheme.typography.titleSmall)
+                    Text("قفل التطبيق", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "طلب البصمة/الوجه عند فتح التطبيق",
+                        "رمز سري بسيط (٤-٨ أرقام) عند فتح التطبيق",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Switch(
-                    checked = prefs.biometricLock,
-                    onCheckedChange = { viewModel.setBiometricLock(activity, it) }
+                    checked = prefs.lockEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled) {
+                            // التفعيل يمر عبر حفظ رمز جديد أولًا
+                            showPinDialog = true
+                        } else {
+                            viewModel.disableLock()
+                        }
+                    }
                 )
             }
         }
@@ -218,7 +219,7 @@ fun SettingsScreen(
         GalaxyCard {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "تصدير/استيراد ملف قاعدة البيانات بالكامل — بدون إنترنت.",
+                    "تصدير/استيراد ملف قاعدة البيانات بالكامل — بدون إنترنت وبدون تشفير معقد.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -241,48 +242,18 @@ fun SettingsScreen(
             }
         }
 
-        // سجل التدقيق
-        SectionTitle("سجل التدقيق — آخر العمليات")
-        GalaxyCard {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (auditLogs.isEmpty()) {
-                    Text("السجل فارغ", style = MaterialTheme.typography.bodySmall)
-                }
-                auditLogs.take(15).forEach { log ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            "${log.action} • ${log.entityType} ${log.details}",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            log.timestamp.formatDateTime(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                TextButton(onClick = { confirmClearAudit = true }) {
-                    Text("مسح السجل", color = DangerRed)
-                }
-            }
-        }
-
-        // الحذف الآمن — تأكيد ثلاثي
-        SectionTitle("الحذف الآمن")
+        // مسح البيانات
+        SectionTitle("مسح البيانات")
         GalaxyCard {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    "مسح كل بيانات التطبيق نهائيًا. يتطلب ثلاثة تأكيدات متتالية.",
+                    "مسح كل المواقع والتفاصيل والمرفقات والإعدادات نهائيًا.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Button(
-                    onClick = { wipeStep = 1 },
-                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    onClick = { confirmWipe = true },
+                    colors = ButtonDefaults.buttonColors(
                         containerColor = DangerRed,
                         contentColor = MaterialTheme.colorScheme.onError
                     )
@@ -313,63 +284,75 @@ fun SettingsScreen(
         )
     }
 
-    // خطوة 1: تحذير
-    if (wipeStep == 1) {
-        ConfirmDialog(
-            title = "تحذير — الخطوة 1 من 3",
-            text = "سيتم مسح كل المواقع والمعدات والروابط والتذاكر والتنبيهات نهائيًا. هل تريد المتابعة؟",
-            confirmText = "متابعة",
-            onConfirm = { wipeStep = 2 },
-            onDismiss = { wipeStep = 0 }
+    if (showPinDialog) {
+        SetPinDialog(
+            onDismiss = { showPinDialog = false },
+            onSave = { pin ->
+                viewModel.setPin(pin)
+                showPinDialog = false
+            }
         )
     }
 
-    // خطوة 2: كتابة كلمة «حذف»
-    if (wipeStep == 2) {
-        AlertDialog(
-            onDismissRequest = { wipeStep = 0 },
-            title = { Text("الخطوة 2 من 3") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("اكتب كلمة «حذف» للتأكيد:")
-                    OutlinedTextField(value = wipeWord, onValueChange = { wipeWord = it }, singleLine = true)
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = { if (wipeWord.trim() == "حذف") wipeStep = 3 },
-                    enabled = wipeWord.trim() == "حذف"
-                ) { Text("متابعة") }
-            },
-            dismissButton = { TextButton(onClick = { wipeStep = 0 }) { Text("إلغاء") } }
-        )
-    }
-
-    // خطوة 3: التأكيد النهائي
-    if (wipeStep == 3) {
+    if (confirmWipe) {
         ConfirmDialog(
-            title = "الخطوة 3 من 3 — الأخيرة",
-            text = "لا يمكن التراجع بعد هذه الخطوة. اضغط «امسح الآن» لتنفيذ المسح الكامل.",
+            title = "مسح كل البيانات",
+            text = "سيُحذف كل شيء نهائيًا ولا يمكن التراجع. هل أنت متأكد؟",
             confirmText = "امسح الآن",
             onConfirm = {
-                wipeStep = 0
-                wipeWord = ""
-                viewModel.wipeAll { /* المسح تم — الرسالة تظهر أعلاه */ }
+                confirmWipe = false
+                viewModel.wipeAll()
             },
-            onDismiss = { wipeStep = 0 }
+            onDismiss = { confirmWipe = false }
         )
     }
+}
 
-    if (confirmClearAudit) {
-        ConfirmDialog(
-            title = "مسح سجل التدقيق",
-            text = "سيتم حذف كل سجلات التدقيق نهائيًا.",
-            confirmText = "مسح",
-            onConfirm = {
-                scope.launch { viewModel.clearAuditLog() }
-                confirmClearAudit = false
-            },
-            onDismiss = { confirmClearAudit = false }
-        )
-    }
+/** حوار ضبط الرمز السري — إدخال واحد مع تحقق من الصيغة */
+@Composable
+private fun SetPinDialog(
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("ضبط الرمز السري") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "أدخل رمزًا من ٤ إلى ٨ أرقام. سيُطلب هذا الرمز عند كل فتح للتطبيق.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = {
+                        pin = it.filter { c -> c.isDigit() }.take(8)
+                        error = null
+                    },
+                    label = { Text("الرمز السري") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    visualTransformation = PasswordVisualTransformation(),
+                    isError = error != null,
+                    supportingText = error?.let { { Text(it) } }
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (pin.length in 4..8) {
+                        onSave(pin)
+                    } else {
+                        error = "الرمز يجب أن يكون بين ٤ و٨ أرقام"
+                    }
+                },
+                enabled = pin.isNotEmpty()
+            ) { Text("حفظ وتفعيل") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
 }

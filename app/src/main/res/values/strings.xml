@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">مجرة</string>
+
+    <!-- شاشة القفل البسيط (رمز سري) -->
     <string name="lock_title">التطبيق مقفل</string>
-    <string name="lock_subtitle">استخدم البصمة أو الوجه للمتابعة</string>
+    <string name="lock_subtitle">أدخل الرمز السري للمتابعة</string>
+    <string name="lock_pin_label">الرمز السري</string>
     <string name="lock_button">فتح القفل</string>
-    <string name="lock_no_sensor">لا يتوفر مستشعر بيومتري مسجل على هذا الجهاز</string>
-    <string name="lock_error">فشل التحقق البيومتري</string>
-    <string name="alerts_channel_name">تنبيهات مجرة</string>
-    <string name="alerts_channel_desc">تنبيهات الصيانة الوقائية ونقص المخزون وانتهاء عمر المعدات</string>
+    <string name="lock_wrong_pin">الرمز السري غير صحيح، حاول مرة أخرى</string>
+
+    <!-- قناة الإشعارات الوحيدة: تنبيه قرب الصيانة -->
+    <string name="maintenance_channel_name">تنبيهات الصيانة</string>
+    <string name="maintenance_channel_desc">تنبيه بسيط عند قرب موعد صيانة موقع</string>
 </resources>

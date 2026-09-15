@@ -1,5 +1,10 @@
-// وحدة التطبيق — «مجرة» نظام إدارة مواقع الاتصالات
+// وحدة التطبيق — «مجرة» إدارة المواقع الشخصية (النسخة المبسطة 2.0)
 // أوفلاين 100%: لا يوجد أي إذن إنترنت في AndroidManifest ولا أي مكتبة تتطلب اتصالًا.
+//
+// ما حُذف في 2.0 حسب تعليمات التبسيط:
+// - WorkManager و hilt-work (لا جدولة دورية ولا عمال تنبيهات)
+// - androidx.biometric (القفل بسيط برمز سري، بلا بصمة)
+// - androidx.fragment (كانت مطلوبة لـ BiometricPrompt فقط)
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -15,8 +20,8 @@ android {
         applicationId = "com.majarra.galaxy"
         minSdk = 30          // حسب التعليمات: Android 11+
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "2.0.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -60,8 +65,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
     // مراقبة الـ Flow بأمان من دورة الحياة (بدل collectAsState غير المرتبط بالدورة)
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
-    // FragmentActivity مطلوبة لـ BiometricPrompt — تعريف صريح بدل الاعتماد العابر
-    implementation("androidx.fragment:fragment-ktx:1.6.2")
 
     // Jetpack Compose (Material 3)
     implementation(platform("androidx.compose:compose-bom:2024.02.01"))
@@ -85,20 +88,12 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    // WorkManager — محرك التنبيهات الدورية
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
-    implementation("androidx.hilt:hilt-work:1.1.0")
-    ksp("androidx.hilt:hilt-compiler:1.1.0")
-
-    // الأمان: البصمة/الوجه
-    implementation("androidx.biometric:biometric:1.1.0")
-
     // الصور المحلية فقط (مرفقات) — لا يحتاج إنترنت
     implementation("io.coil-kt:coil-compose:2.5.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // اختبارات الوحدة (UseCases + حسابات المجرة)
+    // اختبارات الوحدة (التحقق من المدخلات)
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
 }

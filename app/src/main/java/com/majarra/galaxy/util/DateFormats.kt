@@ -8,12 +8,8 @@ import java.util.TimeZone
 /**
  * تنسيق التواريخ والأوقات — مصدر واحد لكل الشاشات.
  *
- * كانت الشاشات تُنشئ `SimpleDateFormat(Locale("ar"))` في كل استدعاء داخل
- * القوائم (تحميل ثقيل مع كل إعادة تركيب)، وSimpleDateFormat ليست آمنة
- * للخيوط، والمنطقة الزمنية كانت تعتمد ضمنيًا على الحالة العامة للجهاز.
- *
- * هنا: نسخة لكل خيط (ThreadLocal)، Locale عربي صريح عبر forLanguageTag،
- * وTimeZone الافتراضية تُثبَّت صراحة، وصيغة مدة عربية للاستخدامات التجارية.
+ * نسخة لكل خيط (ThreadLocal) لأن SimpleDateFormat ليست آمنة للخيوط،
+ * وLocale عربي صريح، والمنطقة الزمنية الافتراضية تُثبَّت صراحة.
  */
 object DateFormats {
 
@@ -38,26 +34,11 @@ object DateFormats {
     fun date(epochMillis: Long): String = requireNotNull(dateFormat.get()).format(Date(epochMillis))
     fun time(epochMillis: Long): String = requireNotNull(timeFormat.get()).format(Date(epochMillis))
 
-    /** اسم آمن لملفات النسخ الاحتياطي والتقارير: بلا مسافات ولا محارف خاصة */
+    /** اسم آمن لملفات النسخ الاحتياطي: بلا مسافات ولا محارف خاصة */
     fun backupStamp(epochMillis: Long = System.currentTimeMillis()): String =
         requireNotNull(backupFormat.get()).format(Date(epochMillis))
-
-    /** مدة مقروءة عربيًا (تُستخدم في زمن معالجة التذاكر) */
-    fun duration(minutes: Long): String {
-        val m = minutes.coerceAtLeast(0)
-        if (m < 60) return "$m دقيقة"
-        val hours = m / 60
-        val rem = m % 60
-        return if (hours < 24) {
-            if (rem == 0L) "$hours ساعة" else "$hours ساعة و $rem دقيقة"
-        } else {
-            val days = hours / 24
-            val remHours = hours % 24
-            if (remHours == 0L) "$days يوم" else "$days يوم و $remHours ساعة"
-        }
-    }
 }
 
-/** عدد الأيام بين لحظتين (يُستخدم في استحقاق الصيانة) */
+/** عدد الأيام من الآن حتى هذه اللحظة (سالب إن كانت في الماضي) */
 fun Long.daysFromNow(now: Long = System.currentTimeMillis()): Long =
     (this - now) / (24L * 3600 * 1000)

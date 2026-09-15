@@ -6,15 +6,10 @@ import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Process
 import android.util.Log
-import androidx.biometric.BiometricManager
-import androidx.biometric.BiometricPrompt
-import androidx.core.content.ContextCompat
-import androidx.fragment.app.FragmentActivity
 import androidx.room.withTransaction
 import com.majarra.galaxy.GalaxyApplication
 import com.majarra.galaxy.MainActivity
 import com.majarra.galaxy.data.local.GalaxyDatabase
-import com.majarra.galaxy.data.repository.SettingsRepositoryImpl
 import com.majarra.galaxy.notify.GalaxyNotifications
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -22,49 +17,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
-
-/** مساعد القفل البيومتري (بصمة/وجه) */
-@Singleton
-class BiometricAuthHelper @Inject constructor() {
-
-    /** هل يتوفر مستشعر بيومتري مسجّل؟ */
-    fun canAuthenticate(activity: FragmentActivity): Boolean =
-        BiometricManager.from(activity)
-            .canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK) ==
-            BiometricManager.BIOMETRIC_SUCCESS
-
-    /** إظهار نافذة التحقق */
-    fun authenticate(
-        activity: FragmentActivity,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val prompt = BiometricPrompt(
-            activity,
-            ContextCompat.getMainExecutor(activity),
-            object : BiometricPrompt.AuthenticationCallback() {
-                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    onSuccess()
-                }
-
-                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    onError(errString.toString())
-                }
-
-                override fun onAuthenticationFailed() {
-                    // فشل محاولة واحدة (بصمة غير مطابقة) — لا نغلق الشاشة
-                    onError("لم يتم التعرف على البصمة، حاول مرة أخرى")
-                }
-            }
-        )
-        val info = BiometricPrompt.PromptInfo.Builder()
-            .setTitle("فتح قفل مجرة")
-            .setSubtitle("استخدم البصمة أو الوجه")
-            .setNegativeButtonText("إلغاء")
-            .build()
-        prompt.authenticate(info)
-    }
-}
 
 /** نتيجة عملية النسخ الاحتياطي أو المسح */
 sealed class BackupResult {
@@ -74,18 +26,15 @@ sealed class BackupResult {
 }
 
 /**
- * مدير النسخ الاحتياطي: تصدير/استيراد ملف قاعدة البيانات عبر SAF.
+ * مدير النسخ الاحتياطي — نسخة محلية بسيطة وموثوقة عبر SAF:
+ * تصدير/استيراد ملف قاعدة البيانات بالكامل، بلا تشفير معقد.
  *
- * تصليب جلسة الفحص (أربعة عيوب حقيقية):
- * 1) التقاط صامت: `catch (_: Exception) { false }` كان يخفي السبب، فيرى
- *    المستخدم «فشل التصدير» بلا تفسير. الآن كل فشل يعيد سببًا مقروءًا.
- * 2) تصدير غير مضمون: لو فشل `wal_checkpoint` كان الملف يُنسخ ناقصًا.
- *    الآن فشل الـ checkpoint = فشل صريح.
- * 3) استيراد غير ذرّي: كان يُغلق القاعدة ويكتب فوق ملفها مباشرة، فإن تعطّل
- *    النسخ في المنتصف تُفقد البيانات بلا استرجاع. الآن: ملف مؤقت → تحقق →
- *    نسخة سابقة → استبدال → تحقق نهائي → استرجاع عند الفشل.
- * 4) بلا تحقق من الصيغة: كان يقبل أي ملف. الآن نتحقق من ترويسة SQLite
- *    ومن وجود جداول التطبيق.
+ * الموثوقية أهم من التعقيد، لذلك بقيت ثلاث حمايات أساسية:
+ * 1) تفريغ سجل الكتابة (WAL checkpoint) قبل التصدير حتى لا يُنسخ الملف ناقصًا.
+ * 2) التحقق من صيغة الملف المستورد (ترويسة SQLite + جداول مجرة)
+ *    حتى لا تُستبدل البيانات بملف تالف.
+ * 3) استيراد شبه ذرّي: نسخة من القاعدة الحالية قبل الاستبدال،
+ *    واسترجاعها إن فشل التحقق النهائي.
  */
 @Singleton
 class BackupManager @Inject constructor(
@@ -151,7 +100,7 @@ class BackupManager @Inject constructor(
             File(dbFile.parentFile, "${GalaxyDatabase.DB_NAME}-shm").delete()
 
             if (!temp.renameTo(dbFile)) {
-                // بعض أنظمة الملفات لا تدعم rename عبر الحدود: نسخ ثم حذف
+                // بعض أنظمة الملفات لا تدعم إعادة التسمية عبر الحدود: نسخ ثم حذف
                 temp.copyTo(dbFile, overwrite = true)
                 temp.delete()
             }
@@ -167,7 +116,7 @@ class BackupManager @Inject constructor(
         }
     }
 
-    /** يتحقق أن الملف قاعدة بيانات SQLite سليمة تحتوي جداول «مجرة» */
+    /** يتحقق أن الملف قاعدة بيانات SQLite سليمة تحتوي جداول «مجرة» المبسطة */
     private fun validateBackup(file: File): String? {
         if (!file.exists() || file.length() < MIN_DB_BYTES) return "حجم الملف أصغر من قاعدة بيانات صالحة"
         val header = ByteArray(16)
@@ -183,7 +132,7 @@ class BackupManager @Inject constructor(
             SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
                 db.rawQuery(
                     "SELECT COUNT(*) FROM sqlite_master WHERE type='table' " +
-                        "AND name IN ('sites','links','audit_log')",
+                        "AND name IN ('sites','site_details','maintenance_logs')",
                     null
                 ).use { cursor ->
                     val found = if (cursor.moveToFirst()) cursor.getInt(0) else 0
@@ -191,7 +140,7 @@ class BackupManager @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            "قاعدة البيانات في الملف غير قابلة للفتح (تالف أو مشفّر)"
+            "قاعدة البيانات في الملف غير قابلة للفتح (تالفة أو غير متوافقة)"
         }
     }
 
@@ -202,9 +151,8 @@ class BackupManager @Inject constructor(
 }
 
 /**
- * الحذف الآمن الكامل — لا يُستدعى إلا بعد تأكيد ثلاثي من الواجهة.
- * يُنفَّذ داخل معاملة واحدة، ويشمل تفضيلات المستخدم والإشعارات حتى لا تبقى
- * بقايا بعد «مسح كل البيانات».
+ * المسح الكامل — يمسح كل الجداول (المواقع والتفاصيل والسجلات
+ * والمرفقات والإعدادات) في معاملة واحدة، ويلغي الإشعارات الظاهرة.
  */
 @Singleton
 class SafeWipe @Inject constructor(
@@ -214,10 +162,6 @@ class SafeWipe @Inject constructor(
     suspend fun wipeAll(): BackupResult = withContext(Dispatchers.IO) {
         try {
             database.withTransaction { database.clearAllTables() }
-            context.getSharedPreferences(SettingsRepositoryImpl.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .clear()
-                .commit()
             GalaxyNotifications.cancelAll(context)
             BackupResult.Imported
         } catch (e: Exception) {

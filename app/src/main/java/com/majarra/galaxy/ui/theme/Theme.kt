@@ -6,14 +6,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import com.majarra.galaxy.domain.model.EquipmentStatus
-import com.majarra.galaxy.domain.model.LinkStatus
-import com.majarra.galaxy.domain.model.SiteStatus
-import com.majarra.galaxy.domain.model.TicketSeverity
 
 /* ============================================================
- * الهوية البصرية — حسب القسم 7 من التعليمات:
- * أسود عميق + أزرق سماوي + أخضر نيون للروابط النشطة.
+ * الهوية البصرية — أسود عميق + أزرق سماوي + أخضر نيون.
  * الوضع الليلي هو الأساسي والنهاري اختياري.
  * ============================================================ */
 
@@ -78,35 +73,4 @@ fun GalaxyTheme(
         typography = GalaxyTypography,
         content = content
     )
-}
-
-/** ألوان الحالات — تُستخدم في الشاشات وفي محرك رسم المجرة معًا */
-object GalaxyColors {
-    fun siteStatusColor(status: SiteStatus): Color = when (status) {
-        SiteStatus.ACTIVE -> NeonGreen
-        SiteStatus.DEGRADED -> WarnAmber
-        SiteStatus.DOWN -> DangerRed
-        SiteStatus.PLANNED -> TextSecondary
-    }
-
-    fun linkStatusColor(status: LinkStatus): Color = when (status) {
-        LinkStatus.ACTIVE -> NeonGreen
-        LinkStatus.DEGRADED -> WarnAmber
-        LinkStatus.DOWN -> DangerRed
-        LinkStatus.PLANNED -> TextSecondary
-    }
-
-    fun equipmentStatusColor(status: EquipmentStatus): Color = when (status) {
-        EquipmentStatus.WORKING -> NeonGreen
-        EquipmentStatus.FAULTY -> DangerRed
-        EquipmentStatus.SPARE -> SkyBlue
-        EquipmentStatus.RETIRED -> TextSecondary
-    }
-
-    fun severityColor(severity: TicketSeverity): Color = when (severity) {
-        TicketSeverity.CRITICAL -> DangerRed
-        TicketSeverity.HIGH -> WarnAmber
-        TicketSeverity.MEDIUM -> SkyBlue
-        TicketSeverity.LOW -> TextSecondary
-    }
 }
