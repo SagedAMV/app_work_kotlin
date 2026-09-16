@@ -38,7 +38,8 @@ sealed class BackupResult {
 @Singleton
 class BackupManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val database: GalaxyDatabase
+    private val database: GalaxyDatabase,
+    private val settings: com.majarra.galaxy.domain.repository.SettingsRepository
 ) {
 
     private val dbFile: File get() = context.getDatabasePath(GalaxyDatabase.DB_NAME)
@@ -64,6 +65,8 @@ class BackupManager @Inject constructor(
                 dbFile.inputStream().use { input -> input.copyTo(out) }
                 out.flush()
             } ?: return@withContext BackupResult.Failure("تعذّر فتح الملف المحدد للكتابة")
+            // تسجيل توقيت النسخة: أساس حساب تذكير النسخ الدوري (الاسئله.md)
+            settings.setLastBackupTs(System.currentTimeMillis())
             BackupResult.Exported
         } catch (e: Exception) {
             Log.e(TAG, "export failed", e)

@@ -75,6 +75,18 @@ class SettingsRepositoryImpl @Inject constructor(
     override suspend fun setLastDueNoticeDay(epochDay: Long) =
         put(KEY_LAST_DUE_NOTICE, epochDay.toString())
 
+    override fun getLastBackupTs(): Long? =
+        dao.getValueSync(KEY_LAST_BACKUP_TS)?.toLongOrNull()
+
+    override suspend fun setLastBackupTs(epochMillis: Long) =
+        put(KEY_LAST_BACKUP_TS, epochMillis.toString())
+
+    override fun getLastBackupReminderDay(): Long? =
+        dao.getValueSync(KEY_LAST_BACKUP_REMINDER)?.toLongOrNull()
+
+    override suspend fun setLastBackupReminderDay(epochDay: Long) =
+        put(KEY_LAST_BACKUP_REMINDER, epochDay.toString())
+
     private fun sha256(value: String): String =
         MessageDigest.getInstance("SHA-256")
             .digest(value.toByteArray(Charsets.UTF_8))
@@ -85,6 +97,8 @@ class SettingsRepositoryImpl @Inject constructor(
         const val KEY_LOCK = "lock_enabled"
         const val KEY_PIN_HASH = "lock_pin_hash"
         const val KEY_LAST_DUE_NOTICE = "last_due_notice_day"
+        const val KEY_LAST_BACKUP_TS = "last_backup_ts"
+        const val KEY_LAST_BACKUP_REMINDER = "last_backup_reminder_day"
         const val PIN_MIN_LENGTH = 4
         const val PIN_MAX_LENGTH = 8
     }

@@ -6,6 +6,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import com.majarra.galaxy.R
 
 /* ============================================================
  * الهوية البصرية — أسود عميق + أزرق سماوي + أخضر نيون.
@@ -61,7 +65,45 @@ private val LightColors = lightColorScheme(
     onError = Color.White
 )
 
-private val GalaxyTypography = Typography()
+/* ============================================================
+ * الخطوط (إجابة الاسئله.md: خط مميز للعناوين وخط أبسط للنصوص)
+ * - العناوين (العرض/الرؤوس/العناوين): خط «أريف رقعة» المدمج —
+ *   طابع عربي رقعي مميز.
+ * - النصوص والتسميات: خط «تجوال» المدمج — أبسط وأوضح للقراءة.
+ * الخطان مرخصان OFL ومضمّنان في مجلد الخطوط (انظر ملاحظة الترخيص
+ * في README).
+ * ============================================================ */
+
+val HeadingFont = FontFamily(
+    Font(R.font.aref_ruqaa_regular, FontWeight.Normal),
+    Font(R.font.aref_ruqaa_bold, FontWeight.Bold)
+)
+
+val BodyFont = FontFamily(
+    Font(R.font.tajawal_regular, FontWeight.Normal),
+    Font(R.font.tajawal_medium, FontWeight.Medium),
+    Font(R.font.tajawal_bold, FontWeight.Bold)
+)
+
+private val defaultTypography = Typography()
+
+private val GalaxyTypography = Typography(
+    displayLarge = defaultTypography.displayLarge.copy(fontFamily = HeadingFont),
+    displayMedium = defaultTypography.displayMedium.copy(fontFamily = HeadingFont),
+    displaySmall = defaultTypography.displaySmall.copy(fontFamily = HeadingFont),
+    headlineLarge = defaultTypography.headlineLarge.copy(fontFamily = HeadingFont),
+    headlineMedium = defaultTypography.headlineMedium.copy(fontFamily = HeadingFont),
+    headlineSmall = defaultTypography.headlineSmall.copy(fontFamily = HeadingFont),
+    titleLarge = defaultTypography.titleLarge.copy(fontFamily = HeadingFont),
+    titleMedium = defaultTypography.titleMedium.copy(fontFamily = HeadingFont),
+    titleSmall = defaultTypography.titleSmall.copy(fontFamily = HeadingFont),
+    bodyLarge = defaultTypography.bodyLarge.copy(fontFamily = BodyFont),
+    bodyMedium = defaultTypography.bodyMedium.copy(fontFamily = BodyFont),
+    bodySmall = defaultTypography.bodySmall.copy(fontFamily = BodyFont),
+    labelLarge = defaultTypography.labelLarge.copy(fontFamily = BodyFont),
+    labelMedium = defaultTypography.labelMedium.copy(fontFamily = BodyFont),
+    labelSmall = defaultTypography.labelSmall.copy(fontFamily = BodyFont)
+)
 
 @Composable
 fun GalaxyTheme(

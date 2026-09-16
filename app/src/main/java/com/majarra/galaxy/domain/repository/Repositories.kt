@@ -1,6 +1,7 @@
 package com.majarra.galaxy.domain.repository
 
 import com.majarra.galaxy.data.local.Attachment
+import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDetail
@@ -8,18 +9,30 @@ import kotlinx.coroutines.flow.Flow
 
 /* ============================================================
  * واجهات المستودعات — طبقة الـ Domain لا تعرف تفاصيل Room.
- * النسخة المبسطة: مواقع، تفاصيل، سجل صيانة، مرفقات، إعدادات.
+ * النسخة 2.1: مواقع، تصنيفات، تفاصيل، سجل صيانة، مرفقات، إعدادات.
  * ============================================================ */
 
 interface SiteRepository {
     fun observeSites(): Flow<List<Site>>
+    fun observeArchivedSites(): Flow<List<Site>>
+    fun observeByCategory(categoryId: Long): Flow<List<Site>>
     fun searchSites(q: String): Flow<List<Site>>
     fun observeSite(id: Long): Flow<Site?>
     suspend fun getSite(id: Long): Site?
     suspend fun getAll(): List<Site>
+    suspend fun countActive(): Int
+    suspend fun countArchived(): Int
     suspend fun insert(site: Site): Long
     suspend fun update(site: Site)
     suspend fun delete(site: Site)
+}
+
+interface CategoryRepository {
+    fun observeAll(): Flow<List<Category>>
+    suspend fun getAll(): List<Category>
+    suspend fun insert(category: Category): Long
+    suspend fun update(category: Category)
+    suspend fun delete(category: Category)
 }
 
 interface SiteDetailRepository {
@@ -31,6 +44,7 @@ interface SiteDetailRepository {
 
 interface MaintenanceLogRepository {
     fun observeBySite(siteId: Long): Flow<List<MaintenanceLog>>
+    suspend fun countAll(): Int
     suspend fun insert(log: MaintenanceLog): Long
     suspend fun delete(log: MaintenanceLog)
 }
@@ -38,6 +52,8 @@ interface MaintenanceLogRepository {
 interface AttachmentRepository {
     fun observeBySite(siteId: Long): Flow<List<Attachment>>
     suspend fun getBySite(siteId: Long): List<Attachment>
+    suspend fun countAll(): Int
+    suspend fun countByType(typeName: String): Int
     suspend fun insert(a: Attachment): Long
     suspend fun delete(a: Attachment)
 }
@@ -76,4 +92,12 @@ interface SettingsRepository {
     /** آخر يوم (epochDay) أُرسل فيه إشعار قرب الصيانة — لمنع تكرار الإشعار كل فتح */
     fun getLastDueNoticeDay(): Long?
     suspend fun setLastDueNoticeDay(epochDay: Long)
+
+    /** آخر نسخة احتياطية ناجحة (epoch millis) — أساس تذكير النسخ الدوري */
+    fun getLastBackupTs(): Long?
+    suspend fun setLastBackupTs(epochMillis: Long)
+
+    /** آخر يوم (epochDay) أُرسل فيه تذكير النسخ الاحتياطي — لعدم الإلحاح اليومي */
+    fun getLastBackupReminderDay(): Long?
+    suspend fun setLastBackupReminderDay(epochDay: Long)
 }

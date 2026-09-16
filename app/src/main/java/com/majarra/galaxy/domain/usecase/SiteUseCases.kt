@@ -10,12 +10,20 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 
-/** مراقبة قائمة المواقع أو البحث فيها */
+/** مراقبة قائمة المواقع أو البحث فيها أو فلترتها (تصنيف/أرشيف) */
 class ObserveSitesUseCase @Inject constructor(
     private val siteRepo: SiteRepository
 ) {
+    /** نطاق البحث حسب الاسئله.md: الاسم فقط وعلى المواقع النشطة */
     fun search(q: String): Flow<List<Site>> =
         if (q.isBlank()) siteRepo.observeSites() else siteRepo.searchSites(q.trim())
+
+    /** مواقع تصنيف واحد (النشطة فقط) */
+    fun byCategory(categoryId: Long): Flow<List<Site>> =
+        siteRepo.observeByCategory(categoryId)
+
+    /** المواقع المؤرشفة */
+    fun archived(): Flow<List<Site>> = siteRepo.observeArchivedSites()
 }
 
 /** مراقبة موقع واحد */
@@ -87,5 +95,19 @@ class DeleteSiteUseCase @Inject constructor(
             }
             // الفشل هنا غير ضار: يعني فقط أن الإذن لم يكن مثبّتًا أصلًا
         }
+    }
+}
+
+/**
+ * أرشفة موقع (إجابة الاسئله.md): إخفاء الموقع من القائمة النشطة مع
+ * إمكانية الاستعادة لاحقًا — بديل آمن عن الحذف النهائي المباشر.
+ */
+class ArchiveSiteUseCase @Inject constructor(
+    private val siteRepo: SiteRepository
+) {
+    suspend operator fun invoke(site: Site, archived: Boolean) {
+        siteRepo.update(
+            site.copy(archived = archived, lastModified = System.currentTimeMillis())
+        )
     }
 }

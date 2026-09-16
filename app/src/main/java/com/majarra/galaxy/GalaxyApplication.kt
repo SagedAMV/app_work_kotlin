@@ -3,6 +3,7 @@ package com.majarra.galaxy
 import android.app.Application
 import android.util.Log
 import com.majarra.galaxy.domain.repository.SettingsRepository
+import com.majarra.galaxy.domain.usecase.BackupReminderUseCase
 import com.majarra.galaxy.domain.usecase.CheckMaintenanceDueUseCase
 import com.majarra.galaxy.notify.GalaxyNotifications
 import dagger.hilt.android.HiltAndroidApp
@@ -27,15 +28,17 @@ import javax.inject.Inject
 class GalaxyApplication : Application() {
 
     @Inject lateinit var checkMaintenanceDue: CheckMaintenanceDueUseCase
+    @Inject lateinit var checkBackupReminder: BackupReminderUseCase
     @Inject lateinit var settings: SettingsRepository
 
-    /** نطاق عمل خاص بالتطبيق لمهمة فحص الصيانة الخفيفة */
+    /** نطاق عمل خاص بالتطبيق لمهام الفحص الخفيفة عند الفتح */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         GalaxyNotifications.ensureChannel(this)
         checkMaintenanceDueOncePerDay()
+        checkBackupReminderOncePerInterval()
     }
 
     /**
@@ -57,6 +60,23 @@ class GalaxyApplication : Application() {
             } catch (t: Throwable) {
                 // فشل التذكير لا يجب أن يسبب كراش للتطبيق
                 Log.e(TAG, "maintenance due check failed", t)
+            }
+        }
+    }
+
+    /**
+     * تذكير النسخ الاحتياطي (إجابة الاسئله.md): كل أسبوعين إن وُجدت
+     * تغييرات منذ آخر نسخة. حارس عدم الإلحاح داخل حالة الاستخدام نفسها.
+     */
+    private fun checkBackupReminderOncePerInterval() {
+        appScope.launch {
+            try {
+                if (!checkBackupReminder()) return@launch
+                val published = GalaxyNotifications.notifyBackupReminder(this@GalaxyApplication)
+                if (published) settings.setLastBackupReminderDay(LocalDate.now().toEpochDay())
+            } catch (t: Throwable) {
+                // فشل التذكير لا يجب أن يسبب كراش للتطبيق
+                Log.e(TAG, "backup reminder check failed", t)
             }
         }
     }

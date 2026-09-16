@@ -14,14 +14,45 @@ import com.majarra.galaxy.domain.model.AttachmentType
  * تفاصيله ومرفقاته وسجل صيانته تلقائيًا للحفاظ على الاتساق.
  * ============================================================ */
 
-/** جدول المواقع — الاسم والملاحظات فقط (بلا إحداثيات ولا رموز ولا حالات) */
-@Entity(tableName = "sites", indices = [Index("name")])
+/**
+ * جدول المواقع — الاسم والملاحظات (بلا إحداثيات ولا رموز ولا حالات).
+ *
+ * الحقول المضافة في النسخة 2.1 حسب إجابات الاسئله.md:
+ * - `categoryId`: تصنيف اختياري (اسم + لون)، حذف التصنيف يعيد الموقع
+ *   إلى «بلا تصنيف» (ON DELETE SET NULL) فلا تُفقد المواقع.
+ * - `archived`: الأرشفة تخفي الموقع من القائمة مع إمكانية الاستعادة،
+ *   بدل الحذف النهائي المباشر.
+ */
+@Entity(
+    tableName = "sites",
+    indices = [Index("name"), Index("categoryId")],
+    foreignKeys = [
+        ForeignKey(
+            entity = Category::class, parentColumns = ["id"], childColumns = ["categoryId"],
+            onDelete = ForeignKey.SET_NULL
+        )
+    ]
+)
 data class Site(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val name: String,
     val notes: String = "",
     val createdDate: Long = System.currentTimeMillis(),
-    val lastModified: Long = System.currentTimeMillis()
+    val lastModified: Long = System.currentTimeMillis(),
+    val categoryId: Long? = null,
+    val archived: Boolean = false
+)
+
+/**
+ * تصنيفات المواقع (النسخة 2.1): اسم + لون سداسي.
+ * اسم التصنيف فريد حتى لا تتكرر مجموعات متطابقة.
+ */
+@Entity(tableName = "categories", indices = [Index(value = ["name"], unique = true)])
+data class Category(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val colorHex: String,
+    val createdDate: Long = System.currentTimeMillis()
 )
 
 /**

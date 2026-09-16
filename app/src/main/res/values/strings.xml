@@ -9,7 +9,9 @@
     <string name="lock_button">فتح القفل</string>
     <string name="lock_wrong_pin">الرمز السري غير صحيح، حاول مرة أخرى</string>
 
-    <!-- قناة الإشعارات الوحيدة: تنبيه قرب الصيانة -->
+    <!-- قنوات الإشعارات: تنبيه قرب الصيانة + تذكير النسخ الاحتياطي -->
     <string name="maintenance_channel_name">تنبيهات الصيانة</string>
     <string name="maintenance_channel_desc">تنبيه بسيط عند قرب موعد صيانة موقع</string>
+    <string name="backup_channel_name">تذكير النسخ الاحتياطي</string>
+    <string name="backup_channel_desc">تذكير دوري بأخذ نسخة احتياطية عند وجود تغييرات</string>
 </resources>

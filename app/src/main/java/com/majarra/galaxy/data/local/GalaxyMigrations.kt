@@ -140,6 +140,60 @@ object GalaxyMigrations {
         }
     }
 
+    /**
+     * 3 → 4: ميزات النسخة 2.1 حسب إجابات الاسئله.md:
+     *   - جدول تصنيفات جديد (اسم فريد + لون).
+     *   - إعادة بناء المواقع لإضافة `categoryId` (مفتاح خارجي اختياري،
+     *     حذف التصنيف يُرجع الموقع إلى «بلا تصنيف» بدل حذفه) و`archived`
+     *     للأرشفة مع الاستعادة.
+     *
+     * حماية البيانات بنفس أسلوب 2 → 3: نسخ إلى جدول *_new ثم إسقاط
+     * القديم وإعادة التسمية، فلا يُفقد أي موقع أو ملاحظة أو تاريخ.
+     * ملاحظة: مفاتيح أجنبية جديدة لا يمكن إضافتها بـ ALTER TABLE في SQLite،
+     * لذلك إعادة البناء هي الطريق الآمن الوحيد.
+     */
+    val MIGRATION_3_4 = object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+
+            // ── 1) جدول التصنيفات الجديد ──
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `categories` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`name` TEXT NOT NULL, " +
+                    "`colorHex` TEXT NOT NULL, " +
+                    "`createdDate` INTEGER NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_categories_name` ON `categories` (`name`)"
+            )
+
+            // ── 2) إعادة بناء المواقع بالحقول الجديدة مع نسخ البيانات ──
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `sites_new` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`name` TEXT NOT NULL, " +
+                    "`notes` TEXT NOT NULL, " +
+                    "`createdDate` INTEGER NOT NULL, " +
+                    "`lastModified` INTEGER NOT NULL, " +
+                    "`categoryId` INTEGER, " +
+                    "`archived` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`categoryId`) REFERENCES `categories`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )"
+            )
+            db.execSQL(
+                "INSERT INTO `sites_new` (`id`, `name`, `notes`, `createdDate`, `lastModified`, `categoryId`, `archived`) " +
+                    "SELECT `id`, `name`, `notes`, `createdDate`, `lastModified`, NULL, 0 FROM `sites`"
+            )
+
+            // ── 3) إسقاط القديم وإعادة التسمية ثم الفهارس بأسماء Room ──
+            db.execSQL("DROP TABLE IF EXISTS `sites`")
+            db.execSQL("ALTER TABLE `sites_new` RENAME TO `sites`")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sites_name` ON `sites` (`name`)")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sites_categoryId` ON `sites` (`categoryId`)"
+            )
+        }
+    }
+
     /** كل الترحيلات بالترتيب — تُمرَّر إلى Room.databaseBuilder */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 }

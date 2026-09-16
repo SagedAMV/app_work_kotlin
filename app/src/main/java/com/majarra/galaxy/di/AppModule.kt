@@ -6,11 +6,13 @@ import androidx.room.RoomDatabase
 import com.majarra.galaxy.data.local.GalaxyDatabase
 import com.majarra.galaxy.data.local.GalaxyMigrations
 import com.majarra.galaxy.data.repository.AttachmentRepositoryImpl
+import com.majarra.galaxy.data.repository.CategoryRepositoryImpl
 import com.majarra.galaxy.data.repository.MaintenanceLogRepositoryImpl
 import com.majarra.galaxy.data.repository.SettingsRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteDetailRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteRepositoryImpl
 import com.majarra.galaxy.domain.repository.AttachmentRepository
+import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
@@ -46,6 +48,7 @@ object AppModule {
             .build()
 
     @Provides fun provideSiteDao(db: GalaxyDatabase) = db.siteDao()
+    @Provides fun provideCategoryDao(db: GalaxyDatabase) = db.categoryDao()
     @Provides fun provideSiteDetailDao(db: GalaxyDatabase) = db.siteDetailDao()
     @Provides fun provideMaintenanceLogDao(db: GalaxyDatabase) = db.maintenanceLogDao()
     @Provides fun provideAttachmentDao(db: GalaxyDatabase) = db.attachmentDao()
@@ -59,6 +62,9 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindSiteRepo(impl: SiteRepositoryImpl): SiteRepository
+
+    @Binds @Singleton
+    abstract fun bindCategoryRepo(impl: CategoryRepositoryImpl): CategoryRepository
 
     @Binds @Singleton
     abstract fun bindSiteDetailRepo(impl: SiteDetailRepositoryImpl): SiteDetailRepository

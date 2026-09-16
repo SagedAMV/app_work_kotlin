@@ -23,19 +23,29 @@ import com.majarra.galaxy.R
 object GalaxyNotifications {
 
     const val CHANNEL_MAINTENANCE = "galaxy_maintenance"
+    const val CHANNEL_BACKUP = "galaxy_backup_reminder"
     private const val ID_MAINTENANCE_DUE = 2001
+    private const val ID_BACKUP_REMINDER = 2002
 
-    /** تُنشأ القناة مرة واحدة — تُستدعى من GalaxyApplication.onCreate */
+    /** تُنشأ القناتان مرة واحدة — تُستدعى من GalaxyApplication.onCreate */
     fun ensureChannel(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        val channel = NotificationChannel(
+        val maintenance = NotificationChannel(
             CHANNEL_MAINTENANCE,
             context.getString(R.string.maintenance_channel_name),
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
             description = context.getString(R.string.maintenance_channel_desc)
         }
-        manager.createNotificationChannel(channel)
+        val backup = NotificationChannel(
+            CHANNEL_BACKUP,
+            context.getString(R.string.backup_channel_name),
+            NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = context.getString(R.string.backup_channel_desc)
+        }
+        manager.createNotificationChannel(maintenance)
+        manager.createNotificationChannel(backup)
     }
 
     fun hasPermission(context: Context): Boolean =
@@ -83,6 +93,39 @@ object GalaxyNotifications {
             true
         } catch (e: SecurityException) {
             // يحدث إن سُحب الإذن بين الفحص والنشر
+            false
+        }
+    }
+
+    /**
+     * تذكير دوري بأخذ نسخة احتياطية إن وُجدت تغييرات (إجابة الاسئله.md).
+     * يعيد هل نُشر فعلًا — الفحص نفسه في BackupReminderUseCase.
+     */
+    fun notifyBackupReminder(context: Context): Boolean {
+        if (!hasPermission(context)) return false
+
+        val intent = PendingIntent.getActivity(
+            context,
+            1,
+            Intent(context, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_BACKUP)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle("مجرة — حان وقت النسخة الاحتياطية")
+            .setContentText("بياناتك تغيّرت منذ آخر نسخة — صدّر نسخة من شاشة الإعدادات")
+            .setContentIntent(intent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
+        return try {
+            NotificationManagerCompat.from(context).notify(ID_BACKUP_REMINDER, notification)
+            true
+        } catch (e: SecurityException) {
             false
         }
     }

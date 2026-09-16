@@ -15,8 +15,20 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface SiteDao {
-    @Query("SELECT * FROM sites ORDER BY name COLLATE NOCASE ASC")
+    /**
+     * المواقع النشطة فقط (المؤرشفة تُعرض في مسار منفصل).
+     * الترتيب حسب إجابة الاسئله.md: الأحدث تعديلًا أولًا.
+     */
+    @Query("SELECT * FROM sites WHERE archived = 0 ORDER BY lastModified DESC")
     fun observeAll(): Flow<List<Site>>
+
+    /** المواقع المؤرشفة — الأحدث تعديلًا أولًا */
+    @Query("SELECT * FROM sites WHERE archived = 1 ORDER BY lastModified DESC")
+    fun observeArchived(): Flow<List<Site>>
+
+    /** مواقع تصنيف واحد (غير المؤرشفة) */
+    @Query("SELECT * FROM sites WHERE archived = 0 AND categoryId = :categoryId ORDER BY lastModified DESC")
+    fun observeByCategory(categoryId: Long): Flow<List<Site>>
 
     @Query("SELECT * FROM sites WHERE id = :id")
     fun observeById(id: Long): Flow<Site?>
@@ -24,11 +36,17 @@ interface SiteDao {
     @Query("SELECT * FROM sites WHERE id = :id")
     suspend fun getById(id: Long): Site?
 
-    @Query("SELECT * FROM sites WHERE name LIKE '%' || :q || '%'")
+    @Query("SELECT * FROM sites WHERE archived = 0 AND name LIKE '%' || :q || '%' ORDER BY lastModified DESC")
     fun search(q: String): Flow<List<Site>>
 
     @Query("SELECT * FROM sites")
     suspend fun getAll(): List<Site>
+
+    @Query("SELECT COUNT(*) FROM sites WHERE archived = 0")
+    suspend fun countActive(): Int
+
+    @Query("SELECT COUNT(*) FROM sites WHERE archived = 1")
+    suspend fun countArchived(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(site: Site): Long
@@ -38,6 +56,25 @@ interface SiteDao {
 
     @Delete
     suspend fun delete(site: Site)
+}
+
+/** تصنيفات المواقع — مراقبة كاملة لأن القائمة صغيرة وتُعرض في أكثر من شاشة */
+@Dao
+interface CategoryDao {
+    @Query("SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC")
+    fun observeAll(): Flow<List<Category>>
+
+    @Query("SELECT * FROM categories ORDER BY name COLLATE NOCASE ASC")
+    suspend fun getAll(): List<Category>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(category: Category): Long
+
+    @Update
+    suspend fun update(category: Category)
+
+    @Delete
+    suspend fun delete(category: Category)
 }
 
 @Dao
@@ -61,6 +98,9 @@ interface MaintenanceLogDao {
     @Query("SELECT * FROM maintenance_logs WHERE siteId = :siteId ORDER BY maintenanceDate DESC")
     fun observeBySite(siteId: Long): Flow<List<MaintenanceLog>>
 
+    @Query("SELECT COUNT(*) FROM maintenance_logs")
+    suspend fun countAll(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: MaintenanceLog): Long
 
@@ -75,6 +115,13 @@ interface AttachmentDao {
 
     @Query("SELECT * FROM attachments WHERE siteId = :siteId")
     suspend fun getBySite(siteId: Long): List<Attachment>
+
+    @Query("SELECT COUNT(*) FROM attachments")
+    suspend fun countAll(): Int
+
+    /** النوع يُمرَّر باسم التعداد نصًا كما يُخزَّن في العمود */
+    @Query("SELECT COUNT(*) FROM attachments WHERE fileType = :typeName")
+    suspend fun countByType(typeName: String): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(a: Attachment): Long

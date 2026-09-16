@@ -7,25 +7,27 @@ import androidx.room.TypeConverters
 /**
  * قاعدة بيانات «مجرة» — أوفلاين بالكامل (Room).
  *
- * الإصدار 3: التبسيط الكبير حسب تعليمات.md — خمسة جداول فقط
- * (مواقع، تفاصيل، سجل صيانة، مرفقات، إعدادات). الترحيل من 2 → 3
- * في GalaxyMigrations يحافظ على بيانات المواقع والمرفقات.
+ * الإصدار 4: ميزات الاسئله.md — جدول تصنيفات جديد + عمودا التصنيف
+ * والأرشفة على المواقع. الترحيل 3 → 4 في GalaxyMigrations غير مدمّر:
+ * يعيد بناء جدول المواقع مع الحفاظ على كل البيانات.
  */
 @Database(
     entities = [
         Site::class,
+        Category::class,
         SiteDetail::class,
         MaintenanceLog::class,
         Attachment::class,
         AppSetting::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(GalaxyConverters::class)
 abstract class GalaxyDatabase : RoomDatabase() {
 
     abstract fun siteDao(): SiteDao
+    abstract fun categoryDao(): CategoryDao
     abstract fun siteDetailDao(): SiteDetailDao
     abstract fun maintenanceLogDao(): MaintenanceLogDao
     abstract fun attachmentDao(): AttachmentDao

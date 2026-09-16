@@ -1,5 +1,8 @@
 package com.majarra.galaxy.ui.navigation
 
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
@@ -53,19 +57,23 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.majarra.galaxy.R
 import com.majarra.galaxy.domain.repository.SettingsRepository
+import com.majarra.galaxy.ui.screens.categories.CategoriesScreen
 import com.majarra.galaxy.ui.screens.settings.SettingsScreen
 import com.majarra.galaxy.ui.screens.sites.SiteDetailsScreen
 import com.majarra.galaxy.ui.screens.sites.SitesScreen
+import com.majarra.galaxy.ui.screens.stats.StatsScreen
 
-/** مسارات التنقل — ثلاثة فقط بعد التبسيط: المواقع، التفاصيل، الإعدادات */
+/** مسارات التنقل — النسخة 2.1: المواقع، التفاصيل، التصنيفات، الإحصائيات، الإعدادات */
 object Routes {
     const val SITES = "sites"
+    const val STATS = "stats"
     const val SETTINGS = "settings"
+    const val CATEGORIES = "categories"
     const val SITE_DETAILS = "site_details/{siteId}"
 
     fun siteDetails(id: Long) = "site_details/$id"
 
-    val topLevel = setOf(SITES, SETTINGS)
+    val topLevel = setOf(SITES, STATS, SETTINGS)
 }
 
 /** عنصر تبويب */
@@ -73,6 +81,7 @@ private data class TabItem(val route: String, val label: String, val icon: Image
 
 private val tabs = listOf(
     TabItem(Routes.SITES, "المواقع", Icons.Filled.CellTower),
+    TabItem(Routes.STATS, "الإحصائيات", Icons.Filled.BarChart),
     TabItem(Routes.SETTINGS, "الإعدادات", Icons.Filled.Settings)
 )
 
@@ -202,7 +211,7 @@ private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) 
     }
 }
 
-/** الشريط السفلي — تبويبان فقط بعد التبسيط */
+/** الشريط السفلي — ثلاثة تبويبات في النسخة 2.1 */
 @Composable
 private fun GalaxyBottomBar(navController: NavHostController, currentRoute: String?) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -228,7 +237,10 @@ private fun GalaxyBottomBar(navController: NavHostController, currentRoute: Stri
     }
 }
 
-/** مضيف التنقل المبسط */
+/**
+ * مضيف التنقل — انتقالات ناعمة (تلاشي) بين كل الوجهات حسب
+ * إجابة الاسئله.md، مع انتقالات إضافية داخل شاشة التفاصيل.
+ */
 @Composable
 private fun GalaxyNavHost(
     navController: NavHostController,
@@ -238,12 +250,23 @@ private fun GalaxyNavHost(
     NavHost(
         navController = navController,
         startDestination = Routes.SITES,
-        modifier = modifier
+        modifier = modifier,
+        enterTransition = { fadeIn(animationSpec = tween(220)) },
+        exitTransition = { fadeOut(animationSpec = tween(160)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(220)) },
+        popExitTransition = { fadeOut(animationSpec = tween(160)) }
     ) {
         composable(Routes.SITES) {
-            SitesScreen(onOpenSite = { navController.navigate(Routes.siteDetails(it)) })
+            SitesScreen(
+                onOpenSite = { navController.navigate(Routes.siteDetails(it)) },
+                onOpenCategories = { navController.navigate(Routes.CATEGORIES) }
+            )
         }
+        composable(Routes.STATS) { StatsScreen() }
         composable(Routes.SETTINGS) { SettingsScreen() }
+        composable(Routes.CATEGORIES) {
+            CategoriesScreen(onBack = { navController.popBackStack() })
+        }
         composable(
             route = Routes.SITE_DETAILS,
             arguments = listOf(navArgument("siteId") { type = NavType.LongType })

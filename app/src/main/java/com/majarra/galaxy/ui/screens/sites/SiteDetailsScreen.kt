@@ -5,6 +5,14 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -24,14 +32,19 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.AddTask
+import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -53,10 +66,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.SavedStateHandle
@@ -65,26 +81,34 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import com.majarra.galaxy.data.local.Attachment
+import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDetail
 import com.majarra.galaxy.domain.model.AttachmentType
 import com.majarra.galaxy.domain.repository.AttachmentRepository
+import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import com.majarra.galaxy.domain.usecase.ArchiveSiteUseCase
 import com.majarra.galaxy.domain.usecase.DeleteMaintenanceLogUseCase
 import com.majarra.galaxy.domain.usecase.DeleteSiteUseCase
+import com.majarra.galaxy.domain.usecase.NEXT_DUE_SUGGESTION_DAYS
 import com.majarra.galaxy.domain.usecase.ObserveSiteUseCase
 import com.majarra.galaxy.domain.usecase.SaveMaintenanceLogUseCase
 import com.majarra.galaxy.domain.usecase.SaveSiteUseCase
 import com.majarra.galaxy.domain.usecase.SetNextMaintenanceUseCase
+import com.majarra.galaxy.ui.components.ColorDot
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.EmptyState
+import com.majarra.galaxy.ui.components.FullscreenImageViewer
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
 import com.majarra.galaxy.ui.components.formatDate
 import com.majarra.galaxy.ui.components.formatDateTime
+import com.majarra.galaxy.util.MaterialItem
+import com.majarra.galaxy.util.MaterialLines
 import com.majarra.galaxy.util.daysFromNow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -109,11 +133,13 @@ class SiteDetailsViewModel @Inject constructor(
     observeSite: ObserveSiteUseCase,
     detailRepo: SiteDetailRepository,
     logRepo: MaintenanceLogRepository,
+    categoryRepo: CategoryRepository,
     private val siteRepo: SiteRepository,
     private val detailRepository: SiteDetailRepository,
     private val attachmentRepo: AttachmentRepository,
     private val saveSite: SaveSiteUseCase,
     private val deleteSite: DeleteSiteUseCase,
+    private val archiveSite: ArchiveSiteUseCase,
     private val saveLog: SaveMaintenanceLogUseCase,
     private val deleteLog: DeleteMaintenanceLogUseCase,
     private val setNextMaintenance: SetNextMaintenanceUseCase,
@@ -129,6 +155,8 @@ class SiteDetailsViewModel @Inject constructor(
     val logs = logRepo.observeBySite(siteId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val attachments = attachmentRepo.observeBySite(siteId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val categories = categoryRepo.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** رسالة قصيرة للواجهة */
@@ -148,6 +176,16 @@ class SiteDetailsViewModel @Inject constructor(
             } catch (e: IllegalArgumentException) {
                 onError(e.message ?: "مدخلات غير صالحة")
             }
+        }
+    }
+
+    /** أرشفة الموقع أو استعادته (إجابة الاسئله.md) */
+    fun setArchived(archived: Boolean, onDone: () -> Unit) {
+        val current = site.value ?: return
+        viewModelScope.launch {
+            archiveSite(current, archived)
+            _message.value = if (archived) "تم نقل الموقع إلى الأرشيف" else "تمت استعادة الموقع"
+            onDone()
         }
     }
 
@@ -281,10 +319,21 @@ fun SiteDetailsScreen(
     val detail by viewModel.detail.collectAsStateWithLifecycle()
     val logs by viewModel.logs.collectAsStateWithLifecycle()
     val attachments by viewModel.attachments.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
 
     var tab by remember { mutableStateOf(DetailsTab.INFO) }
     var showEditInfo by remember { mutableStateOf(false) }
     var confirmDeleteSite by remember { mutableStateOf(false) }
+    // مرفق معروض ملء الشاشة / مرفق بانتظار تأكيد الحذف (مشترك بين
+    // الشبكة والعارض حتى يعمل الحذف من داخل العارض أيضًا)
+    var viewerAttachment by remember { mutableStateOf<Attachment?>(null) }
+    var attachmentToDelete by remember { mutableStateOf<Attachment?>(null) }
+
+    val scope = rememberCoroutineScope()
+    /** رسائل أخطاء الأفعال المحلية (فتح ملف بلا تطبيق مناسب…) */
+    val reportLocal: (String) -> Unit = { text ->
+        scope.launch { snackbarHostState.showSnackbar(text) }
+    }
 
     // رسائل الحالة عبر الشريط السفلي العام
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -315,6 +364,22 @@ fun SiteDetailsScreen(
                     }
                 },
                 actions = {
+                    // أرشفة/استعادة (إجابة الاسئله.md)
+                    val currentSite = site
+                    if (currentSite != null) {
+                        IconButton(onClick = {
+                            if (currentSite.archived) {
+                                viewModel.setArchived(false) { }
+                            } else {
+                                viewModel.setArchived(true, onDone = onBack)
+                            }
+                        }) {
+                            Icon(
+                                if (currentSite.archived) Icons.Filled.Unarchive else Icons.Filled.Archive,
+                                contentDescription = if (currentSite.archived) "استعادة من الأرشيف" else "أرشفة الموقع"
+                            )
+                        }
+                    }
                     IconButton(onClick = { showEditInfo = true }) {
                         Icon(Icons.Filled.Edit, contentDescription = "تعديل")
                     }
@@ -349,29 +414,52 @@ fun SiteDetailsScreen(
                     subtitle = "ربما حُذف للتو"
                 )
             } else {
-                when (tab) {
-                    DetailsTab.INFO -> InfoTab(s)
-                    DetailsTab.MATERIALS -> MaterialsTab(
-                        detail = detail,
-                        onSave = viewModel::saveMaterials
-                    )
-                    DetailsTab.MAINTENANCE -> MaintenanceTab(
-                        detail = detail,
-                        logs = logs,
-                        onSetDue = viewModel::setNextMaintenanceDue,
-                        onAddLog = viewModel::addLog,
-                        onDeleteLog = viewModel::removeLog
-                    )
-
-                    DetailsTab.ATTACHMENTS -> AttachmentsTab(
-                        attachments = attachments,
-                        onPickImage = { imagePicker.launch(arrayOf("image/*")) },
-                        onPickPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
-                        onDelete = viewModel::deleteAttachment
-                    )
+                // انتقالات ناعمة بين التبويبات (إجابة الاسئله.md)
+                AnimatedContent(
+                    targetState = tab,
+                    transitionSpec = {
+                        (slideInHorizontally(animationSpec = tween(240)) { it / 4 } + fadeIn(tween(240)))
+                            .togetherWith(slideOutHorizontally(animationSpec = tween(240)) { -it / 4 } + fadeOut(tween(240)))
+                    },
+                    label = "details-tabs"
+                ) { target ->
+                    when (target) {
+                        DetailsTab.INFO -> InfoTab(s, categories)
+                        DetailsTab.MATERIALS -> MaterialsTab(
+                            detail = detail,
+                            onSave = viewModel::saveMaterials
+                        )
+                        DetailsTab.MAINTENANCE -> MaintenanceTab(
+                            detail = detail,
+                            logs = logs,
+                            onSetDue = viewModel::setNextMaintenanceDue,
+                            onAddLog = viewModel::addLog,
+                            onDeleteLog = viewModel::removeLog
+                        )
+                        DetailsTab.ATTACHMENTS -> AttachmentsTab(
+                            attachments = attachments,
+                            onPickImage = { imagePicker.launch(arrayOf("image/*")) },
+                            onPickPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
+                            onOpenImage = { viewerAttachment = it },
+                            onDelete = { attachmentToDelete = it },
+                            reportError = reportLocal
+                        )
+                    }
                 }
             }
         }
+    }
+
+    // عارض الصور ملء الشاشة (إجابة الاسئله.md: تكبير/تصغير بالسحب)
+    viewerAttachment?.let { attachment ->
+        FullscreenImageViewer(
+            uri = attachment.filePath,
+            onDismiss = { viewerAttachment = null },
+            onDelete = {
+                viewerAttachment = null
+                attachmentToDelete = attachment
+            }
+        )
     }
 
     // حوار تعديل الاسم والملاحظات
@@ -405,12 +493,27 @@ fun SiteDetailsScreen(
             onDismiss = { confirmDeleteSite = false }
         )
     }
+
+    // تأكيد حذف مرفق (من الشبكة أو من داخل العارض)
+    attachmentToDelete?.let { attachment ->
+        ConfirmDialog(
+            title = "حذف المرفق",
+            text = "سيُحذف هذا المرفق نهائيًا من الموقع.",
+            confirmText = "حذف",
+            onConfirm = {
+                viewModel.deleteAttachment(attachment)
+                attachmentToDelete = null
+            },
+            onDismiss = { attachmentToDelete = null }
+        )
+    }
 }
 
 /* ═══════════════════ تبويب البيانات ═══════════════════ */
 
 @Composable
-private fun InfoTab(s: Site) {
+private fun InfoTab(s: Site, categories: List<Category>) {
+    val category = categories.firstOrNull { it.id == s.categoryId }
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -423,6 +526,24 @@ private fun InfoTab(s: Site) {
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    // التصنيف والحالة: مؤرشف/نشط + اسم التصنيف بلونه
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            if (s.archived) "مؤرشف" else "نشط",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (s.archived) {
+                                MaterialTheme.colorScheme.error
+                            } else {
+                                MaterialTheme.colorScheme.secondary
+                            }
+                        )
+                        if (category != null) {
+                            ColorDot(category.colorHex)
+                            Text(category.name, style = MaterialTheme.typography.labelSmall)
+                        } else {
+                            Text("بلا تصنيف", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                    }
                     Text("أُنشئ: ${s.createdDate.formatDateTime()}", style = MaterialTheme.typography.bodySmall)
                     Text("آخر تحديث: ${s.lastModified.formatDateTime()}", style = MaterialTheme.typography.bodySmall)
                 }
@@ -446,19 +567,23 @@ private fun InfoTab(s: Site) {
     }
 }
 
-/* ═══════════════════ تبويب المواد ═══════════════════ */
+/* ═══════════════════ تبويب المواد (قوائم ✔) ═══════════════════ */
 
+/**
+ * المواد الآن قوائم عناصر مع علامة ✔ لكل عنصر (إجابة الاسئله.md).
+ * التخزين ما زال نصيًا في نفس الأعمدة — تنسيق «[ ] / [x]» في
+ * MaterialLines متوافق مع البيانات القديمة.
+ */
 @Composable
 private fun MaterialsTab(
     detail: SiteDetail?,
     onSave: (available: String, needed: String, maintenance: String, withdrawn: String) -> Unit
 ) {
-    // الحقول تبدأ من القيم المحفوظة وتبقى قابلة للتحرير محليًا.
-    // المفتاح على معرف صف التفاصيل يجعلها تتحدث عند تحميل قيم موقع آخر.
-    var available by remember(detail?.id) { mutableStateOf(detail?.availableMaterials.orEmpty()) }
-    var needed by remember(detail?.id) { mutableStateOf(detail?.neededMaterials.orEmpty()) }
-    var maintenance by remember(detail?.id) { mutableStateOf(detail?.maintenanceMaterials.orEmpty()) }
-    var withdrawn by remember(detail?.id) { mutableStateOf(detail?.withdrawnMaterials.orEmpty()) }
+    // كل حقل قائمة عناصر تُحرَّر محليًا وتُحفظ دفعة واحدة
+    var available by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.availableMaterials.orEmpty())) }
+    var needed by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.neededMaterials.orEmpty())) }
+    var maintenance by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.maintenanceMaterials.orEmpty())) }
+    var withdrawn by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.withdrawnMaterials.orEmpty())) }
 
     Column(
         modifier = Modifier
@@ -470,15 +595,26 @@ private fun MaterialsTab(
             modifier = Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            MaterialsField("المواد الموجودة حاليًا", available) { available = it }
-            MaterialsField("احتياج الموقع (ما ينقص)", needed) { needed = it }
-            MaterialsField("مواد تحتاج صيانة", maintenance) { maintenance = it }
-            MaterialsField("مواد تم سحبها", withdrawn) { withdrawn = it }
+            SectionTitle("المواد الموجودة حاليًا")
+            MaterialChecklistField(items = available) { available = it }
+            SectionTitle("احتياج الموقع (ما ينقص)")
+            MaterialChecklistField(items = needed) { needed = it }
+            SectionTitle("مواد تحتاج صيانة")
+            MaterialChecklistField(items = maintenance) { maintenance = it }
+            SectionTitle("مواد تم سحبها")
+            MaterialChecklistField(items = withdrawn) { withdrawn = it }
         }
         Button(
-            onClick = { onSave(available, needed, maintenance, withdrawn) },
+            onClick = {
+                onSave(
+                    MaterialLines.serialize(available),
+                    MaterialLines.serialize(needed),
+                    MaterialLines.serialize(maintenance),
+                    MaterialLines.serialize(withdrawn)
+                )
+            },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("حفظ بيانات المواد")
@@ -486,17 +622,84 @@ private fun MaterialsTab(
     }
 }
 
+/** قائمة عناصر واحدة: تحديد/إلغاء + حذف + إضافة عنصر جديد */
 @Composable
-private fun MaterialsField(label: String, value: String, onChange: (String) -> Unit) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth(),
-        label = { Text(label) },
-        minLines = 3,
-        maxLines = 8,
-        placeholder = { Text("اكتب سطرًا لكل مادة…") }
-    )
+private fun MaterialChecklistField(
+    items: List<MaterialItem>,
+    onChange: (List<MaterialItem>) -> Unit
+) {
+    var newItem by remember { mutableStateOf("") }
+
+    GalaxyCard {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (items.isEmpty()) {
+                Text(
+                    "لا عناصر بعد — أضف أول عنصر بالأسفل",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
+            items.forEachIndexed { index, item ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = item.checked,
+                        onCheckedChange = { checked ->
+                            onChange(items.toMutableList().also { it[index] = item.copy(checked = checked) })
+                        }
+                    )
+                    Text(
+                        item.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (item.checked) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = {
+                        onChange(items.toMutableList().also { it.removeAt(index) })
+                    }) {
+                        Icon(
+                            Icons.Filled.Delete,
+                            contentDescription = "حذف العنصر",
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.outline
+                        )
+                    }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = newItem,
+                    onValueChange = { newItem = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("أضف عنصرًا…") },
+                    singleLine = true
+                )
+                IconButton(
+                    onClick = {
+                        val text = newItem.trim()
+                        if (text.isNotEmpty()) {
+                            onChange(items + MaterialItem(text, checked = false))
+                            newItem = ""
+                        }
+                    },
+                    enabled = newItem.isNotBlank()
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = "إضافة العنصر")
+                }
+            }
+        }
+    }
 }
 
 /* ═══════════════════ تبويب الصيانة ═══════════════════ */
@@ -518,6 +721,8 @@ private fun MaintenanceTab(
     var showAddLog by remember { mutableStateOf(false) }
     var showDuePicker by remember { mutableStateOf(false) }
     var logToDelete by remember { mutableStateOf<MaintenanceLog?>(null) }
+    // اقتراح الموعد القادم بعد تسجيل صيانة (إجابة الاسئله.md)
+    var suggestedDue by remember { mutableStateOf<Long?>(null) }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -624,6 +829,39 @@ private fun MaintenanceTab(
             onDismiss = { showAddLog = false },
             onSave = { dateMillis, notes, performedBy, onSaved, reportError ->
                 onAddLog(dateMillis, notes, performedBy, onSaved, reportError)
+            },
+            onSavedExtra = { dateMillis ->
+                // بعد نجاح الحفظ: اقتراح الموعد القادم تلقائيًا
+                suggestedDue = dateMillis + NEXT_DUE_SUGGESTION_DAYS * 24L * 3600 * 1000
+            }
+        )
+    }
+
+    // حوار اقتراح الموعد القادم: اعتماد / تعديل يدوي / تجاهل
+    suggestedDue?.let { suggested ->
+        AlertDialog(
+            onDismissRequest = { suggestedDue = null },
+            title = { Text("اقتراح موعد الصيانة القادم") },
+            text = {
+                Text(
+                    "سُجلت الصيانة بنجاح. هل تريد تحديد الموعد القادم مقترحًا بعد ٩٠ يومًا؟\n" +
+                        "الموعد المقترح: ${suggested.formatDate()}"
+                )
+            },
+            confirmButton = {
+                Button(onClick = {
+                    onSetDue(suggested)
+                    suggestedDue = null
+                }) { Text("اعتماد المقترح") }
+            },
+            dismissButton = {
+                Row {
+                    TextButton(onClick = {
+                        suggestedDue = null
+                        showDuePicker = true
+                    }) { Text("تعديل يدوي") }
+                    TextButton(onClick = { suggestedDue = null }) { Text("تجاهل") }
+                }
             }
         )
     }
@@ -670,7 +908,9 @@ private fun AddLogDialog(
         performedBy: String,
         onSaved: () -> Unit,
         reportError: (String) -> Unit
-    ) -> Unit
+    ) -> Unit,
+    /** يُستدعى بعد نجاح الحفظ لتمرير تاريخ الصيانة لاقتراح الموعد القادم */
+    onSavedExtra: (Long) -> Unit = {}
 ) {
     var dateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var notes by remember { mutableStateOf("") }
@@ -712,9 +952,13 @@ private fun AddLogDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    // عند نجاح الحفظ يُغلق الحوار عبر onSaved، وعند خطأ التحقق
-                    // يبقى مفتوحًا وتظهر الرسالة تحت حقل الملاحظات.
-                    onSave(dateMillis, notes, performedBy, onDismiss) { message ->
+                    // عند نجاح الحفظ يُغلق الحوار عبر onSaved ويُمرَّر التاريخ
+                    // لاقتراح الموعد القادم، وعند خطأ التحقق يبقى مفتوحًا.
+                    val selectedDate = dateMillis
+                    onSave(selectedDate, notes, performedBy, {
+                        onSavedExtra(selectedDate)
+                        onDismiss()
+                    }) { message ->
                         error = message
                     }
                 }
@@ -744,16 +988,41 @@ private fun AddLogDialog(
 
 /* ═══════════════════ تبويب المرفقات ═══════════════════ */
 
+/**
+ * فتح ملف (عادة PDF) في عارض خارجي مع منح إذن القراءة المؤقت.
+ * @return هل وُجد تطبيق مناسب وفتح فعلًا.
+ */
+private fun Context.openFileExternally(uriString: String): Boolean = runCatching {
+    val uri = Uri.parse(uriString)
+    val intent = Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    startActivity(intent)
+    true
+}.getOrDefault(false)
+
+/** مشاركة ملف مع التطبيقات الأخرى (إجابة الاسئله.md) */
+private fun Context.shareFile(uriString: String): Boolean = runCatching {
+    val uri = Uri.parse(uriString)
+    val send = Intent(Intent.ACTION_SEND).apply {
+        type = "*/*"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    startActivity(Intent.createChooser(send, "مشاركة الملف"))
+    true
+}.getOrDefault(false)
+
 @Composable
 private fun AttachmentsTab(
     attachments: List<Attachment>,
     onPickImage: () -> Unit,
     onPickPdf: () -> Unit,
-    onDelete: (Attachment) -> Unit
+    onOpenImage: (Attachment) -> Unit,
+    onDelete: (Attachment) -> Unit,
+    reportError: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val images = attachments.filter { it.fileType == AttachmentType.IMAGE }
     val files = attachments.filter { it.fileType != AttachmentType.IMAGE }
-    var toDelete by remember { mutableStateOf<Attachment?>(null) }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -785,7 +1054,8 @@ private fun AttachmentsTab(
         if (images.isNotEmpty()) {
             item { SectionTitle("معرض الصور (${images.size})") }
             item {
-                // شبكة صور بارتفاع محسوب — عرض بسيط بلا شاشة تكبير منفصلة
+                // شبكة صور بارتفاع محسوب؛ نقرة = عارض ملء الشاشة،
+                // ضغطة طويلة = حذف.
                 val rows = (images.size + 2) / 3
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(3),
@@ -796,25 +1066,41 @@ private fun AttachmentsTab(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(images, key = { it.id }) { image ->
-                        GalaxyCard(onClick = { toDelete = image }) {
-                            AsyncImage(
-                                model = image.filePath,
-                                contentDescription = "صورة مرفقة",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(104.dp)
-                            )
-                        }
+                        AsyncImage(
+                            model = image.filePath,
+                            contentDescription = "صورة مرفقة",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(104.dp)
+                                .pointerInput(image.id) {
+                                    detectTapGestures(
+                                        onTap = { onOpenImage(image) },
+                                        onLongPress = { onDelete(image) }
+                                    )
+                                }
+                        )
                     }
                 }
+            }
+            item {
+                Text(
+                    "نقرة لعرض الصورة ملء الشاشة — ضغطة طويلة للحذف",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
             }
         }
 
         if (files.isNotEmpty()) {
             item { SectionTitle("الملفات (${files.size})") }
             items(files, key = { it.id }) { file ->
-                GalaxyCard {
+                GalaxyCard(onClick = {
+                    // فتح الملف في عارض خارجي (إجابة الاسئله.md)
+                    if (!context.openFileExternally(file.filePath)) {
+                        reportError("لا يوجد تطبيق مناسب لفتح هذا الملف")
+                    }
+                }) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -824,7 +1110,6 @@ private fun AttachmentsTab(
                     ) {
                         Icon(Icons.Filled.Description, contentDescription = null)
                         Column(Modifier.weight(1f)) {
-                            // التسمية من التعداد نفسه بدل نص مكرر يدويًا
                             Text(file.fileType.label, style = MaterialTheme.typography.titleSmall)
                             Text(
                                 file.uploadedDate.formatDateTime(),
@@ -832,26 +1117,21 @@ private fun AttachmentsTab(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { toDelete = file }) {
+                        // مشاركة مع التطبيقات الأخرى (إجابة الاسئله.md)
+                        IconButton(onClick = {
+                            if (!context.shareFile(file.filePath)) {
+                                reportError("تعذّرت مشاركة الملف")
+                            }
+                        }) {
+                            Icon(Icons.Filled.Share, contentDescription = "مشاركة الملف")
+                        }
+                        IconButton(onClick = { onDelete(file) }) {
                             Icon(Icons.Filled.Delete, contentDescription = "حذف المرفق")
                         }
                     }
                 }
             }
         }
-    }
-
-    toDelete?.let { attachment ->
-        ConfirmDialog(
-            title = "حذف المرفق",
-            text = "سيُحذف هذا المرفق نهائيًا من الموقع.",
-            confirmText = "حذف",
-            onConfirm = {
-                onDelete(attachment)
-                toDelete = null
-            },
-            onDismiss = { toDelete = null }
-        )
     }
 }
 
