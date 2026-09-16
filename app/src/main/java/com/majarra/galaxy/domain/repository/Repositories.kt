@@ -32,7 +32,6 @@ interface SiteDetailRepository {
 interface MaintenanceLogRepository {
     fun observeBySite(siteId: Long): Flow<List<MaintenanceLog>>
     suspend fun insert(log: MaintenanceLog): Long
-    suspend fun update(log: MaintenanceLog)
     suspend fun delete(log: MaintenanceLog)
 }
 

@@ -14,7 +14,6 @@ import javax.inject.Inject
 class ObserveSitesUseCase @Inject constructor(
     private val siteRepo: SiteRepository
 ) {
-    operator fun invoke(): Flow<List<Site>> = siteRepo.observeSites()
     fun search(q: String): Flow<List<Site>> =
         if (q.isBlank()) siteRepo.observeSites() else siteRepo.searchSites(q.trim())
 }

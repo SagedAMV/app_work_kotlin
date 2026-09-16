@@ -4,6 +4,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.majarra.galaxy.domain.model.AttachmentType
 
 /* ============================================================
  * كيانات قاعدة بيانات «مجرة» — النسخة المبسطة (2.0)
@@ -87,8 +88,12 @@ data class Attachment(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val siteId: Long,
     val filePath: String,
-    /** قيمة النوع تُخزَّن باسم التعداد: IMAGE أو PDF (انظر GalaxyConverters) */
-    val fileType: String,
+    /**
+     * نوع التعدادโดยตรง، والتخزين نصًا (اسم القيمة) يتم عبر
+     * GalaxyConverters — سابقًا كان الحقل نصًا صريحًا مما جعل
+     * المحوّلات كودًا ميتًا وعطّل الحماية من القيم التالفة.
+     */
+    val fileType: AttachmentType,
     val uploadedDate: Long = System.currentTimeMillis()
 )
 

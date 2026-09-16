@@ -64,9 +64,6 @@ interface MaintenanceLogDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: MaintenanceLog): Long
 
-    @Update
-    suspend fun update(log: MaintenanceLog)
-
     @Delete
     suspend fun delete(log: MaintenanceLog)
 }
@@ -97,7 +94,4 @@ interface AppSettingDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(setting: AppSetting)
-
-    @Query("DELETE FROM app_settings")
-    suspend fun clear()
 }

@@ -7,7 +7,6 @@ import android.net.Uri
 import android.os.Process
 import android.util.Log
 import androidx.room.withTransaction
-import com.majarra.galaxy.GalaxyApplication
 import com.majarra.galaxy.MainActivity
 import com.majarra.galaxy.data.local.GalaxyDatabase
 import com.majarra.galaxy.notify.GalaxyNotifications
@@ -184,11 +183,9 @@ object AppRestarter {
         val intent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }
-        if (context is GalaxyApplication) {
-            context.startActivity(intent)
-        } else {
-            context.applicationContext.startActivity(intent)
-        }
+        // الفرعان السابقان (context is GalaxyApplication / else) كانا ينفذان
+        // نفس الشيء تمامًا؛ الاكتفاء بسياق التطبيق الواحد يكفي ويمنع التكرار.
+        context.applicationContext.startActivity(intent)
         Process.killProcess(Process.myPid())
     }
 }

@@ -225,7 +225,7 @@ class SiteDetailsViewModel @Inject constructor(
                 false
             }
             attachmentRepo.insert(
-                Attachment(siteId = siteId, filePath = uri.toString(), fileType = type.name)
+                Attachment(siteId = siteId, filePath = uri.toString(), fileType = type)
             )
             touchSite()
             _message.value = if (persisted) {
@@ -336,7 +336,7 @@ fun SiteDetailsScreen(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                DetailsTab.values().forEach { t ->
+                DetailsTab.entries.forEach { t ->
                     FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                 }
             }
@@ -751,8 +751,8 @@ private fun AttachmentsTab(
     onPickPdf: () -> Unit,
     onDelete: (Attachment) -> Unit
 ) {
-    val images = attachments.filter { it.fileType == AttachmentType.IMAGE.name }
-    val files = attachments.filter { it.fileType != AttachmentType.IMAGE.name }
+    val images = attachments.filter { it.fileType == AttachmentType.IMAGE }
+    val files = attachments.filter { it.fileType != AttachmentType.IMAGE }
     var toDelete by remember { mutableStateOf<Attachment?>(null) }
 
     LazyColumn(
@@ -824,7 +824,8 @@ private fun AttachmentsTab(
                     ) {
                         Icon(Icons.Filled.Description, contentDescription = null)
                         Column(Modifier.weight(1f)) {
-                            Text("مستند PDF", style = MaterialTheme.typography.titleSmall)
+                            // التسمية من التعداد نفسه بدل نص مكرر يدويًا
+                            Text(file.fileType.label, style = MaterialTheme.typography.titleSmall)
                             Text(
                                 file.uploadedDate.formatDateTime(),
                                 style = MaterialTheme.typography.labelSmall,

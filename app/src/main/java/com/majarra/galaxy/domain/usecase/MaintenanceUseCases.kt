@@ -5,12 +5,22 @@ import com.majarra.galaxy.data.local.SiteDetail
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 /** نافذة التنبيه: إشعار قبل موعد الصيانة بسبعة أيام أو عند تجاوزه */
 const val DUE_WINDOW_DAYS = 7
 
-private const val DAY_MS = 24L * 3600 * 1000
+/**
+ * تحويل لحظة (مللي ثانية) إلى تاريخ اليوم المحلي الذي تقع فيه.
+ * منتقي التاريخ في Compose يعيد منتصف الليل بالتوقيت العالمي (UTC)،
+ * لذا فالمقارنة بالمللي ثانية وحدها تُخطئ قرب حدود اليوم؛ المقارنة
+ * الصحيحة تكون بين أيام تقويمية كاملة.
+ */
+internal fun Long.toLocalDate(): LocalDate =
+    Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
 
 /** حفظ إدخال جديد في سجل الصيانة مع تطبيع المدخلات */
 class SaveMaintenanceLogUseCase @Inject constructor(
@@ -56,9 +66,13 @@ class CheckMaintenanceDueUseCase @Inject constructor(
     private val detailRepo: SiteDetailRepository
 ) {
     suspend operator fun invoke(): List<DueSite> {
-        val cutoff = System.currentTimeMillis() + DUE_WINDOW_DAYS * DAY_MS
+        // الحد الأقصى: آخر يوم تُقبل فيه الصيانة ضمن نافذة التنبيه
+        // (اليوم + 7 أيام). المقارنة بين أيام تقويمية لا مللي ثانية
+        // حتى لا تتأثر النتيجة بساعة الفحص أو بفارق المنطقة الزمنية.
+        val lastDueDay = LocalDate.now().plusDays(DUE_WINDOW_DAYS.toLong())
         val dueDetails = detailRepo.getAll().filter { detail ->
-            detail.nextMaintenanceDue != null && detail.nextMaintenanceDue <= cutoff
+            val due = detail.nextMaintenanceDue ?: return@filter false
+            !due.toLocalDate().isAfter(lastDueDay)
         }
         if (dueDetails.isEmpty()) return emptyList()
 
