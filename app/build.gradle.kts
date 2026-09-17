@@ -20,8 +20,8 @@ android {
         applicationId = "com.majarra.galaxy"
         minSdk = 30          // حسب التعليمات: Android 11+
         targetSdk = 34
-        versionCode = 5
-        versionName = "2.2.0"
+        versionCode = 6
+        versionName = "2.3.0"
         vectorDrawables { useSupportLibrary = true }
     }
 

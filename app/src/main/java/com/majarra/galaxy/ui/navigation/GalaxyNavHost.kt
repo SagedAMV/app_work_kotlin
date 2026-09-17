@@ -3,6 +3,8 @@ package com.majarra.galaxy.ui.navigation
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -57,6 +60,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.majarra.galaxy.R
 import com.majarra.galaxy.domain.repository.SettingsRepository
+import com.majarra.galaxy.ui.anim.GalaxySnackbarHost
+import com.majarra.galaxy.ui.anim.PinDots
+import com.majarra.galaxy.ui.anim.galaxyPressGlow
 import com.majarra.galaxy.ui.screens.categories.CategoriesScreen
 import com.majarra.galaxy.ui.screens.materials.MaterialsCatalogScreen
 import com.majarra.galaxy.ui.screens.settings.SettingsScreen
@@ -131,7 +137,8 @@ fun GalaxyRoot(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        // سنابار بشريط مهلة متناقص (اختيارات 2.3 — مقترح 12)
+        snackbarHost = { GalaxySnackbarHost(snackbarHostState) },
         bottomBar = {
             if (currentRoute in Routes.topLevel) {
                 GalaxyBottomBar(navController, currentRoute)
@@ -188,6 +195,8 @@ private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) 
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // خانات الرمز: كل رقم يدخل تظهر نقطته بقفزة نابضة (اختيارات 2.3 — مقترح 4)
+            PinDots(pin = pin)
             OutlinedTextField(
                 value = pin,
                 onValueChange = { value ->
@@ -203,12 +212,17 @@ private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) 
             error?.let {
                 Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
             }
+            // زر الفتح مع توهج الضغط (اختيارات 2.3 — مقترح 1)
+            val lockInteraction = remember { MutableInteractionSource() }
             Button(
                 onClick = {
                     if (verifyPin(pin)) onUnlock() else error = wrongPinMessage
                 },
                 enabled = pin.length >= 4,
-                modifier = Modifier.fillMaxWidth()
+                interactionSource = lockInteraction,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .galaxyPressGlow(lockInteraction)
             ) {
                 Text(stringResource(R.string.lock_button))
             }
@@ -243,8 +257,10 @@ private fun GalaxyBottomBar(navController: NavHostController, currentRoute: Stri
 }
 
 /**
- * مضيف التنقل — انتقالات ناعمة (تلاشي) بين كل الوجهات حسب
- * إجابة الاسئله.md، مع انتقالات إضافية داخل شاشة التفاصيل.
+ * مضيف التنقل — انتقالات «تلاشي وتحجيم» بين كل الوجهات
+ * (اختيارات 2.3 — مقترح 7): الشاشة القديمة تتلاشى وتصغر 96%
+ * بينما الجديدة تدخل من 96% إلى حجمها الكامل. شاشة التفاصيل
+ * يهيمن عليها انتقال «تحول الحاوية» (مقترح 8) من قائمة المواقع.
  */
 @Composable
 private fun GalaxyNavHost(
@@ -256,10 +272,10 @@ private fun GalaxyNavHost(
         navController = navController,
         startDestination = Routes.SITES,
         modifier = modifier,
-        enterTransition = { fadeIn(animationSpec = tween(220)) },
-        exitTransition = { fadeOut(animationSpec = tween(160)) },
-        popEnterTransition = { fadeIn(animationSpec = tween(220)) },
-        popExitTransition = { fadeOut(animationSpec = tween(160)) }
+        enterTransition = { fadeIn(tween(220)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220)) },
+        exitTransition = { fadeOut(tween(160)) + scaleOut(targetScale = 0.96f, animationSpec = tween(160)) },
+        popEnterTransition = { fadeIn(tween(220)) + scaleIn(initialScale = 0.96f, animationSpec = tween(220)) },
+        popExitTransition = { fadeOut(tween(160)) + scaleOut(targetScale = 0.96f, animationSpec = tween(160)) }
     ) {
         composable(Routes.SITES) {
             SitesScreen(

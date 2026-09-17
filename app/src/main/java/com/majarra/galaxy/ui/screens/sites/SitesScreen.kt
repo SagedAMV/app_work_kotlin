@@ -1,11 +1,15 @@
 package com.majarra.galaxy.ui.screens.sites
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
@@ -41,12 +46,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -61,6 +75,13 @@ import com.majarra.galaxy.domain.usecase.CheckMaintenanceDueUseCase
 import com.majarra.galaxy.domain.usecase.DueSite
 import com.majarra.galaxy.domain.usecase.ObserveSitesUseCase
 import com.majarra.galaxy.domain.usecase.SaveSiteUseCase
+import com.majarra.galaxy.ui.anim.BreathingDueBadge
+import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
+import com.majarra.galaxy.ui.anim.GlowButton
+import com.majarra.galaxy.ui.anim.SiteLaunchOverlay
+import com.majarra.galaxy.ui.anim.SiteLaunchTarget
+import com.majarra.galaxy.ui.anim.StaggeredItem
+import com.majarra.galaxy.ui.anim.rememberAlertPulse
 import com.majarra.galaxy.ui.components.ColorDot
 import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.ui.components.GalaxyCard
@@ -68,6 +89,7 @@ import com.majarra.galaxy.ui.components.formatDate
 import com.majarra.galaxy.util.daysFromNow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -182,16 +204,37 @@ fun SitesScreen(
     val currentFilter = filter
     val showArchived = currentFilter is ListFilter.Archived
 
+    // ── حالة انيميشنات الإصدار 2.3 (اختيارات المستخدم) ──
+    // تحول الحاوية: مستطيلات البطاقات بإحداثيات النافذة + مستطيل الشاشة
+    val cardBounds = remember { mutableStateMapOf<Long, Rect>() }
+    var containerRect by remember { mutableStateOf<Rect?>(null) }
+    var launchTarget by remember { mutableStateOf<SiteLaunchTarget?>(null) }
+    // انهيار ارتفاع العنصر قبل إزالته من البيانات (مقترح 14)
+    var collapsingId by remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
+    // مفتاح الظهور المتتابع: يتغير مع البحث/الفلتر فتعاد حركة الدخول (مقترح 13)
+    val staggerTrigger = "$query|" + when (currentFilter) {
+        is ListFilter.Active -> "all"
+        is ListFilter.ByCategory -> "cat-${currentFilter.categoryId}"
+        is ListFilter.Archived -> "archived"
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { containerRect = it.boundsInWindow() }
+    ) {
     Scaffold(
         floatingActionButton = {
             if (!showArchived) {
-                ExtendedFloatingActionButton(
-                    onClick = { showAdd = true },
-                    containerColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null)
-                    Text("موقع جديد", modifier = Modifier.padding(start = 6.dp))
-                }
+                // زر إضافة متمدّد: نقرة تفتح شريطه ونقرة تنفّذ (مقترح 2)
+                GalaxyExpandingFab(
+                    icon = Icons.Filled.Add,
+                    primaryLabel = "موقع جديد",
+                    onPrimary = { showAdd = true },
+                    secondaryLabel = "المواد الموحدة",
+                    onSecondary = onOpenMaterials
+                )
             }
         }
     ) { padding ->
@@ -293,15 +336,53 @@ fun SitesScreen(
                     contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(sites, key = { it.id }) { site ->
-                        SiteRow(
-                            site = site,
-                            categories = categories,
-                            archived = showArchived,
-                            onClick = { onOpenSite(site.id) },
-                            onRestore = { viewModel.restore(site) }
-                        )
+                    itemsIndexed(sites, key = { _, site -> site.id }) { index, site ->
+                        // ظهور متتابع عند الفتح/البحث (مقترح 13)، وانهيار
+                        // ارتفاع عند الاستعادة قبل خروج العنصر (مقترح 14)
+                        StaggeredItem(index = index, trigger = staggerTrigger) {
+                            AnimatedVisibility(
+                                visible = collapsingId != site.id,
+                                enter = expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)) + fadeIn(tween(200)),
+                                exit = shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(240)) + fadeOut(tween(200))
+                            ) {
+                                SiteRow(
+                                    site = site,
+                                    categories = categories,
+                                    archived = showArchived,
+                                    onClick = {
+                                        // فتح التفاصيل بتحول الحاوية من البطاقة نفسها (مقترح 8)
+                                        val from = cardBounds[site.id]
+                                        val bounds = containerRect
+                                        if (!showArchived && from != null && bounds != null) {
+                                            launchTarget = SiteLaunchTarget(site.id, site.name, from)
+                                        } else {
+                                            onOpenSite(site.id)
+                                        }
+                                    },
+                                    onRestore = {
+                                        collapsingId = site.id
+                                        scope.launch {
+                                            delay(280)
+                                            viewModel.restore(site)
+                                            collapsingId = null
+                                        }
+                                    },
+                                    onMeasured = { rect -> cardBounds[site.id] = rect }
+                                )
+                            }
+                        }
                     }
+                }
+            }
+        }
+    }
+
+        // تحول الحاوية: البطاقة تتمدد حتى تملأ الشاشة ثم يحدث التنقل (مقترح 8)
+        launchTarget?.let { target ->
+            containerRect?.let { bounds ->
+                SiteLaunchOverlay(target = target, container = bounds) {
+                    launchTarget = null
+                    onOpenSite(target.siteId)
                 }
             }
         }
@@ -329,6 +410,8 @@ fun SitesScreen(
 /**
  * شريط علوي يعرض المواقع المتأخرة والقريبة الصيانة (إجابة الاسئله.md).
  * الأحمر = متأخر، الكهرماني = قريب. النقر يفتح الموقع مباشرة.
+ * انيميشن 2.3 (مقترح 11): ينزلق من الأعلى ثم ينبض مرة واحدة بهالة
+ * حمراء إن وُجد موقع متجاوز للموعد، وشارات الأيام تتنفس لونيًا (مقترح 16).
  */
 @Composable
 private fun DueSitesBanner(
@@ -336,12 +419,27 @@ private fun DueSitesBanner(
     visible: Boolean,
     onOpenSite: (Long) -> Unit
 ) {
+    val bannerVisible = visible && dueSites.isNotEmpty()
+    val hasOverdue = dueSites.any { it.dueDate.daysFromNow() < 0 }
+    val pulseAlpha = rememberAlertPulse(active = bannerVisible && hasOverdue)
     AnimatedVisibility(
-        visible = visible && dueSites.isNotEmpty(),
+        visible = bannerVisible,
         enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
     ) {
-        GalaxyCard(modifier = Modifier.padding(bottom = 10.dp)) {
+        GalaxyCard(
+            modifier = Modifier
+                .padding(bottom = 10.dp)
+                .drawBehind {
+                    if (pulseAlpha > 0f) {
+                        drawRoundRect(
+                            color = Color(0xFFFF5A5A).copy(alpha = 0.6f * pulseAlpha),
+                            cornerRadius = CornerRadius(16.dp.toPx()),
+                            style = Stroke(width = 2.5.dp.toPx())
+                        )
+                    }
+                }
+        ) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(
@@ -354,7 +452,6 @@ private fun DueSitesBanner(
                 }
                 dueSites.take(4).forEach { due ->
                     val days = due.dueDate.daysFromNow()
-                    val overdue = days < 0
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -367,19 +464,8 @@ private fun DueSitesBanner(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        Text(
-                            when {
-                                overdue -> "متأخر ${-days} يوم"
-                                days == 0L -> "اليوم"
-                                else -> "بعد $days يوم"
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (overdue) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.tertiary
-                            }
-                        )
+                        // شارة تتنفس لونيًا للمتأخر (مقترح 16)
+                        BreathingDueBadge(days)
                     }
                 }
                 if (dueSites.size > 4) {
@@ -402,10 +488,15 @@ private fun SiteRow(
     categories: List<Category>,
     archived: Boolean,
     onClick: () -> Unit,
-    onRestore: () -> Unit
+    onRestore: () -> Unit,
+    /** قياس مستطيل البطاقة بإحداثيات النافذة — يغذي تحول الحاوية (مقترح 8) */
+    onMeasured: (Rect) -> Unit = {}
 ) {
     val category = categories.firstOrNull { it.id == site.categoryId }
-    GalaxyCard(onClick = onClick) {
+    GalaxyCard(
+        onClick = onClick,
+        modifier = Modifier.onGloballyPositioned { onMeasured(it.boundsInWindow()) }
+    ) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (category != null) ColorDot(category.colorHex)
@@ -521,7 +612,8 @@ private fun AddSiteDialog(
             }
         },
         confirmButton = {
-            Button(
+            // توهج الضغط (مقترح 1)
+            GlowButton(
                 onClick = { onSave(name, notes, categoryId) { message -> error = message } },
                 enabled = name.isNotBlank()
             ) { Text("حفظ") }

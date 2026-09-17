@@ -38,6 +38,7 @@ import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import com.majarra.galaxy.domain.usecase.CheckMaintenanceDueUseCase
+import com.majarra.galaxy.ui.anim.OdometerNumber
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -224,8 +225,10 @@ private fun StatCard(
                 }
             )
             Column {
-                Text(
-                    value.toString(),
+                // عجلة أرقام تدور عموديًا حتى تستقر على القيمة
+                // (اختيارات 2.3 — مقترح 15)
+                OdometerNumber(
+                    value = value,
                     style = MaterialTheme.typography.headlineMedium,
                     color = if (emphasize) {
                         MaterialTheme.colorScheme.error

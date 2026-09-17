@@ -1,5 +1,9 @@
 package com.majarra.galaxy.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -17,15 +21,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,7 +46,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.majarra.galaxy.ui.anim.GalaxyDialogShell
 import com.majarra.galaxy.util.DateFormats
+import kotlinx.coroutines.delay
 
 /* ============================================================
  * مكونات مشتركة تُستخدم في كل الشاشات للحفاظ على الاتساق.
@@ -89,9 +96,26 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     )
 }
 
-/** حالة قائمة فارغة */
+/**
+ * حالة قائمة فارغة (انيميشن اختيارات 2.3 — مقترح 19):
+ * الأيقونة تتنفس (تكبر وتصغر بهدوء) والنصان يظهران متتابعين.
+ */
 @Composable
 fun EmptyState(icon: ImageVector, title: String, subtitle: String = "") {
+    // تنفس الأيقونة: دورة هادئة لا نهائية بين 100% و107%
+    val breath = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            breath.animateTo(1f, tween(1300))
+            breath.animateTo(0f, tween(1300))
+        }
+    }
+    // ظهور النصوص متتابعًا بعد أيقونة التنفس
+    var textsShown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(180)
+        textsShown = true
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -99,15 +123,38 @@ fun EmptyState(icon: ImageVector, title: String, subtitle: String = "") {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.outline)
-        Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-        if (subtitle.isNotBlank()) {
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.graphicsLayer {
+                val scale = 1f + 0.07f * breath.value
+                scaleX = scale
+                scaleY = scale
+                alpha = 0.8f + 0.2f * breath.value
+            }
+        )
+        AnimatedVisibility(
+            visible = textsShown,
+            enter = fadeIn(tween(350))
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                if (subtitle.isNotBlank()) {
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
         }
     }
 }
 
-/** حوار تأكيد عام */
+/**
+ * حوار تأكيد عام (انيميشن اختيارات 2.3 — مقترح 10): يظهر من 90%
+ * بنوابض لطيفة مع تعتيم تدريجي، ويخرج مصغّرًا قبل تنفيذ الإجراء.
+ */
 @Composable
 fun ConfirmDialog(
     title: String,
@@ -116,19 +163,34 @@ fun ConfirmDialog(
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(confirmText, color = MaterialTheme.colorScheme.error)
+    GalaxyDialogShell(onDismissRequest = onDismiss) { requestClose ->
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.headlineSmall)
+                Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
+                    Spacer(Modifier.size(8.dp))
+                    TextButton(onClick = { requestClose(onConfirm) }) {
+                        Text(confirmText, color = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
         }
-    )
+    }
 }
 
 /** نقطة لون دائرية لعرض لون التصنيف */

@@ -1,5 +1,11 @@
 package com.majarra.galaxy.ui.screens.materials
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -34,6 +40,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,11 +54,14 @@ import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.usecase.DeleteMaterialUseCase
 import com.majarra.galaxy.domain.usecase.RenameMaterialUseCase
 import com.majarra.galaxy.domain.usecase.SaveMaterialUseCase
+import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
+import com.majarra.galaxy.ui.anim.GalaxySnackbarHost
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.formatDate
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -116,9 +126,13 @@ fun MaterialsCatalogScreen(
     var materialToRename by remember { mutableStateOf<Material?>(null) }
     var materialToDelete by remember { mutableStateOf<Material?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    // انهيار ارتفاع المادة قبل حذفها الفعلي من البيانات (مقترح 14)
+    var collapsingId by remember { mutableStateOf<Long?>(null) }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        // سنابار بشريط مهلة متناقص (مقترح 12)
+        snackbarHost = { GalaxySnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("المواد الموحدة") },
@@ -130,13 +144,12 @@ fun MaterialsCatalogScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAdd = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Text("مادة جديدة", modifier = Modifier.padding(start = 6.dp))
-            }
+            // زر إضافة متمدّد (اختيارات 2.3 — مقترح 2)
+            GalaxyExpandingFab(
+                icon = Icons.Filled.Add,
+                primaryLabel = "مادة جديدة",
+                onPrimary = { showAdd = true }
+            )
         }
     ) { padding ->
         LazyColumn(
@@ -170,6 +183,12 @@ fun MaterialsCatalogScreen(
                 }
             } else {
                 items(materials, key = { it.id }) { material ->
+                    // انهيار الارتفاع عند الحذف قبل الإزالة من البيانات (مقترح 14)
+                    AnimatedVisibility(
+                        visible = collapsingId != material.id,
+                        enter = expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)) + fadeIn(tween(200)),
+                        exit = shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(240)) + fadeOut(tween(200))
+                    ) {
                     GalaxyCard {
                         Row(
                             modifier = Modifier
@@ -200,6 +219,7 @@ fun MaterialsCatalogScreen(
                                 )
                             }
                         }
+                    }
                     }
                 }
             }
@@ -246,8 +266,14 @@ fun MaterialsCatalogScreen(
                 "العناصر المضافة سابقًا في قوائم المواقع تبقى محفوظة.",
             confirmText = "حذف",
             onConfirm = {
-                viewModel.delete(material)
+                // انهيار البطاقة أولًا ثم الحذف من البيانات (مقترح 14)
+                collapsingId = material.id
                 materialToDelete = null
+                scope.launch {
+                    delay(280)
+                    viewModel.delete(material)
+                    collapsingId = null
+                }
             },
             onDismiss = { materialToDelete = null }
         )

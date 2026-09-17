@@ -6,29 +6,36 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -75,6 +82,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -114,6 +123,11 @@ import com.majarra.galaxy.domain.usecase.SaveSiteUseCase
 import com.majarra.galaxy.domain.usecase.SetNextMaintenanceUseCase
 import com.majarra.galaxy.domain.usecase.StartWithdrawalMaintenanceUseCase
 import com.majarra.galaxy.domain.usecase.WithdrawItemUseCase
+import com.majarra.galaxy.ui.anim.DrawnCheck
+import com.majarra.galaxy.ui.anim.GalaxySnackbarHost
+import com.majarra.galaxy.ui.anim.GlowButton
+import com.majarra.galaxy.ui.anim.MorphingActionButton
+import com.majarra.galaxy.ui.anim.StaggeredItem
 import com.majarra.galaxy.ui.components.ColorDot
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.EmptyState
@@ -436,7 +450,8 @@ fun SiteDetailsScreen(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        // سنابار بشريط مهلة متناقص (اختيارات 2.3 — مقترح 12)
+        snackbarHost = { GalaxySnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text(site?.name ?: "تفاصيل الموقع") },
@@ -496,12 +511,14 @@ fun SiteDetailsScreen(
                     subtitle = "ربما حُذف للتو"
                 )
             } else {
-                // انتقالات ناعمة بين التبويبات (إجابة الاسئله.md)
+                // انتقال التبويبات (اختيارات 2.3 — مقترح 9): الخارج يتلاشى
+                // والجديد تدخل عناصره متتابعة بفاصل 30 مللي ثانية عبر
+                // StaggeredItem داخل كل تبويب.
                 AnimatedContent(
                     targetState = tab,
                     transitionSpec = {
-                        (slideInHorizontally(animationSpec = tween(240)) { it / 4 } + fadeIn(tween(240)))
-                            .togetherWith(slideOutHorizontally(animationSpec = tween(240)) { -it / 4 } + fadeOut(tween(240)))
+                        fadeIn(animationSpec = tween(180))
+                            .togetherWith(fadeOut(animationSpec = tween(140)))
                     },
                     label = "details-tabs"
                 ) { target ->
@@ -623,6 +640,8 @@ private fun InfoTab(s: Site, categories: List<Category>) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
+            // ظهور متتابع عند دخول التبويب (مقترح 9)
+            StaggeredItem(index = 0, trigger = "info-tab") {
             GalaxyCard {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
@@ -652,8 +671,10 @@ private fun InfoTab(s: Site, categories: List<Category>) {
                     Text("آخر تحديث: ${s.lastModified.formatDateTime()}", style = MaterialTheme.typography.bodySmall)
                 }
             }
+            }
         }
         item {
+            StaggeredItem(index = 1, trigger = "info-tab") {
             SectionTitle("ملاحظات عامة")
             GalaxyCard {
                 Text(
@@ -666,6 +687,7 @@ private fun InfoTab(s: Site, categories: List<Category>) {
                         MaterialTheme.colorScheme.onSurface
                     }
                 )
+            }
             }
         }
     }
@@ -706,16 +728,34 @@ private fun MaterialsTab(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            SectionTitle("المواد الموجودة حاليًا")
-            MaterialSelectionList(items = available, catalog = catalog) { available = it }
-            SectionTitle("احتياج الموقع (ما ينقص)")
-            MaterialSelectionList(items = needed, catalog = catalog) { needed = it }
-            SectionTitle("مواد تحتاج صيانة")
-            MaterialSelectionList(items = maintenance, catalog = catalog) { maintenance = it }
-            SectionTitle("مواد تم سحبها")
-            MaterialSelectionList(items = withdrawn, catalog = catalog) { withdrawn = it }
+            // ظهور متتابع للأقسام الأربعة عند دخول التبويب (مقترح 9)
+            StaggeredItem(index = 0, trigger = "materials-tab") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SectionTitle("المواد الموجودة حاليًا")
+                    MaterialSelectionList(items = available, catalog = catalog) { available = it }
+                }
+            }
+            StaggeredItem(index = 1, trigger = "materials-tab") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SectionTitle("احتياج الموقع (ما ينقص)")
+                    MaterialSelectionList(items = needed, catalog = catalog) { needed = it }
+                }
+            }
+            StaggeredItem(index = 2, trigger = "materials-tab") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SectionTitle("مواد تحتاج صيانة")
+                    MaterialSelectionList(items = maintenance, catalog = catalog) { maintenance = it }
+                }
+            }
+            StaggeredItem(index = 3, trigger = "materials-tab") {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SectionTitle("مواد تم سحبها")
+                    MaterialSelectionList(items = withdrawn, catalog = catalog) { withdrawn = it }
+                }
+            }
         }
-        Button(
+        // زر الحفظ مع توهج الضغط (مقترح 1)
+        GlowButton(
             onClick = {
                 onSave(
                     MaterialLines.serialize(available),
@@ -758,12 +798,14 @@ private fun MaterialSelectionList(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Checkbox(
+                    // علامة صح تُرسم خطًا متحركًا (اختيارات 2.3 — مقترح 5)
+                    DrawnCheck(
                         checked = item.checked,
-                        onCheckedChange = { checked ->
+                        onToggle = { checked ->
                             onChange(items.toMutableList().also { it[index] = item.copy(checked = checked) })
                         }
                     )
+                    Spacer(Modifier.size(10.dp))
                     Text(
                         item.text,
                         style = MaterialTheme.typography.bodyMedium,
@@ -879,9 +921,10 @@ private fun MaterialPickerDialog(
                                     .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Checkbox(
+                                // نفس علامة الصح المرسومة (مقترح 5)
+                                DrawnCheck(
                                     checked = isSelected,
-                                    onCheckedChange = { checked ->
+                                    onToggle = { checked ->
                                         selected = if (checked) {
                                             selected + material.name
                                         } else {
@@ -889,6 +932,7 @@ private fun MaterialPickerDialog(
                                         }
                                     }
                                 )
+                                Spacer(Modifier.size(10.dp))
                                 Text(material.name, style = MaterialTheme.typography.bodyMedium)
                             }
                         }
@@ -981,13 +1025,16 @@ private fun WithdrawalsTab(
                 )
             }
         } else {
-            items(withdrawals, key = { it.id }) { w ->
-                WithdrawalRow(
-                    w = w,
-                    onStartMaintenance = onStartMaintenance,
-                    onReturn = onReturn,
-                    onDelete = onDelete
-                )
+            // ظهور متتابع للسجلات عند دخول التبويب (مقترح 9)
+            itemsIndexed(withdrawals, key = { _, w -> w.id }) { index, w ->
+                StaggeredItem(index = index, trigger = "withdrawals-tab") {
+                    WithdrawalRow(
+                        w = w,
+                        onStartMaintenance = onStartMaintenance,
+                        onReturn = onReturn,
+                        onDelete = onDelete
+                    )
+                }
             }
         }
     }
@@ -1048,14 +1095,19 @@ private fun WithdrawalRow(
             }
             if (w.status != WithdrawalStatus.RETURNED) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // أزرار الحالة المتدرجة: تنكمش لدائرة تحميل ثم نجاح
+                    // أخضر قبل تحديث الحالة (اختيارات 2.3 — مقترح 3)
                     if (w.status == WithdrawalStatus.WITHDRAWN) {
-                        OutlinedButton(onClick = { onStartMaintenance(w) }) {
-                            Text("بدء الصيانة")
-                        }
+                        MorphingActionButton(
+                            label = "بدء الصيانة",
+                            outlined = true,
+                            onClick = { onStartMaintenance(w) }
+                        )
                     }
-                    Button(onClick = { onReturn(w) }) {
-                        Text("إرجاع للموقع")
-                    }
+                    MorphingActionButton(
+                        label = "إرجاع للموقع",
+                        onClick = { onReturn(w) }
+                    )
                 }
             }
         }
@@ -1140,7 +1192,8 @@ private fun WithdrawDialog(
             }
         },
         confirmButton = {
-            Button(
+            // توهج الضغط (مقترح 1)
+            GlowButton(
                 onClick = {
                     // عند نجاح الحفظ يُغلق الحوار عبر onSaved،
                     // وعند خطأ التحقق يبقى مفتوحًا لعرض الرسالة.
@@ -1200,6 +1253,8 @@ private fun MaintenanceTab(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
+            StaggeredItem(index = 0, trigger = "maintenance-tab") {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SectionTitle("موعد الصيانة القادم")
             GalaxyCard {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1231,9 +1286,12 @@ private fun MaintenanceTab(
                     }
                 }
             }
+            }
+            }
         }
 
         item {
+            StaggeredItem(index = 1, trigger = "maintenance-tab") {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1244,6 +1302,7 @@ private fun MaintenanceTab(
                     Icon(Icons.Filled.AddTask, contentDescription = null, modifier = Modifier.size(18.dp))
                     Text("إضافة", modifier = Modifier.padding(start = 6.dp))
                 }
+            }
             }
         }
 
@@ -1256,30 +1315,15 @@ private fun MaintenanceTab(
                 )
             }
         } else {
-            items(logs, key = { it.id }) { log ->
-                GalaxyCard {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(14.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(log.maintenanceDate.formatDate(), style = MaterialTheme.typography.titleSmall)
-                            Text(log.notes, style = MaterialTheme.typography.bodyMedium)
-                            if (log.performedBy.isNotBlank()) {
-                                Text(
-                                    "نفّذها: ${log.performedBy}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                        IconButton(onClick = { logToDelete = log }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "حذف الإدخال")
-                        }
-                    }
-                }
+            // خط زمني: الخط يُرسم تدريجيًا والنقاط والبطاقات تظهر
+            // بالترتيب خلفه (اختيارات 2.3 — مقترح 18)
+            itemsIndexed(logs, key = { _, log -> log.id }) { index, log ->
+                TimelineLogRow(
+                    log = log,
+                    index = index,
+                    isLast = index == logs.lastIndex,
+                    onDelete = { logToDelete = log }
+                )
             }
         }
     }
@@ -1348,6 +1392,83 @@ private fun MaintenanceTab(
             },
             onDismiss = { logToDelete = null }
         )
+    }
+}
+
+/**
+ * صف واحد في الخط الزمني لسجل الصيانة (مقترح 18): نقطة وخط عمودي
+ * يظهران برسم تدريجي متتابع (تأخير 180 مللي لكل سجل)، ثم تظهر
+ * البطاقة بتلاشي مرتبط بنفس التقدم.
+ */
+@Composable
+private fun TimelineLogRow(
+    log: MaintenanceLog,
+    index: Int,
+    isLast: Boolean,
+    onDelete: () -> Unit
+) {
+    // التقدم يبدأ صفرًا عند أول تركيب للسجل ويتحرك بتأخير متزايد
+    val progress by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(durationMillis = 420, delayMillis = 250 + index * 180),
+        label = "timeline-$index"
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    val lineColor = MaterialTheme.colorScheme.outline
+
+    Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+        Column(
+            modifier = Modifier.width(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // نقطة الدخول — تكبر مع التقدم
+            Box(
+                modifier = Modifier
+                    .padding(top = 16.dp)
+                    .size(12.dp)
+                    .graphicsLayer {
+                        scaleX = progress
+                        scaleY = progress
+                    }
+                    .clip(CircleShape)
+                    .background(primary)
+            )
+            // الخط الواصل للسجل التالي — يزداد وضوحه مع التقدم
+            if (!isLast) {
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .weight(1f)
+                        .background(lineColor.copy(alpha = progress))
+                )
+            }
+        }
+        Spacer(Modifier.width(10.dp))
+        Box(modifier = Modifier.weight(1f).graphicsLayer { alpha = progress }) {
+            GalaxyCard {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(log.maintenanceDate.formatDate(), style = MaterialTheme.typography.titleSmall)
+                        Text(log.notes, style = MaterialTheme.typography.bodyMedium)
+                        if (log.performedBy.isNotBlank()) {
+                            Text(
+                                "نفّذها: ${log.performedBy}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDelete) {
+                        Icon(Icons.Filled.Delete, contentDescription = "حذف الإدخال")
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1435,6 +1556,7 @@ private fun AddLogDialog(
                 }
             ) { Text("حفظ") }
         },
+        // توهج الضغط لأزرار الحفظ مفعّل في حوارات الإضافة الأخرى (مقترح 1)
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
     )
 
@@ -1500,14 +1622,16 @@ private fun AttachmentsTab(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onPickImage, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.AddAPhoto, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("إضافة صورة", modifier = Modifier.padding(start = 6.dp))
-                }
-                OutlinedButton(onClick = onPickPdf, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Description, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Text("إضافة ملف", modifier = Modifier.padding(start = 6.dp))
+            StaggeredItem(index = 0, trigger = "attachments-tab") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onPickImage, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Filled.AddAPhoto, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("إضافة صورة", modifier = Modifier.padding(start = 6.dp))
+                    }
+                    OutlinedButton(onClick = onPickPdf, modifier = Modifier.weight(1f)) {
+                        Icon(Icons.Filled.Description, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Text("إضافة ملف", modifier = Modifier.padding(start = 6.dp))
+                    }
                 }
             }
         }
@@ -1536,21 +1660,24 @@ private fun AttachmentsTab(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    items(images, key = { it.id }) { image ->
-                        AsyncImage(
-                            model = image.filePath,
-                            contentDescription = "صورة مرفقة",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(104.dp)
-                                .pointerInput(image.id) {
-                                    detectTapGestures(
-                                        onTap = { onOpenImage(image) },
-                                        onLongPress = { onDelete(image) }
-                                    )
-                                }
-                        )
+                    // شبكة متتابعة: الصور تظهر واحدة تلو الأخرى (مقترح 20)
+                    itemsIndexed(images, key = { _, image -> image.id }) { index, image ->
+                        StaggeredItem(index = index, trigger = images.size) {
+                            AsyncImage(
+                                model = image.filePath,
+                                contentDescription = "صورة مرفقة",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(104.dp)
+                                    .pointerInput(image.id) {
+                                        detectTapGestures(
+                                            onTap = { onOpenImage(image) },
+                                            onLongPress = { onDelete(image) }
+                                        )
+                                    }
+                            )
+                        }
                     }
                 }
             }
@@ -1565,7 +1692,8 @@ private fun AttachmentsTab(
 
         if (files.isNotEmpty()) {
             item { SectionTitle("الملفات (${files.size})") }
-            items(files, key = { it.id }) { file ->
+            itemsIndexed(files, key = { _, file -> file.id }) { index, file ->
+                StaggeredItem(index = index + 1, trigger = "attachments-tab") {
                 GalaxyCard(onClick = {
                     // فتح الملف في عارض خارجي (إجابة الاسئله.md)
                     if (!context.openFileExternally(file.filePath)) {
@@ -1600,6 +1728,7 @@ private fun AttachmentsTab(
                             Icon(Icons.Filled.Delete, contentDescription = "حذف المرفق")
                         }
                     }
+                }
                 }
             }
         }
@@ -1645,7 +1774,8 @@ private fun EditSiteInfoDialog(
             }
         },
         confirmButton = {
-            Button(
+            // توهج الضغط (مقترح 1)
+            GlowButton(
                 onClick = {
                     // عند النجاح يُغلق الحوار عبر مسار onSaved في الشاشة،
                     // وعند خطأ التحقق يبقى مفتوحًا لعرض الرسالة.

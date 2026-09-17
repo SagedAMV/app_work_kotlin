@@ -52,6 +52,8 @@ import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.usecase.DeleteCategoryUseCase
 import com.majarra.galaxy.domain.usecase.SaveCategoryUseCase
+import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
+import com.majarra.galaxy.ui.anim.SlidingColorPalette
 import com.majarra.galaxy.ui.components.ColorDot
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.EmptyState
@@ -134,13 +136,12 @@ fun CategoriesScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showCreate = true },
-                containerColor = MaterialTheme.colorScheme.primary
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = null)
-                Text("تصنيف جديد", modifier = Modifier.padding(start = 6.dp))
-            }
+            // زر إضافة متمدّد (اختيارات 2.3 — مقترح 2)
+            GalaxyExpandingFab(
+                icon = Icons.Filled.Add,
+                primaryLabel = "تصنيف جديد",
+                onPrimary = { showCreate = true }
+            )
         }
     ) { padding ->
         if (categories.isEmpty()) {
@@ -256,40 +257,16 @@ private fun CategoryDialog(
                     supportingText = error?.let { { Text(it) } }
                 )
                 Text("اللون", style = MaterialTheme.typography.labelMedium)
-                // لوحة الألوان — صفان من 4
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    PALETTE.chunked(4).forEach { rowColors ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            rowColors.forEach { hex ->
-                                val selected = hex == colorHex
-                                val parsed = runCatching { Color(android.graphics.Color.parseColor(hex)) }
-                                    .getOrDefault(MaterialTheme.colorScheme.primary)
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .clip(CircleShape)
-                                        .background(parsed)
-                                        .border(
-                                            width = if (selected) 3.dp else 1.dp,
-                                            color = if (selected) {
-                                                MaterialTheme.colorScheme.onSurface
-                                            } else {
-                                                MaterialTheme.colorScheme.outline
-                                            },
-                                            shape = CircleShape
-                                        )
-                                        .clickable {
-                                            colorHex = hex
-                                            error = null
-                                        }
-                                )
-                            }
-                        }
+                // لوحة الألوان بحلقة منزلقة تنزلق بين الاختيارات
+                // (اختيارات 2.3 — مقترح 6) بدل القفز الفوري
+                SlidingColorPalette(
+                    palette = PALETTE,
+                    selectedHex = colorHex,
+                    onSelect = { hex ->
+                        colorHex = hex
+                        error = null
                     }
-                }
+                )
             }
         },
         confirmButton = {
