@@ -1067,6 +1067,7 @@ private fun WithdrawalRow(
  * + تاريخ السحب (افتراضيًا اليوم) + ملاحظات اختيارية. أخطاء التحقق
  * تظهر داخل الحوار بدل إغلاقه.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WithdrawDialog(
     onDismiss: () -> Unit,
