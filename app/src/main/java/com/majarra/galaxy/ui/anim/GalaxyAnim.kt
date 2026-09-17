@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -118,7 +120,7 @@ fun GlowButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    content: @Composable () -> Unit
+    content: @Composable RowScope.() -> Unit
 ) {
     val interaction = remember { MutableInteractionSource() }
     Button(
@@ -299,18 +301,26 @@ fun PinDots(pin: String, maxLen: Int = 8, modifier: Modifier = Modifier) {
                             shape = CircleShape
                         )
                 )
-                AnimatedVisibility(
-                    visible = filled,
-                    enter = scaleIn(spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)),
-                    exit = fadeOut(tween(90))
-                ) {
-                    Box(
-                        Modifier
-                            .size(8.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
-                    )
-                }
+                // النقطة الداخلية تقفز بنوابض عند امتلاء الخانة
+                // (بديل مقياس الرسم بدل AnimatedVisibility — أمتن داخل الصفوف)
+                val dotScale by animateFloatAsState(
+                    targetValue = if (filled) 1f else 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMedium
+                    ),
+                    label = "pin-dot-$index"
+                )
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .graphicsLayer {
+                            scaleX = dotScale
+                            scaleY = dotScale
+                        }
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                )
             }
         }
     }
@@ -398,13 +408,14 @@ fun SlidingColorPalette(
     val hGap = 12.dp
     val vGap = 10.dp
     val selectedIndex = palette.indexOf(selectedHex).coerceAtLeast(0)
+    // ملاحظة: الضرب يبدأ بـ Dp لأن (Int × Dp) غير معرّف في Kotlin
     val ringX by animateDpAsState(
-        targetValue = (selectedIndex % 4) * (swatchSize + hGap),
+        targetValue = (swatchSize + hGap) * (selectedIndex % 4),
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "ring-x"
     )
     val ringY by animateDpAsState(
-        targetValue = (selectedIndex / 4) * (swatchSize + vGap),
+        targetValue = (swatchSize + vGap) * (selectedIndex / 4),
         animationSpec = tween(300, easing = FastOutSlowInEasing),
         label = "ring-y"
     )
@@ -584,7 +595,7 @@ fun OdometerNumber(
     val cap = 40
     val start = (value - cap).coerceAtLeast(0)
     val offset by animateDpAsState(
-        targetValue = (value - start) * rowHeight,
+        targetValue = rowHeight * (value - start),
         animationSpec = tween(1100, easing = FastOutSlowInEasing),
         label = "odometer"
     )
