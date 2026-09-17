@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -40,13 +41,17 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -83,22 +88,32 @@ import coil.compose.AsyncImage
 import com.majarra.galaxy.data.local.Attachment
 import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.MaintenanceLog
+import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDetail
+import com.majarra.galaxy.data.local.Withdrawal
 import com.majarra.galaxy.domain.model.AttachmentType
+import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.WithdrawalStatus
 import com.majarra.galaxy.domain.repository.AttachmentRepository
 import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
+import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import com.majarra.galaxy.domain.usecase.ArchiveSiteUseCase
 import com.majarra.galaxy.domain.usecase.DeleteMaintenanceLogUseCase
 import com.majarra.galaxy.domain.usecase.DeleteSiteUseCase
+import com.majarra.galaxy.domain.usecase.DeleteWithdrawalUseCase
 import com.majarra.galaxy.domain.usecase.NEXT_DUE_SUGGESTION_DAYS
 import com.majarra.galaxy.domain.usecase.ObserveSiteUseCase
+import com.majarra.galaxy.domain.usecase.ReturnWithdrawnItemUseCase
 import com.majarra.galaxy.domain.usecase.SaveMaintenanceLogUseCase
 import com.majarra.galaxy.domain.usecase.SaveSiteUseCase
 import com.majarra.galaxy.domain.usecase.SetNextMaintenanceUseCase
+import com.majarra.galaxy.domain.usecase.StartWithdrawalMaintenanceUseCase
+import com.majarra.galaxy.domain.usecase.WithdrawItemUseCase
 import com.majarra.galaxy.ui.components.ColorDot
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.EmptyState
@@ -119,10 +134,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** تبويبات شاشة التفاصيل — حسب تعليمات التبسيط */
+/** تبويبات شاشة التفاصيل — النسخة 2.2: أُضيف تبويب المسحوبات */
 private enum class DetailsTab(val label: String) {
     INFO("بيانات"),
     MATERIALS("المواد"),
+    WITHDRAWALS("المسحوبات"),
     MAINTENANCE("الصيانة"),
     ATTACHMENTS("المرفقات")
 }
@@ -134,6 +150,8 @@ class SiteDetailsViewModel @Inject constructor(
     detailRepo: SiteDetailRepository,
     logRepo: MaintenanceLogRepository,
     categoryRepo: CategoryRepository,
+    materialRepo: MaterialRepository,
+    withdrawalRepo: WithdrawalRepository,
     private val siteRepo: SiteRepository,
     private val detailRepository: SiteDetailRepository,
     private val attachmentRepo: AttachmentRepository,
@@ -143,6 +161,10 @@ class SiteDetailsViewModel @Inject constructor(
     private val saveLog: SaveMaintenanceLogUseCase,
     private val deleteLog: DeleteMaintenanceLogUseCase,
     private val setNextMaintenance: SetNextMaintenanceUseCase,
+    private val withdrawItem: WithdrawItemUseCase,
+    private val startWithdrawalMaintenance: StartWithdrawalMaintenanceUseCase,
+    private val returnWithdrawnItem: ReturnWithdrawnItemUseCase,
+    private val deleteWithdrawal: DeleteWithdrawalUseCase,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -157,6 +179,14 @@ class SiteDetailsViewModel @Inject constructor(
     val attachments = attachmentRepo.observeBySite(siteId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val categories = categoryRepo.observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** كتالوج المواد الموحد — تختار منه قوائم تبويب المواد */
+    val materialsCatalog = materialRepo.observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** سجل سحب المواد وصيانتها وإرجاعها لهذا الموقع */
+    val withdrawals = withdrawalRepo.observeBySite(siteId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** رسالة قصيرة للواجهة */
@@ -250,6 +280,54 @@ class SiteDetailsViewModel @Inject constructor(
         viewModelScope.launch { deleteLog(log) }
     }
 
+    /**
+     * سحب مادة جديدة من الموقع — يُسجَّل السحب ويتزامن تلقائيًا مع
+     * قائمة «مواد تم سحبها» داخل حالة الاستخدام.
+     */
+    fun withdrawNewItem(
+        name: String,
+        type: ItemType,
+        dateMillis: Long,
+        notes: String,
+        onSaved: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        viewModelScope.launch {
+            try {
+                // حالة الاستخدام تحدّث آخر تعديل للموقع بنفسها (لا تكرار هنا)
+                withdrawItem(
+                    Withdrawal(
+                        siteId = siteId,
+                        itemName = name,
+                        itemType = type,
+                        withdrawnDate = dateMillis,
+                        notes = notes
+                    )
+                )
+                onSaved()
+            } catch (e: IllegalArgumentException) {
+                onError(e.message ?: "مدخلات غير صالحة")
+            }
+        }
+    }
+
+    /** نقل المادة المسحوبة إلى حالة «قيد الصيانة» */
+    fun startItemMaintenance(w: Withdrawal) {
+        viewModelScope.launch { startWithdrawalMaintenance(w) }
+    }
+
+    /** إرجاع المادة إلى الموقع وختم الدورة */
+    fun returnItem(w: Withdrawal) {
+        viewModelScope.launch {
+            returnWithdrawnItem(w)
+            _message.value = "تم إرجاع «${w.itemName}» إلى الموقع"
+        }
+    }
+
+    fun removeWithdrawal(w: Withdrawal) {
+        viewModelScope.launch { deleteWithdrawal(w) }
+    }
+
     /** إضافة مرفق: تثبيت إذن القراءة الدائم ثم حفظ المسار */
     fun addAttachment(uri: Uri, type: AttachmentType) {
         viewModelScope.launch {
@@ -320,6 +398,8 @@ fun SiteDetailsScreen(
     val logs by viewModel.logs.collectAsStateWithLifecycle()
     val attachments by viewModel.attachments.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
+    val materialsCatalog by viewModel.materialsCatalog.collectAsStateWithLifecycle()
+    val withdrawals by viewModel.withdrawals.collectAsStateWithLifecycle()
 
     var tab by remember { mutableStateOf(DetailsTab.INFO) }
     var showEditInfo by remember { mutableStateOf(false) }
@@ -328,6 +408,8 @@ fun SiteDetailsScreen(
     // الشبكة والعارض حتى يعمل الحذف من داخل العارض أيضًا)
     var viewerAttachment by remember { mutableStateOf<Attachment?>(null) }
     var attachmentToDelete by remember { mutableStateOf<Attachment?>(null) }
+    // سجل سحب بانتظار تأكيد الحذف
+    var withdrawalToDelete by remember { mutableStateOf<Withdrawal?>(null) }
 
     val scope = rememberCoroutineScope()
     /** رسائل أخطاء الأفعال المحلية (فتح ملف بلا تطبيق مناسب…) */
@@ -427,7 +509,15 @@ fun SiteDetailsScreen(
                         DetailsTab.INFO -> InfoTab(s, categories)
                         DetailsTab.MATERIALS -> MaterialsTab(
                             detail = detail,
+                            catalog = materialsCatalog,
                             onSave = viewModel::saveMaterials
+                        )
+                        DetailsTab.WITHDRAWALS -> WithdrawalsTab(
+                            withdrawals = withdrawals,
+                            onWithdraw = viewModel::withdrawNewItem,
+                            onStartMaintenance = viewModel::startItemMaintenance,
+                            onReturn = viewModel::returnItem,
+                            onDelete = { withdrawalToDelete = it }
                         )
                         DetailsTab.MAINTENANCE -> MaintenanceTab(
                             detail = detail,
@@ -507,6 +597,20 @@ fun SiteDetailsScreen(
             onDismiss = { attachmentToDelete = null }
         )
     }
+
+    // تأكيد حذف سجل سحب — قائمة «مواد تم سحبها» لا تتأثر (تبقى للتوثيق)
+    withdrawalToDelete?.let { w ->
+        ConfirmDialog(
+            title = "حذف سجل السحب",
+            text = "سيُحذف سجل سحب «${w.itemName}» نهائيًا من سجل المسحوبات.",
+            confirmText = "حذف",
+            onConfirm = {
+                viewModel.removeWithdrawal(w)
+                withdrawalToDelete = null
+            },
+            onDismiss = { withdrawalToDelete = null }
+        )
+    }
 }
 
 /* ═══════════════════ تبويب البيانات ═══════════════════ */
@@ -567,16 +671,21 @@ private fun InfoTab(s: Site, categories: List<Category>) {
     }
 }
 
-/* ═══════════════════ تبويب المواد (قوائم ✔) ═══════════════════ */
+/* ═══════════════ تبويب المواد (اختيار من الكتالوج الموحد) ═══════════════ */
 
 /**
- * المواد الآن قوائم عناصر مع علامة ✔ لكل عنصر (إجابة الاسئله.md).
- * التخزين ما زال نصيًا في نفس الأعمدة — تنسيق «[ ] / [x]» في
- * MaterialLines متوافق مع البيانات القديمة.
+ * المواد في النسخة 2.2: لا كتابة نصية في كل موقع — العناصر تُختار
+ * من كتالوج المواد الموحد عبر واجهة اختيار (بحث + علامات ✔)،
+ * فيلغى الإدخال المكرر وتصبح المواد موحدة ومرتبة وسهلة الاختيار.
+ *
+ * التخزين ما زال نصيًا في نفس الأعمدة (تنسيق «[ ] / [x]» في
+ * MaterialLines) — البيانات القديمة النصية تبقى محفوظة ومقروءة،
+ * والعناصر غير الموجودة في الكتالوج تُعرض كما هي وتُحذف فرديًا.
  */
 @Composable
 private fun MaterialsTab(
     detail: SiteDetail?,
+    catalog: List<Material>,
     onSave: (available: String, needed: String, maintenance: String, withdrawn: String) -> Unit
 ) {
     // كل حقل قائمة عناصر تُحرَّر محليًا وتُحفظ دفعة واحدة
@@ -598,13 +707,13 @@ private fun MaterialsTab(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             SectionTitle("المواد الموجودة حاليًا")
-            MaterialChecklistField(items = available) { available = it }
+            MaterialSelectionList(items = available, catalog = catalog) { available = it }
             SectionTitle("احتياج الموقع (ما ينقص)")
-            MaterialChecklistField(items = needed) { needed = it }
+            MaterialSelectionList(items = needed, catalog = catalog) { needed = it }
             SectionTitle("مواد تحتاج صيانة")
-            MaterialChecklistField(items = maintenance) { maintenance = it }
+            MaterialSelectionList(items = maintenance, catalog = catalog) { maintenance = it }
             SectionTitle("مواد تم سحبها")
-            MaterialChecklistField(items = withdrawn) { withdrawn = it }
+            MaterialSelectionList(items = withdrawn, catalog = catalog) { withdrawn = it }
         }
         Button(
             onClick = {
@@ -622,19 +731,23 @@ private fun MaterialsTab(
     }
 }
 
-/** قائمة عناصر واحدة: تحديد/إلغاء + حذف + إضافة عنصر جديد */
+/**
+ * قائمة مواد واحدة: تحديد/إلغاء + حذف فردي + اختيار عناصر جديدة من
+ * الكتالوج الموحد بدل الكتابة الحرة (تعديل النسخة 2.2).
+ */
 @Composable
-private fun MaterialChecklistField(
+private fun MaterialSelectionList(
     items: List<MaterialItem>,
+    catalog: List<Material>,
     onChange: (List<MaterialItem>) -> Unit
 ) {
-    var newItem by remember { mutableStateOf("") }
+    var showPicker by remember { mutableStateOf(false) }
 
     GalaxyCard {
         Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             if (items.isEmpty()) {
                 Text(
-                    "لا عناصر بعد — أضف أول عنصر بالأسفل",
+                    "لا عناصر بعد — اختر من المواد الموحدة بالزر أدناه",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -673,31 +786,388 @@ private fun MaterialChecklistField(
                     }
                 }
             }
+            TextButton(
+                onClick = { showPicker = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("إضافة من المواد الموحدة", modifier = Modifier.padding(start = 6.dp))
+            }
+        }
+    }
+
+    if (showPicker) {
+        MaterialPickerDialog(
+            catalog = catalog,
+            currentItems = items,
+            onDismiss = { showPicker = false },
+            onApply = { newItems ->
+                onChange(newItems)
+                showPicker = false
+            }
+        )
+    }
+}
+
+/**
+ * واجهة الاختيار من الكتالوج الموحد: مواد الكتالوج تُعرض بعلامات ✔،
+ * والتعليم هنا يعني وجود المادة في قائمة الموقع. إلغاء تعليم مادة
+ * موجودة يزيلها من القائمة. العناصر القديمة غير الموجودة في الكتالوج
+ * لا تتأثر (تُحفظ كما هي)، وحالات ✔ السابقة للمواد المختارة تبقى.
+ */
+@Composable
+private fun MaterialPickerDialog(
+    catalog: List<Material>,
+    currentItems: List<MaterialItem>,
+    onDismiss: () -> Unit,
+    onApply: (List<MaterialItem>) -> Unit
+) {
+    val catalogNames = remember(catalog) { catalog.map { it.name } }
+    // التحديد الابتدائي: أسماء الكتالوج الموجودة حاليًا في القائمة
+    var selected by remember(catalogNames) {
+        mutableStateOf(
+            currentItems.map { it.text }
+                .filter { text -> catalogNames.any { it.equals(text, ignoreCase = true) } }
+                .toSet()
+        )
+    }
+    var query by remember { mutableStateOf("") }
+    val visible = catalog.filter {
+        query.isBlank() || it.name.contains(query.trim(), ignoreCase = true)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("اختيار من المواد الموحدة") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("ابحث عن مادة…") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    singleLine = true
+                )
+                when {
+                    catalog.isEmpty() -> Text(
+                        "الكتالوج الموحد فارغ — افتح شاشة «المواد الموحدة» من الشاشة الرئيسية وأضف موادك مرة واحدة.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    visible.isEmpty() -> Text(
+                        "لا مواد مطابقة للبحث",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    else -> LazyColumn(
+                        modifier = Modifier.height(280.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(visible, key = { it.id }) { material ->
+                            val isSelected = selected.contains(material.name)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selected = if (isSelected) {
+                                            selected - material.name
+                                        } else {
+                                            selected + material.name
+                                        }
+                                    }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = isSelected,
+                                    onCheckedChange = { checked ->
+                                        selected = if (checked) {
+                                            selected + material.name
+                                        } else {
+                                            selected - material.name
+                                        }
+                                    }
+                                )
+                                Text(material.name, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    // العناصر القديمة (نص حر خارج الكتالوج) تبقى كما هي
+                    val legacy = currentItems.filterNot { item ->
+                        catalogNames.any { it.equals(item.text, ignoreCase = true) }
+                    }
+                    // المواد المختارة: إن كانت موجودة سابقًا نحتفظ بحالتها
+                    // (✔ أو بدونها) بدل إعادة إنشائها من الصفر
+                    val picked = catalog.filter { selected.contains(it.name) }.map { material ->
+                        currentItems.firstOrNull { it.text.equals(material.name, ignoreCase = true) }
+                            ?: MaterialItem(material.name, checked = false)
+                    }
+                    onApply(picked + legacy)
+                },
+                enabled = catalog.isNotEmpty()
+            ) { Text("تطبيق") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+}
+
+/* ═══════════ تبويب المسحوبات (سحب ← صيانة ← إرجاع) ═══════════ */
+
+/**
+ * الإضافة الجديدة في النسخة 2.2: المواد التي يسحبها المستخدم من
+ * الموقع (جهاز/مايك/لوح شمسي/بطارية/جهاز يدوي/أي شيء)، يصونها،
+ * ثم يرجعها للموقع. كل سجل يحمل نوعه وتاريخه وحالته، والأفعال
+ * بضغطات: «بدء الصيانة» ثم «إرجاع للموقع». السحب يتزامن تلقائيًا
+ * مع قائمة «مواد تم سحبها» في تبويب المواد.
+ */
+@Composable
+private fun WithdrawalsTab(
+    withdrawals: List<Withdrawal>,
+    onWithdraw: (
+        name: String,
+        type: ItemType,
+        dateMillis: Long,
+        notes: String,
+        onSaved: () -> Unit,
+        onError: (String) -> Unit
+    ) -> Unit,
+    onStartMaintenance: (Withdrawal) -> Unit,
+    onReturn: (Withdrawal) -> Unit,
+    onDelete: (Withdrawal) -> Unit
+) {
+    var showWithdrawDialog by remember { mutableStateOf(false) }
+    val openCount = withdrawals.count { it.status != WithdrawalStatus.RETURNED }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Button(
+                onClick = { showWithdrawDialog = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.SwapVert, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("سحب مادة جديدة", modifier = Modifier.padding(start = 6.dp))
+            }
+        }
+
+        if (openCount > 0) {
+            item {
+                GalaxyCard {
+                    Text(
+                        "مسحوبة الآن ولم تُرجع: $openCount",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            }
+        }
+
+        if (withdrawals.isEmpty()) {
+            item {
+                EmptyState(
+                    icon = Icons.Filled.SwapVert,
+                    title = "لا سجلات سحب",
+                    subtitle = "عندما تسحب مادة من الموقع لصيانتها سجّلها هنا لتتبع دورتها حتى الإرجاع"
+                )
+            }
+        } else {
+            items(withdrawals, key = { it.id }) { w ->
+                WithdrawalRow(
+                    w = w,
+                    onStartMaintenance = onStartMaintenance,
+                    onReturn = onReturn,
+                    onDelete = onDelete
+                )
+            }
+        }
+    }
+
+    if (showWithdrawDialog) {
+        WithdrawDialog(
+            onDismiss = { showWithdrawDialog = false },
+            onWithdraw = onWithdraw
+        )
+    }
+}
+
+/** صف سجل سحب واحد: الاسم والنوع والحالة والتواريخ + أفعال التقدم */
+@Composable
+private fun WithdrawalRow(
+    w: Withdrawal,
+    onStartMaintenance: (Withdrawal) -> Unit,
+    onReturn: (Withdrawal) -> Unit,
+    onDelete: (Withdrawal) -> Unit
+) {
+    val statusColor = when (w.status) {
+        WithdrawalStatus.WITHDRAWN -> MaterialTheme.colorScheme.tertiary
+        WithdrawalStatus.IN_MAINTENANCE -> MaterialTheme.colorScheme.secondary
+        WithdrawalStatus.RETURNED -> MaterialTheme.colorScheme.outline
+    }
+
+    GalaxyCard {
+        Column(
+            Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                OutlinedTextField(
-                    value = newItem,
-                    onValueChange = { newItem = it },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("أضف عنصرًا…") },
-                    singleLine = true
+                Text(
+                    w.itemName,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f)
                 )
-                IconButton(
-                    onClick = {
-                        val text = newItem.trim()
-                        if (text.isNotEmpty()) {
-                            onChange(items + MaterialItem(text, checked = false))
-                            newItem = ""
-                        }
-                    },
-                    enabled = newItem.isNotBlank()
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = "إضافة العنصر")
+                Text(w.status.label, style = MaterialTheme.typography.labelSmall, color = statusColor)
+                IconButton(onClick = { onDelete(w) }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        contentDescription = "حذف السجل",
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
+            Text(
+                "${w.itemType.label} — سُحبت: ${w.withdrawnDate.formatDate()}" +
+                    (w.returnedDate?.let { " · أُرجعت: ${it.formatDate()}" } ?: ""),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (w.notes.isNotBlank()) {
+                Text(w.notes, style = MaterialTheme.typography.bodySmall)
+            }
+            if (w.status != WithdrawalStatus.RETURNED) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (w.status == WithdrawalStatus.WITHDRAWN) {
+                        OutlinedButton(onClick = { onStartMaintenance(w) }) {
+                            Text("بدء الصيانة")
+                        }
+                    }
+                    Button(onClick = { onReturn(w) }) {
+                        Text("إرجاع للموقع")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * حوار سحب مادة جديدة: الاسم إلزامي + النوع من قائمة الأنواع الشائعة
+ * + تاريخ السحب (افتراضيًا اليوم) + ملاحظات اختيارية. أخطاء التحقق
+ * تظهر داخل الحوار بدل إغلاقه.
+ */
+@Composable
+private fun WithdrawDialog(
+    onDismiss: () -> Unit,
+    onWithdraw: (
+        name: String,
+        type: ItemType,
+        dateMillis: Long,
+        notes: String,
+        onSaved: () -> Unit,
+        onError: (String) -> Unit
+    ) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(ItemType.DEVICE) }
+    var dateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    var notes by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var showTypeMenu by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("سحب مادة من الموقع") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        error = null
+                    },
+                    label = { Text("اسم المادة") },
+                    singleLine = true,
+                    isError = error != null,
+                    supportingText = error?.let { { Text(it) } }
+                )
+                OutlinedButton(
+                    onClick = { showTypeMenu = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("النوع: ${type.label}")
+                }
+                DropdownMenu(
+                    expanded = showTypeMenu,
+                    onDismissRequest = { showTypeMenu = false }
+                ) {
+                    ItemType.entries.forEach { t ->
+                        DropdownMenuItem(
+                            text = { Text(t.label) },
+                            onClick = {
+                                type = t
+                                showTypeMenu = false
+                            }
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("تاريخ السحب: ${dateMillis.formatDate()}")
+                }
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text("ملاحظات (اختياري)") },
+                    minLines = 2,
+                    maxLines = 4
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    // عند نجاح الحفظ يُغلق الحوار عبر onSaved،
+                    // وعند خطأ التحقق يبقى مفتوحًا لعرض الرسالة.
+                    onWithdraw(name, type, dateMillis, notes, onDismiss) { message ->
+                        error = message
+                    }
+                },
+                enabled = name.isNotBlank()
+            ) { Text("سحب") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
+    )
+
+    if (showDatePicker) {
+        val state = rememberDatePickerState(initialSelectedDateMillis = dateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        state.selectedDateMillis?.let { dateMillis = it }
+                        showDatePicker = false
+                    }
+                ) { Text("تحديد") }
+            },
+            dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text("إلغاء") } }
+        ) {
+            DatePicker(state = state)
         }
     }
 }

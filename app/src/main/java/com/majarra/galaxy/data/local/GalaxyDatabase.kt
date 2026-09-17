@@ -7,9 +7,10 @@ import androidx.room.TypeConverters
 /**
  * قاعدة بيانات «مجرة» — أوفلاين بالكامل (Room).
  *
- * الإصدار 4: ميزات الاسئله.md — جدول تصنيفات جديد + عمودا التصنيف
- * والأرشفة على المواقع. الترحيل 3 → 4 في GalaxyMigrations غير مدمّر:
- * يعيد بناء جدول المواقع مع الحفاظ على كل البيانات.
+ * الإصدار 5 (النسخة 2.2): جدولان جديدان حسب تعليمات جلسة الإضافة/التعديل:
+ *   - `materials`: كتالوج المواد الموحد (تعديل تبويب المواد).
+ *   - `withdrawals`: سجل سحب المواد وصيانتها وإرجاعها (الإضافة الجديدة).
+ * الترحيل 4 → 5 في GalaxyMigrations إضافة فقط (غير مدمّر إطلاقًا).
  */
 @Database(
     entities = [
@@ -18,9 +19,11 @@ import androidx.room.TypeConverters
         SiteDetail::class,
         MaintenanceLog::class,
         Attachment::class,
-        AppSetting::class
+        AppSetting::class,
+        Material::class,
+        Withdrawal::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(GalaxyConverters::class)
@@ -32,6 +35,8 @@ abstract class GalaxyDatabase : RoomDatabase() {
     abstract fun maintenanceLogDao(): MaintenanceLogDao
     abstract fun attachmentDao(): AttachmentDao
     abstract fun appSettingDao(): AppSettingDao
+    abstract fun materialDao(): MaterialDao
+    abstract fun withdrawalDao(): WithdrawalDao
 
     companion object {
         const val DB_NAME = "galaxy.db"

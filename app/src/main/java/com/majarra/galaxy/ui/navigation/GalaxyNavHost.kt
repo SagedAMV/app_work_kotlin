@@ -58,17 +58,22 @@ import androidx.navigation.navArgument
 import com.majarra.galaxy.R
 import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.ui.screens.categories.CategoriesScreen
+import com.majarra.galaxy.ui.screens.materials.MaterialsCatalogScreen
 import com.majarra.galaxy.ui.screens.settings.SettingsScreen
 import com.majarra.galaxy.ui.screens.sites.SiteDetailsScreen
 import com.majarra.galaxy.ui.screens.sites.SitesScreen
 import com.majarra.galaxy.ui.screens.stats.StatsScreen
 
-/** مسارات التنقل — النسخة 2.1: المواقع، التفاصيل، التصنيفات، الإحصائيات، الإعدادات */
+/**
+ * مسارات التنقل — النسخة 2.2: المواقع، التفاصيل، التصنيفات،
+ * المواد الموحدة، الإحصائيات، الإعدادات.
+ */
 object Routes {
     const val SITES = "sites"
     const val STATS = "stats"
     const val SETTINGS = "settings"
     const val CATEGORIES = "categories"
+    const val MATERIALS = "materials"
     const val SITE_DETAILS = "site_details/{siteId}"
 
     fun siteDetails(id: Long) = "site_details/$id"
@@ -259,13 +264,17 @@ private fun GalaxyNavHost(
         composable(Routes.SITES) {
             SitesScreen(
                 onOpenSite = { navController.navigate(Routes.siteDetails(it)) },
-                onOpenCategories = { navController.navigate(Routes.CATEGORIES) }
+                onOpenCategories = { navController.navigate(Routes.CATEGORIES) },
+                onOpenMaterials = { navController.navigate(Routes.MATERIALS) }
             )
         }
         composable(Routes.STATS) { StatsScreen() }
         composable(Routes.SETTINGS) { SettingsScreen() }
         composable(Routes.CATEGORIES) {
             CategoriesScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.MATERIALS) {
+            MaterialsCatalogScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Routes.SITE_DETAILS,

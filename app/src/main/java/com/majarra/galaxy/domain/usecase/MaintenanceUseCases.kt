@@ -64,7 +64,8 @@ class SetNextMaintenanceUseCase @Inject constructor(
 data class DueSite(val siteId: Long, val siteName: String, val dueDate: Long)
 
 /**
- * فحص المواقع التي تستحق تنبيه الصيانة (مستحقة الآن أو خلال 7 أيام).
+ * فحص المواقع التي تستحق تنبيه الصيانة (مستحقة الآن أو خلال نافذة
+ * [DUE_WINDOW_DAYS] يومًا — 30 يومًا حسب إجابة الاسئله.md).
  * تُستدعى عند فتح التطبيق فقط — بلا عمال خلفية ولا جدولة دورية.
  */
 class CheckMaintenanceDueUseCase @Inject constructor(

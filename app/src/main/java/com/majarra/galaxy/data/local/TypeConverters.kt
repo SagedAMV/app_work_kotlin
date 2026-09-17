@@ -3,11 +3,12 @@ package com.majarra.galaxy.data.local
 import android.util.Log
 import androidx.room.TypeConverter
 import com.majarra.galaxy.domain.model.AttachmentType
+import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.WithdrawalStatus
 
 /**
- * محوّلات Room — النسخة المبسطة: نوع المرفقات فقط.
- * تُخزَّن القيم بأسمائها الإنجليزية، مع قيمة افتراضية آمنة
- * عند القراءة لحماية التطبيق من بيانات تالفة أو قديمة.
+ * محوّلات Room — التعدادات تُخزَّن بأسمائها الإنجليزية، مع قيمة
+ * افتراضية آمنة عند القراءة لحماية التطبيق من بيانات تالفة أو قديمة.
  */
 class GalaxyConverters {
 
@@ -23,5 +24,23 @@ class GalaxyConverters {
             // بل نسجل تحذيرا واضحا ثم نرجع القيمة الافتراضية الآمنة.
             Log.w(TAG, "enum value unknown in db: $v -> default IMAGE")
             AttachmentType.IMAGE
+        }
+
+    @TypeConverter fun itemTypeToDb(v: ItemType): String = v.name
+
+    @TypeConverter fun itemType(v: String): ItemType =
+        runCatching { ItemType.valueOf(v) }.getOrElse {
+            // القيمة «أخرى» هي الافتراض الآمن لأي نوع مجهول
+            Log.w(TAG, "item type unknown in db: $v -> default OTHER")
+            ItemType.OTHER
+        }
+
+    @TypeConverter fun withdrawalStatusToDb(v: WithdrawalStatus): String = v.name
+
+    @TypeConverter fun withdrawalStatus(v: String): WithdrawalStatus =
+        runCatching { WithdrawalStatus.valueOf(v) }.getOrElse {
+            // القيمة «مسحوبة» هي الافتراض الآمن: الدورة تبدأ من السحب
+            Log.w(TAG, "withdrawal status unknown in db: $v -> default WITHDRAWN")
+            WithdrawalStatus.WITHDRAWN
         }
 }

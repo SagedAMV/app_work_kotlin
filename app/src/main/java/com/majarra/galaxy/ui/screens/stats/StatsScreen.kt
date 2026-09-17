@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +34,9 @@ import com.majarra.galaxy.domain.model.AttachmentType
 import com.majarra.galaxy.domain.repository.AttachmentRepository
 import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
+import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import com.majarra.galaxy.domain.usecase.CheckMaintenanceDueUseCase
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
@@ -51,7 +55,9 @@ data class StatsUi(
     val maintenanceLogs: Int = 0,
     val attachmentsTotal: Int = 0,
     val attachmentsImages: Int = 0,
-    val dueSites: Int = 0
+    val dueSites: Int = 0,
+    val openWithdrawals: Int = 0,
+    val catalogMaterials: Int = 0
 ) {
     val attachmentsFiles: Int get() = attachmentsTotal - attachmentsImages
 }
@@ -62,6 +68,8 @@ class StatsViewModel @Inject constructor(
     private val categoryRepo: CategoryRepository,
     private val logRepo: MaintenanceLogRepository,
     private val attachmentRepo: AttachmentRepository,
+    private val withdrawalRepo: WithdrawalRepository,
+    private val materialRepo: MaterialRepository,
     private val checkMaintenanceDue: CheckMaintenanceDueUseCase
 ) : ViewModel() {
 
@@ -83,7 +91,9 @@ class StatsViewModel @Inject constructor(
                 maintenanceLogs = logRepo.countAll(),
                 attachmentsTotal = attachmentRepo.countAll(),
                 attachmentsImages = images,
-                dueSites = runCatching { checkMaintenanceDue().size }.getOrDefault(0)
+                dueSites = runCatching { checkMaintenanceDue().size }.getOrDefault(0),
+                openWithdrawals = withdrawalRepo.countOpen(),
+                catalogMaterials = materialRepo.getAll().size
             )
         }
     }
@@ -153,6 +163,23 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                 icon = Icons.Filled.AttachFile,
                 value = stats.attachmentsTotal,
                 label = "مرفقات",
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        SectionTitle("السحوبات والمواد الموحدة")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatCard(
+                icon = Icons.Filled.SwapVert,
+                value = stats.openWithdrawals,
+                label = "مسحوبات لم تُرجع",
+                modifier = Modifier.weight(1f),
+                emphasize = stats.openWithdrawals > 0
+            )
+            StatCard(
+                icon = Icons.Filled.Inventory2,
+                value = stats.catalogMaterials,
+                label = "مواد موحدة",
                 modifier = Modifier.weight(1f)
             )
         }

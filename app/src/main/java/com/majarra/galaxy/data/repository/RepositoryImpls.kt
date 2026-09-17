@@ -6,15 +6,21 @@ import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.CategoryDao
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.MaintenanceLogDao
+import com.majarra.galaxy.data.local.Material
+import com.majarra.galaxy.data.local.MaterialDao
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDao
 import com.majarra.galaxy.data.local.SiteDetail
 import com.majarra.galaxy.data.local.SiteDetailDao
+import com.majarra.galaxy.data.local.Withdrawal
+import com.majarra.galaxy.data.local.WithdrawalDao
 import com.majarra.galaxy.domain.repository.AttachmentRepository
 import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
+import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -83,4 +89,26 @@ class AttachmentRepositoryImpl @Inject constructor(
     override suspend fun countByType(typeName: String): Int = dao.countByType(typeName)
     override suspend fun insert(a: Attachment): Long = dao.insert(a)
     override suspend fun delete(a: Attachment) = dao.delete(a)
+}
+
+@Singleton
+class MaterialRepositoryImpl @Inject constructor(
+    private val dao: MaterialDao
+) : MaterialRepository {
+    override fun observeAll(): Flow<List<Material>> = dao.observeAll()
+    override suspend fun getAll(): List<Material> = dao.getAll()
+    override suspend fun insert(material: Material): Long = dao.insert(material)
+    override suspend fun update(material: Material) = dao.update(material)
+    override suspend fun delete(material: Material) = dao.delete(material)
+}
+
+@Singleton
+class WithdrawalRepositoryImpl @Inject constructor(
+    private val dao: WithdrawalDao
+) : WithdrawalRepository {
+    override fun observeBySite(siteId: Long): Flow<List<Withdrawal>> = dao.observeBySite(siteId)
+    override suspend fun countOpen(): Int = dao.countOpen()
+    override suspend fun insert(withdrawal: Withdrawal): Long = dao.insert(withdrawal)
+    override suspend fun update(withdrawal: Withdrawal) = dao.update(withdrawal)
+    override suspend fun delete(withdrawal: Withdrawal) = dao.delete(withdrawal)
 }

@@ -194,6 +194,52 @@ object GalaxyMigrations {
         }
     }
 
+    /**
+     * 4 → 5: ميزات النسخة 2.2 حسب تعليمات جلسة الإضافة/التعديل:
+     *   - جدول `materials`: كتالوج المواد الموحد — الاسم فريد حتى لا
+     *     تتكرر مواد متطابقة في واجهات الاختيار داخل المواقع.
+     *   - جدول `withdrawals`: سجل سحب المواد من المواقع وصيانتها
+     *     وإرجاعها (مفتاح خارجي بحذف متسلسل مع موقعه).
+     *
+     * ترحيل إضافة فقط: لا يُلمس أي جدول قائم ولا تُنقل أي بيانات،
+     * لذلك هو غير مدمّر بطبيعته.
+     */
+    val MIGRATION_4_5 = object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+
+            // ── 1) كتالوج المواد الموحد ──
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `materials` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`name` TEXT NOT NULL, " +
+                    "`createdDate` INTEGER NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_materials_name` ON `materials` (`name`)"
+            )
+
+            // ── 2) سجل السحب والإرجاع ──
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `withdrawals` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`siteId` INTEGER NOT NULL, " +
+                    "`itemName` TEXT NOT NULL, " +
+                    "`itemType` TEXT NOT NULL, " +
+                    "`withdrawnDate` INTEGER NOT NULL, " +
+                    "`status` TEXT NOT NULL, " +
+                    "`notes` TEXT NOT NULL, " +
+                    "`returnedDate` INTEGER, " +
+                    "FOREIGN KEY(`siteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_withdrawals_siteId` ON `withdrawals` (`siteId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_withdrawals_status` ON `withdrawals` (`status`)"
+            )
+        }
+    }
+
     /** كل الترحيلات بالترتيب — تُمرَّر إلى Room.databaseBuilder */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 }

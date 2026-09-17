@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Warning
@@ -166,6 +167,7 @@ class SitesViewModel @Inject constructor(
 fun SitesScreen(
     onOpenSite: (Long) -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenMaterials: () -> Unit,
     viewModel: SitesViewModel = hiltViewModel()
 ) {
     val sites by viewModel.sites.collectAsStateWithLifecycle()
@@ -210,7 +212,10 @@ fun SitesScreen(
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(vertical = 8.dp)
                 )
-                // إدارة التصنيفات
+                // إدارة التصنيفات + كتالوج المواد الموحد (النسخة 2.2)
+                IconButton(onClick = onOpenMaterials) {
+                    Icon(Icons.Filled.Inventory2, contentDescription = "المواد الموحدة")
+                }
                 IconButton(onClick = onOpenCategories) {
                     Icon(Icons.Filled.Category, contentDescription = "إدارة التصنيفات")
                 }

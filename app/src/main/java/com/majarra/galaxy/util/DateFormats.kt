@@ -15,7 +15,7 @@ import java.util.TimeZone
  */
 object DateFormats {
 
-    private const val PATTERN_DATETIME = "yyyy/MM/dd  HH:mm"
+    private const val PATTERN_DATETIME = "yyyy/MM/dd HH:mm"
     private const val PATTERN_DATE = "yyyy/MM/dd"
     private const val PATTERN_BACKUP = "yyyyMMdd_HHmm"
 

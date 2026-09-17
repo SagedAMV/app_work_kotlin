@@ -3,13 +3,16 @@ package com.majarra.galaxy.domain.repository
 import com.majarra.galaxy.data.local.Attachment
 import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.MaintenanceLog
+import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDetail
+import com.majarra.galaxy.data.local.Withdrawal
 import kotlinx.coroutines.flow.Flow
 
 /* ============================================================
  * واجهات المستودعات — طبقة الـ Domain لا تعرف تفاصيل Room.
- * النسخة 2.1: مواقع، تصنيفات، تفاصيل، سجل صيانة، مرفقات، إعدادات.
+ * النسخة 2.2: مواقع، تصنيفات، تفاصيل، سجل صيانة، مرفقات، إعدادات،
+ * كتالوج المواد الموحد، وسجل السحب والإرجاع.
  * ============================================================ */
 
 interface SiteRepository {
@@ -56,6 +59,24 @@ interface AttachmentRepository {
     suspend fun countByType(typeName: String): Int
     suspend fun insert(a: Attachment): Long
     suspend fun delete(a: Attachment)
+}
+
+/** كتالوج المواد الموحد — مصدر وحيد لأسماء المواد تختار منه المواقع */
+interface MaterialRepository {
+    fun observeAll(): Flow<List<Material>>
+    suspend fun getAll(): List<Material>
+    suspend fun insert(material: Material): Long
+    suspend fun update(material: Material)
+    suspend fun delete(material: Material)
+}
+
+/** سجل سحب المواد وصيانتها وإرجاعها — دورة كاملة لكل مادة مسحوبة */
+interface WithdrawalRepository {
+    fun observeBySite(siteId: Long): Flow<List<Withdrawal>>
+    suspend fun countOpen(): Int
+    suspend fun insert(withdrawal: Withdrawal): Long
+    suspend fun update(withdrawal: Withdrawal)
+    suspend fun delete(withdrawal: Withdrawal)
 }
 
 /**

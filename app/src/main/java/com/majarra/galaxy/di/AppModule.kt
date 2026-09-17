@@ -8,15 +8,19 @@ import com.majarra.galaxy.data.local.GalaxyMigrations
 import com.majarra.galaxy.data.repository.AttachmentRepositoryImpl
 import com.majarra.galaxy.data.repository.CategoryRepositoryImpl
 import com.majarra.galaxy.data.repository.MaintenanceLogRepositoryImpl
+import com.majarra.galaxy.data.repository.MaterialRepositoryImpl
 import com.majarra.galaxy.data.repository.SettingsRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteDetailRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteRepositoryImpl
+import com.majarra.galaxy.data.repository.WithdrawalRepositoryImpl
 import com.majarra.galaxy.domain.repository.AttachmentRepository
 import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
+import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -53,6 +57,8 @@ object AppModule {
     @Provides fun provideMaintenanceLogDao(db: GalaxyDatabase) = db.maintenanceLogDao()
     @Provides fun provideAttachmentDao(db: GalaxyDatabase) = db.attachmentDao()
     @Provides fun provideAppSettingDao(db: GalaxyDatabase) = db.appSettingDao()
+    @Provides fun provideMaterialDao(db: GalaxyDatabase) = db.materialDao()
+    @Provides fun provideWithdrawalDao(db: GalaxyDatabase) = db.withdrawalDao()
 }
 
 /** ربط واجهات المستودعات بتطبيقاتها */
@@ -77,4 +83,10 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindSettingsRepo(impl: SettingsRepositoryImpl): SettingsRepository
+
+    @Binds @Singleton
+    abstract fun bindMaterialRepo(impl: MaterialRepositoryImpl): MaterialRepository
+
+    @Binds @Singleton
+    abstract fun bindWithdrawalRepo(impl: WithdrawalRepositoryImpl): WithdrawalRepository
 }

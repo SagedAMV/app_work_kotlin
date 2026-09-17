@@ -5,13 +5,17 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.majarra.galaxy.domain.model.AttachmentType
+import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.WithdrawalStatus
 
 /* ============================================================
- * كيانات قاعدة بيانات «مجرة» — النسخة المبسطة (2.0)
- * حسب نموذج البيانات في تعليمات.md، الجداول المطلوبة فقط:
+ * كيانات قاعدة بيانات «مجرة».
+ * الجداول الأساسية حسب تعليمات التبسيط:
  *   sites, site_details, maintenance_logs, attachments, app_settings
+ * المضافة في النسخة 2.2 حسب تعليمات جلسة الإضافة/التعديل:
+ *   materials (كتالوج المواد الموحد), withdrawals (سجل السحب والإرجاع)
  * جميع المفاتيح الخارجية بحذف متسلسل (CASCADE): حذف موقع يمسح
- * تفاصيله ومرفقاته وسجل صيانته تلقائيًا للحفاظ على الاتساق.
+ * تفاصيله ومرفقاته وسجل صيانته وسحوباته تلقائيًا للحفاظ على الاتساق.
  * ============================================================ */
 
 /**
@@ -137,4 +141,48 @@ data class AppSetting(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val settingKey: String,
     val settingValue: String
+)
+
+/**
+ * كتالوج المواد الموحد (النسخة 2.2 — تعديل تبويب المواد):
+ * المواد تُعرَّف هنا مرة واحدة ثم تختارها المواقع من واجهة اختيار،
+ * بدل الكتابة النصية في كل موقع. اسم المادة فريد حتى لا تتكرر
+ * مواد متطابقة في قوائم الاختيار.
+ */
+@Entity(tableName = "materials", indices = [Index(value = ["name"], unique = true)])
+data class Material(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val createdDate: Long = System.currentTimeMillis()
+)
+
+/**
+ * سجل سحب المواد من المواقع وصيانتها وإرجاعها (النسخة 2.2 — الإضافة):
+ * المستخدم يسحب مادة من موقع (جهاز/مايك/لوح شمسي/بطارية/جهاز يدوي…)،
+ * يصونها، ثم يرجعها للموقع. كل سجل يتتبع هذه الدورة كاملة:
+ *  - `itemType` + `itemName`: ما الذي سُحب.
+ *  - `status`: مسحوبة ← قيد الصيانة ← مُرجعة (تقدم باتجاه واحد).
+ *  - `withdrawnDate` / `returnedDate`: طرفا الدورة الزمنيان.
+ * الحذف المتسلسل (CASCADE) يمسح السحوبات مع موقعها تلقائيًا.
+ */
+@Entity(
+    tableName = "withdrawals",
+    foreignKeys = [
+        ForeignKey(
+            entity = Site::class, parentColumns = ["id"], childColumns = ["siteId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("siteId"), Index("status")]
+)
+data class Withdrawal(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val siteId: Long,
+    val itemName: String,
+    val itemType: ItemType,
+    val withdrawnDate: Long = System.currentTimeMillis(),
+    val status: WithdrawalStatus = WithdrawalStatus.WITHDRAWN,
+    val notes: String = "",
+    /** تاريخ الإرجاع الفعلي للموقع، يملأ تلقائيًا عند الإرجاع */
+    val returnedDate: Long? = null
 )

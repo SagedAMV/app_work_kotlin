@@ -142,3 +142,45 @@ interface AppSettingDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(setting: AppSetting)
 }
+
+/**
+ * كتالوج المواد الموحد — مراقبة كاملة لأن القائمة تُعرض في أكثر من
+ * شاشة (إدارة الكتالوج + واجهات الاختيار في كل موقع).
+ */
+@Dao
+interface MaterialDao {
+    @Query("SELECT * FROM materials ORDER BY name COLLATE NOCASE ASC")
+    fun observeAll(): Flow<List<Material>>
+
+    @Query("SELECT * FROM materials ORDER BY name COLLATE NOCASE ASC")
+    suspend fun getAll(): List<Material>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(material: Material): Long
+
+    @Update
+    suspend fun update(material: Material)
+
+    @Delete
+    suspend fun delete(material: Material)
+}
+
+/** سجل السحب والإرجاع — يُعرض داخل موقعه ويُعدّ المفتوح منه للإحصائيات */
+@Dao
+interface WithdrawalDao {
+    @Query("SELECT * FROM withdrawals WHERE siteId = :siteId ORDER BY withdrawnDate DESC")
+    fun observeBySite(siteId: Long): Flow<List<Withdrawal>>
+
+    /** عدد المواد المسحوبة التي لم تُرجع بعد (لكل المواقع) */
+    @Query("SELECT COUNT(*) FROM withdrawals WHERE status != 'RETURNED'")
+    suspend fun countOpen(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(withdrawal: Withdrawal): Long
+
+    @Update
+    suspend fun update(withdrawal: Withdrawal)
+
+    @Delete
+    suspend fun delete(withdrawal: Withdrawal)
+}
