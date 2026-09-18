@@ -165,6 +165,16 @@ interface MaterialDao {
     suspend fun delete(material: Material)
 }
 
+/**
+ * سجل النزول الطارئ/الاستكشاف (النسخة 2.4) — إدخال فقط؛ الحذف يتم
+ * متسلسلًا مع حذف موقعه ولا حاجة لتحديث سجل محفوظ كما هو.
+ */
+@Dao
+interface EmergencyVisitDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(visit: EmergencyVisit): Long
+}
+
 /** سجل السحب والإرجاع — يُعرض داخل موقعه ويُعدّ المفتوح منه للإحصائيات */
 @Dao
 interface WithdrawalDao {

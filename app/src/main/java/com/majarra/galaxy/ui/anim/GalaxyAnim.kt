@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -59,8 +58,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
@@ -69,11 +66,9 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -86,8 +81,10 @@ import kotlinx.coroutines.launch
  *  5) رسم خط علامة الصح       6) حلقة منزلقة للألوان
  * 10) حوار بتكبير نابض       12) سنابار بشريط مهلة
  * 13) ظهور متتابع للقوائم    15) عجلة أرقام الإحصائيات
- * 16) تنفس لوني للشارات       8) تحول حاوي لفتح التفاصيل
- * ============================================================ */
+ * 16) تنفس لوني للشارات       8) فتح التفاصيل بانتقال واحد
+ * ============================================================
+ * ملاحظة: «تحول الحاوية» القديم (مقترح 8) أُزيل في هذه الجلسة حسب
+ * تعليمات إصلاح الانميشن المزدوج — فتح الموقع صار انميشنًا واحدًا. */
 
 /* ═══════════════ 1) نبض توهج — توهج سماوي حول الزر أثناء الضغط ═══════════════ */
 
@@ -599,11 +596,15 @@ fun OdometerNumber(
         animationSpec = tween(1100, easing = FastOutSlowInEasing),
         label = "odometer"
     )
+    // إصلاح تعليمات هذه الجلسة: المحاذاة يجب أن تكون من الأعلى (TopStart)
+    // لا من المنتصف — فمع أي قيمة أكبر من صفر يصبح عمود الأرقام أطول من
+    // نافذة العرض، والمحاذاة الوسطى كانت تزاحه للأعلى بمقدار نصف الفرق
+    // فيخرج الرقم النهائي عن النافذة ويبدو الرقم «مختفيًا» بعد الانميشن.
     Box(
         modifier = modifier
             .height(rowHeight)
             .clip(RoundedCornerShape(6.dp)),
-        contentAlignment = Alignment.CenterStart
+        contentAlignment = Alignment.TopStart
     ) {
         Column(Modifier.offset(y = -offset)) {
             for (i in start..value) {
@@ -670,68 +671,15 @@ fun BreathingDueBadge(days: Long, modifier: Modifier = Modifier) {
     }
 }
 
-/* ═══════════════ 8) تحول الحاوية — فتح تفاصيل الموقع ═══════════════ */
-
-/** وصف عملية فتح موقع: البطاقة المصدر ومستطيلها في إحداثيات النافذة */
-data class SiteLaunchTarget(
-    val siteId: Long,
-    val siteName: String,
-    val from: Rect
-)
-
-/**
- * طبقة «تحول الحاوية» (اختيار 8-1 بنسخة يدوية متوافقة مع BOM 2024.02):
- * سطح بلون الشاشة يتمدد من مستطيل البطاقة حتى يملأ الشاشة خلال
- * 330 مللي ثانية، ثم يُستدعى `onArrived` للتنقل الفعلي — فيبدو
- * أن البطاقة نفسها تحولت إلى شاشة التفاصيل.
+/* ═══════════════ 8) فتح تفاصيل الموقع ═══════════════
+ * ملاحظة (تنفيذ تعليمات هذه الجلسة): كانت هنا طبقة «تحول الحاوية»
+ * (SiteLaunchOverlay/SiteLaunchTarget) تتمدد من البطاقة حتى تملأ الشاشة
+ * ثم يحدث التنقل بانتقاله الخاص — فكان المستخدم يرى انميشنين متتابعين
+ * مع اختفاء مفاجئ بينهما. حُذفت الطبقة بالكامل وأصبح فتح الموقع يتم
+ * بانميشن واحد فقط: انتقال التنقل نفسه (تلاشي + تحجيم في مضيف
+ * التنقل). الحذف هنا أيضًا إزالة كود ميت بعد فك استخدامه من قائمة
+ * المواقع.
  */
-@Composable
-fun SiteLaunchOverlay(
-    target: SiteLaunchTarget,
-    container: Rect,
-    onArrived: () -> Unit
-) {
-    val density = LocalDensity.current
-    val t = remember { Animatable(0f) }
-    var arrived by remember { mutableStateOf(false) }
-
-    LaunchedEffect(target.siteId) {
-        t.snapTo(0f)
-        t.animateTo(1f, animationSpec = tween(330, easing = FastOutSlowInEasing))
-        if (!arrived) {
-            arrived = true
-            onArrived()
-        }
-    }
-
-    val rect = lerp(target.from, container, t.value)
-    val surfaceColor = MaterialTheme.colorScheme.surface
-    val titleColor = MaterialTheme.colorScheme.primary
-
-    Box(Modifier.fillMaxSize()) {
-        // تعتيم خفيف يركز النظر على السطح المتمدد
-        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f * t.value)))
-        Box(
-            modifier = Modifier
-                .offset(
-                    x = with(density) { rect.left.toDp() },
-                    y = with(density) { rect.top.toDp() }
-                )
-                .width(with(density) { rect.width.toDp() })
-                .height(with(density) { rect.height.toDp() })
-                .background(surfaceColor, RoundedCornerShape(lerp(16f, 0f, t.value).dp))
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                target.siteName,
-                style = MaterialTheme.typography.titleLarge,
-                color = titleColor,
-                modifier = Modifier.graphicsLayer { alpha = t.value }
-            )
-        }
-    }
-}
 
 /* ═══════════════ 11) نبضة شريط الصيانة بعد النزول ═══════════════ */
 

@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.majarra.galaxy.domain.model.AttachmentType
 import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.VisitOutcome
 import com.majarra.galaxy.domain.model.WithdrawalStatus
 
 /* ============================================================
@@ -14,8 +15,11 @@ import com.majarra.galaxy.domain.model.WithdrawalStatus
  *   sites, site_details, maintenance_logs, attachments, app_settings
  * المضافة في النسخة 2.2 حسب تعليمات جلسة الإضافة/التعديل:
  *   materials (كتالوج المواد الموحد), withdrawals (سجل السحب والإرجاع)
+ * المضافة في النسخة 2.4 حسب تعليمات هذه الجلسة:
+ *   emergency_visits (سجل النزول الطارئ/الاستكشاف لكل موقع)
  * جميع المفاتيح الخارجية بحذف متسلسل (CASCADE): حذف موقع يمسح
- * تفاصيله ومرفقاته وسجل صيانته وسحوباته تلقائيًا للحفاظ على الاتساق.
+ * تفاصيله ومرفقاته وسجل صيانته وسحوباته ونزولاته تلقائيًا للحفاظ
+ * على الاتساق.
  * ============================================================ */
 
 /**
@@ -185,4 +189,38 @@ data class Withdrawal(
     val notes: String = "",
     /** تاريخ الإرجاع الفعلي للموقع، يملأ تلقائيًا عند الإرجاع */
     val returnedDate: Long? = null
+)
+
+/**
+ * سجل النزول الطارئ/الاستكشاف (النسخة 2.4 — تعليمات هذه الجلسة):
+ * عند نزول المستخدم إلى موقع نزولًا طارئًا يسجل هنا:
+ *  - `reason`: سبب النزول أو الغرض منه (إلزامي).
+ *  - `outcome`: النتيجة — لا توجد مشكلة / تم حل المشكلة / لم تُحل.
+ *  - `problemDescription`: وصف المشكلة مع حلها (تم الحل) أو وصف
+ *    المشكلة التي لم تُحل — حسب النتيجة المختارة.
+ *  - `usedMaterials`: المواد التي استُبدلت أو صُرفت لحل المشكلة
+ *    (اختيارية، أسماء من الكتالوج الموحد، اسم في كل سطر).
+ *  - `analysis`: تحليلات المشكلة والحلول المتوقعة عندما لا تُحل
+ *    (اختيارية).
+ * الحذف المتسلسل (CASCADE) يمسح النزولات مع موقعها تلقائيًا.
+ */
+@Entity(
+    tableName = "emergency_visits",
+    foreignKeys = [
+        ForeignKey(
+            entity = Site::class, parentColumns = ["id"], childColumns = ["siteId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("siteId")]
+)
+data class EmergencyVisit(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val siteId: Long,
+    val visitDate: Long = System.currentTimeMillis(),
+    val reason: String,
+    val outcome: VisitOutcome,
+    val problemDescription: String = "",
+    val usedMaterials: String = "",
+    val analysis: String = ""
 )

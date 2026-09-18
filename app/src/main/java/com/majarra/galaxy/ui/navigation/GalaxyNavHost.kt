@@ -29,7 +29,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -64,6 +63,7 @@ import com.majarra.galaxy.ui.anim.GalaxySnackbarHost
 import com.majarra.galaxy.ui.anim.PinDots
 import com.majarra.galaxy.ui.anim.galaxyPressGlow
 import com.majarra.galaxy.ui.screens.categories.CategoriesScreen
+import com.majarra.galaxy.ui.screens.emergency.EmergencyVisitScreen
 import com.majarra.galaxy.ui.screens.materials.MaterialsCatalogScreen
 import com.majarra.galaxy.ui.screens.settings.SettingsScreen
 import com.majarra.galaxy.ui.screens.sites.SiteDetailsScreen
@@ -71,8 +71,8 @@ import com.majarra.galaxy.ui.screens.sites.SitesScreen
 import com.majarra.galaxy.ui.screens.stats.StatsScreen
 
 /**
- * مسارات التنقل — النسخة 2.2: المواقع، التفاصيل، التصنيفات،
- * المواد الموحدة، الإحصائيات، الإعدادات.
+ * مسارات التنقل — النسخة 2.4: المواقع، التفاصيل، التصنيفات،
+ * المواد الموحدة، الإحصائيات، الإعدادات، والنزول الطارئ.
  */
 object Routes {
     const val SITES = "sites"
@@ -81,8 +81,10 @@ object Routes {
     const val CATEGORIES = "categories"
     const val MATERIALS = "materials"
     const val SITE_DETAILS = "site_details/{siteId}"
+    const val EMERGENCY_VISIT = "emergency_visit/{siteId}"
 
     fun siteDetails(id: Long) = "site_details/$id"
+    fun emergencyVisit(id: Long) = "emergency_visit/$id"
 
     val topLevel = setOf(SITES, STATS, SETTINGS)
 }
@@ -259,8 +261,11 @@ private fun GalaxyBottomBar(navController: NavHostController, currentRoute: Stri
 /**
  * مضيف التنقل — انتقالات «تلاشي وتحجيم» بين كل الوجهات
  * (اختيارات 2.3 — مقترح 7): الشاشة القديمة تتلاشى وتصغر 96%
- * بينما الجديدة تدخل من 96% إلى حجمها الكامل. شاشة التفاصيل
- * يهيمن عليها انتقال «تحول الحاوية» (مقترح 8) من قائمة المواقع.
+ * بينما الجديدة تدخل من 96% إلى حجمها الكامل.
+ *
+ * ملاحظة (تنفيذ تعليمات هذه الجلسة): فتح الموقع صار يتم بانميشن واحد
+ * فقط — انتقال التنقل هذا. طبقة «تحول الحاوية» السابقة كانت تضيف
+ * انميشنًا ثانيًا فوقه مع اختفاء مفاجئ بينهما فأُزيلت.
  */
 @Composable
 private fun GalaxyNavHost(
@@ -297,6 +302,17 @@ private fun GalaxyNavHost(
             arguments = listOf(navArgument("siteId") { type = NavType.LongType })
         ) {
             SiteDetailsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenEmergency = { navController.navigate(Routes.emergencyVisit(it)) },
+                snackbarHostState = snackbarHostState
+            )
+        }
+        // شاشة النزول الطارئ/الاستكشاف (النسخة 2.4 — تعليمات هذه الجلسة)
+        composable(
+            route = Routes.EMERGENCY_VISIT,
+            arguments = listOf(navArgument("siteId") { type = NavType.LongType })
+        ) {
+            EmergencyVisitScreen(
                 onBack = { navController.popBackStack() },
                 snackbarHostState = snackbarHostState
             )

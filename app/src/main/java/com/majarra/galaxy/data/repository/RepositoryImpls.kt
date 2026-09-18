@@ -4,6 +4,8 @@ import com.majarra.galaxy.data.local.Attachment
 import com.majarra.galaxy.data.local.AttachmentDao
 import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.CategoryDao
+import com.majarra.galaxy.data.local.EmergencyVisit
+import com.majarra.galaxy.data.local.EmergencyVisitDao
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.MaintenanceLogDao
 import com.majarra.galaxy.data.local.Material
@@ -16,6 +18,7 @@ import com.majarra.galaxy.data.local.Withdrawal
 import com.majarra.galaxy.data.local.WithdrawalDao
 import com.majarra.galaxy.domain.repository.AttachmentRepository
 import com.majarra.galaxy.domain.repository.CategoryRepository
+import com.majarra.galaxy.domain.repository.EmergencyVisitRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
@@ -111,4 +114,11 @@ class WithdrawalRepositoryImpl @Inject constructor(
     override suspend fun insert(withdrawal: Withdrawal): Long = dao.insert(withdrawal)
     override suspend fun update(withdrawal: Withdrawal) = dao.update(withdrawal)
     override suspend fun delete(withdrawal: Withdrawal) = dao.delete(withdrawal)
+}
+
+@Singleton
+class EmergencyVisitRepositoryImpl @Inject constructor(
+    private val dao: EmergencyVisitDao
+) : EmergencyVisitRepository {
+    override suspend fun insert(visit: EmergencyVisit): Long = dao.insert(visit)
 }

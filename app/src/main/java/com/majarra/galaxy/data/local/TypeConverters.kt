@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.room.TypeConverter
 import com.majarra.galaxy.domain.model.AttachmentType
 import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.VisitOutcome
 import com.majarra.galaxy.domain.model.WithdrawalStatus
 
 /**
@@ -42,5 +43,14 @@ class GalaxyConverters {
             // القيمة «مسحوبة» هي الافتراض الآمن: الدورة تبدأ من السحب
             Log.w(TAG, "withdrawal status unknown in db: $v -> default WITHDRAWN")
             WithdrawalStatus.WITHDRAWN
+        }
+
+    @TypeConverter fun visitOutcomeToDb(v: VisitOutcome): String = v.name
+
+    @TypeConverter fun visitOutcome(v: String): VisitOutcome =
+        runCatching { VisitOutcome.valueOf(v) }.getOrElse {
+            // القيمة «لا توجد مشكلة» هي الافتراض الآمن لأي نتيجة مجهولة
+            Log.w(TAG, "visit outcome unknown in db: $v -> default NO_PROBLEM")
+            VisitOutcome.NO_PROBLEM
         }
 }

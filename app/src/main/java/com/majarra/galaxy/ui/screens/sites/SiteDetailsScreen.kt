@@ -49,12 +49,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -67,7 +68,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -404,6 +404,7 @@ class SiteDetailsViewModel @Inject constructor(
 @Composable
 fun SiteDetailsScreen(
     onBack: () -> Unit,
+    onOpenEmergency: (Long) -> Unit,
     snackbarHostState: SnackbarHostState,
     viewModel: SiteDetailsViewModel = hiltViewModel()
 ) {
@@ -492,6 +493,29 @@ fun SiteDetailsScreen(
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            // زر «طارئ» — يفتح شاشة النزول الطارئ/الاستكشاف لهذا الموقع
+            // (النسخة 2.4 — تعليمات هذه الجلسة). يظهر فور فتح الموقع
+            // فوق التبويبات بلون تنبيهي واضح.
+            Button(
+                onClick = { onOpenEmergency(viewModel.siteId) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(
+                    Icons.Filled.WarningAmber,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("طارئ")
+            }
+
             Row(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 6.dp)

@@ -2,6 +2,7 @@ package com.majarra.galaxy.domain.repository
 
 import com.majarra.galaxy.data.local.Attachment
 import com.majarra.galaxy.data.local.Category
+import com.majarra.galaxy.data.local.EmergencyVisit
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.data.local.Site
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
  * واجهات المستودعات — طبقة الـ Domain لا تعرف تفاصيل Room.
  * النسخة 2.2: مواقع، تصنيفات، تفاصيل، سجل صيانة، مرفقات، إعدادات،
  * كتالوج المواد الموحد، وسجل السحب والإرجاع.
+ * النسخة 2.4: سجل النزول الطارئ/الاستكشاف (تعليمات هذه الجلسة).
  * ============================================================ */
 
 interface SiteRepository {
@@ -77,6 +79,11 @@ interface WithdrawalRepository {
     suspend fun insert(withdrawal: Withdrawal): Long
     suspend fun update(withdrawal: Withdrawal)
     suspend fun delete(withdrawal: Withdrawal)
+}
+
+/** سجل النزول الطارئ/الاستكشاف — إدخال سجل جديد لكل نزول */
+interface EmergencyVisitRepository {
+    suspend fun insert(visit: EmergencyVisit): Long
 }
 
 /**

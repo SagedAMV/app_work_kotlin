@@ -240,6 +240,38 @@ object GalaxyMigrations {
         }
     }
 
+    /**
+     * 5 → 6: ميزات النسخة 2.4 حسب تعليمات هذه الجلسة:
+     *   - جدول `emergency_visits`: سجل النزول الطارئ/الاستكشاف لكل موقع
+     *     (سبب النزول + النتيجة + وصف المشكلة + المواد المستخدمة +
+     *     التحليلات)، بمفتاح خارجي بحذف متسلسل مع موقعه.
+     *
+     * ترحيل إضافة فقط: لا يُلمس أي جدول قائم ولا تُنقل أي بيانات،
+     * لذلك هو غير مدمّر بطبيعته. أسماء الأعمدة والفهارس تطابق حرفيًا
+     * ما يولّده Room من كيان EmergencyVisit وإلا فشل التحقق من المخطط.
+     */
+    val MIGRATION_5_6 = object : Migration(5, 6) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `emergency_visits` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`siteId` INTEGER NOT NULL, " +
+                    "`visitDate` INTEGER NOT NULL, " +
+                    "`reason` TEXT NOT NULL, " +
+                    "`outcome` TEXT NOT NULL, " +
+                    "`problemDescription` TEXT NOT NULL, " +
+                    "`usedMaterials` TEXT NOT NULL, " +
+                    "`analysis` TEXT NOT NULL, " +
+                    "FOREIGN KEY(`siteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_emergency_visits_siteId` ON `emergency_visits` (`siteId`)"
+            )
+        }
+    }
+
     /** كل الترحيلات بالترتيب — تُمرَّر إلى Room.databaseBuilder */
-    val ALL: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+    val ALL: Array<Migration> = arrayOf(
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+    )
 }

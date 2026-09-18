@@ -7,10 +7,13 @@ import androidx.room.TypeConverters
 /**
  * قاعدة بيانات «مجرة» — أوفلاين بالكامل (Room).
  *
- * الإصدار 5 (النسخة 2.2): جدولان جديدان حسب تعليمات جلسة الإضافة/التعديل:
+ * الإصدار 6 (النسخة 2.4): جدول جديد حسب تعليمات هذه الجلسة:
+ *   - `emergency_visits`: سجل النزول الطارئ/الاستكشاف لكل موقع.
+ * الترحيل 5 → 6 في GalaxyMigrations إضافة فقط (غير مدمّر إطلاقًا).
+ *
+ * الإصدار 5 (النسخة 2.2): جدولان حسب تعليمات جلسة الإضافة/التعديل:
  *   - `materials`: كتالوج المواد الموحد (تعديل تبويب المواد).
- *   - `withdrawals`: سجل سحب المواد وصيانتها وإرجاعها (الإضافة الجديدة).
- * الترحيل 4 → 5 في GalaxyMigrations إضافة فقط (غير مدمّر إطلاقًا).
+ *   - `withdrawals`: سجل سحب المواد وصيانتها وإرجاعها.
  */
 @Database(
     entities = [
@@ -21,9 +24,10 @@ import androidx.room.TypeConverters
         Attachment::class,
         AppSetting::class,
         Material::class,
-        Withdrawal::class
+        Withdrawal::class,
+        EmergencyVisit::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 @TypeConverters(GalaxyConverters::class)
@@ -37,6 +41,7 @@ abstract class GalaxyDatabase : RoomDatabase() {
     abstract fun appSettingDao(): AppSettingDao
     abstract fun materialDao(): MaterialDao
     abstract fun withdrawalDao(): WithdrawalDao
+    abstract fun emergencyVisitDao(): EmergencyVisitDao
 
     companion object {
         const val DB_NAME = "galaxy.db"

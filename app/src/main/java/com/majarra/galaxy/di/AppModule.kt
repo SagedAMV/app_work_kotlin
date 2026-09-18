@@ -7,6 +7,7 @@ import com.majarra.galaxy.data.local.GalaxyDatabase
 import com.majarra.galaxy.data.local.GalaxyMigrations
 import com.majarra.galaxy.data.repository.AttachmentRepositoryImpl
 import com.majarra.galaxy.data.repository.CategoryRepositoryImpl
+import com.majarra.galaxy.data.repository.EmergencyVisitRepositoryImpl
 import com.majarra.galaxy.data.repository.MaintenanceLogRepositoryImpl
 import com.majarra.galaxy.data.repository.MaterialRepositoryImpl
 import com.majarra.galaxy.data.repository.SettingsRepositoryImpl
@@ -15,6 +16,7 @@ import com.majarra.galaxy.data.repository.SiteRepositoryImpl
 import com.majarra.galaxy.data.repository.WithdrawalRepositoryImpl
 import com.majarra.galaxy.domain.repository.AttachmentRepository
 import com.majarra.galaxy.domain.repository.CategoryRepository
+import com.majarra.galaxy.domain.repository.EmergencyVisitRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SettingsRepository
@@ -59,6 +61,7 @@ object AppModule {
     @Provides fun provideAppSettingDao(db: GalaxyDatabase) = db.appSettingDao()
     @Provides fun provideMaterialDao(db: GalaxyDatabase) = db.materialDao()
     @Provides fun provideWithdrawalDao(db: GalaxyDatabase) = db.withdrawalDao()
+    @Provides fun provideEmergencyVisitDao(db: GalaxyDatabase) = db.emergencyVisitDao()
 }
 
 /** ربط واجهات المستودعات بتطبيقاتها */
@@ -89,4 +92,7 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindWithdrawalRepo(impl: WithdrawalRepositoryImpl): WithdrawalRepository
+
+    @Binds @Singleton
+    abstract fun bindEmergencyVisitRepo(impl: EmergencyVisitRepositoryImpl): EmergencyVisitRepository
 }

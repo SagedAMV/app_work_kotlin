@@ -9,7 +9,6 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -31,10 +30,8 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,7 +43,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -56,11 +52,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -78,8 +71,6 @@ import com.majarra.galaxy.domain.usecase.SaveSiteUseCase
 import com.majarra.galaxy.ui.anim.BreathingDueBadge
 import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
 import com.majarra.galaxy.ui.anim.GlowButton
-import com.majarra.galaxy.ui.anim.SiteLaunchOverlay
-import com.majarra.galaxy.ui.anim.SiteLaunchTarget
 import com.majarra.galaxy.ui.anim.StaggeredItem
 import com.majarra.galaxy.ui.anim.rememberAlertPulse
 import com.majarra.galaxy.ui.components.ColorDot
@@ -205,10 +196,10 @@ fun SitesScreen(
     val showArchived = currentFilter is ListFilter.Archived
 
     // ── حالة انيميشنات الإصدار 2.3 (اختيارات المستخدم) ──
-    // تحول الحاوية: مستطيلات البطاقات بإحداثيات النافذة + مستطيل الشاشة
-    val cardBounds = remember { mutableStateMapOf<Long, Rect>() }
-    var containerRect by remember { mutableStateOf<Rect?>(null) }
-    var launchTarget by remember { mutableStateOf<SiteLaunchTarget?>(null) }
+    // ملاحظة (تنفيذ تعليمات هذه الجلسة): «تحول الحاوية» السابق كان يمدد
+    // البطاقة حتى تملأ الشاشة ثم يحدث التنقل بانتقاله الخاص — انميشنان
+    // متتابعان مع اختفاء مفاجئ. أُزيل بالكامل: فتح الموقع الآن يتم
+    // بانميشن واحد فقط (انتقال التنقل في المضيف).
     // انهيار ارتفاع العنصر قبل إزالته من البيانات (مقترح 14)
     var collapsingId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
@@ -219,11 +210,6 @@ fun SitesScreen(
         is ListFilter.Archived -> "archived"
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .onGloballyPositioned { containerRect = it.boundsInWindow() }
-    ) {
     Scaffold(
         floatingActionButton = {
             if (!showArchived) {
@@ -350,14 +336,9 @@ fun SitesScreen(
                                     categories = categories,
                                     archived = showArchived,
                                     onClick = {
-                                        // فتح التفاصيل بتحول الحاوية من البطاقة نفسها (مقترح 8)
-                                        val from = cardBounds[site.id]
-                                        val bounds = containerRect
-                                        if (!showArchived && from != null && bounds != null) {
-                                            launchTarget = SiteLaunchTarget(site.id, site.name, from)
-                                        } else {
-                                            onOpenSite(site.id)
-                                        }
+                                        // فتح التفاصيل مباشرة — انميشن واحد هو انتقال
+                                        // التنقل نفسه (إصلاح الانميشن المزدوج)
+                                        onOpenSite(site.id)
                                     },
                                     onRestore = {
                                         collapsingId = site.id
@@ -366,23 +347,11 @@ fun SitesScreen(
                                             viewModel.restore(site)
                                             collapsingId = null
                                         }
-                                    },
-                                    onMeasured = { rect -> cardBounds[site.id] = rect }
+                                    }
                                 )
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-
-        // تحول الحاوية: البطاقة تتمدد حتى تملأ الشاشة ثم يحدث التنقل (مقترح 8)
-        launchTarget?.let { target ->
-            containerRect?.let { bounds ->
-                SiteLaunchOverlay(target = target, container = bounds) {
-                    launchTarget = null
-                    onOpenSite(target.siteId)
                 }
             }
         }
@@ -488,15 +457,10 @@ private fun SiteRow(
     categories: List<Category>,
     archived: Boolean,
     onClick: () -> Unit,
-    onRestore: () -> Unit,
-    /** قياس مستطيل البطاقة بإحداثيات النافذة — يغذي تحول الحاوية (مقترح 8) */
-    onMeasured: (Rect) -> Unit = {}
+    onRestore: () -> Unit
 ) {
     val category = categories.firstOrNull { it.id == site.categoryId }
-    GalaxyCard(
-        onClick = onClick,
-        modifier = Modifier.onGloballyPositioned { onMeasured(it.boundsInWindow()) }
-    ) {
+    GalaxyCard(onClick = onClick) {
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (category != null) ColorDot(category.colorHex)
