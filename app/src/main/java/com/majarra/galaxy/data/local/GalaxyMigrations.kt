@@ -270,8 +270,40 @@ object GalaxyMigrations {
         }
     }
 
+    /**
+     * 6 → 7: ميزة «واجهة المجرة» حسب تعليمات هذه الجلسة:
+     *   - جدول `site_links`: روابط شبكة الاتصالات بين المواقع، بمفتاحين
+     *     خارجيين بحذف متسلسل (حذف أي موقع يمسح كل روابطه).
+     *
+     * ترحيل إضافة فقط: لا يُلمس أي جدول قائم ولا تُنقل أي بيانات،
+     * لذلك هو غير مدمّر بطبيعته. أسماء الأعمدة والفهارس تطابق حرفيًا
+     * ما يولّده Room من كيان SiteLink وإلا فشل التحقق من المخطط:
+     * فهارس `index_site_links_fromSiteId_toSiteId` (فريد) و
+     * `index_site_links_toSiteId`.
+     */
+    val MIGRATION_6_7 = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `site_links` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`fromSiteId` INTEGER NOT NULL, " +
+                    "`toSiteId` INTEGER NOT NULL, " +
+                    "`createdDate` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`fromSiteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                    "FOREIGN KEY(`toSiteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_site_links_fromSiteId_toSiteId` " +
+                    "ON `site_links` (`fromSiteId`, `toSiteId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_site_links_toSiteId` ON `site_links` (`toSiteId`)"
+            )
+        }
+    }
+
     /** كل الترحيلات بالترتيب — تُمرَّر إلى Room.databaseBuilder */
     val ALL: Array<Migration> = arrayOf(
-        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
     )
 }

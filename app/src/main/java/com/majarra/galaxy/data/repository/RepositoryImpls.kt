@@ -14,6 +14,8 @@ import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDao
 import com.majarra.galaxy.data.local.SiteDetail
 import com.majarra.galaxy.data.local.SiteDetailDao
+import com.majarra.galaxy.data.local.SiteLink
+import com.majarra.galaxy.data.local.SiteLinkDao
 import com.majarra.galaxy.data.local.Withdrawal
 import com.majarra.galaxy.data.local.WithdrawalDao
 import com.majarra.galaxy.domain.repository.AttachmentRepository
@@ -22,6 +24,7 @@ import com.majarra.galaxy.domain.repository.EmergencyVisitRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
+import com.majarra.galaxy.domain.repository.SiteLinkRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import kotlinx.coroutines.flow.Flow
@@ -121,4 +124,13 @@ class EmergencyVisitRepositoryImpl @Inject constructor(
     private val dao: EmergencyVisitDao
 ) : EmergencyVisitRepository {
     override suspend fun insert(visit: EmergencyVisit): Long = dao.insert(visit)
+}
+
+@Singleton
+class SiteLinkRepositoryImpl @Inject constructor(
+    private val dao: SiteLinkDao
+) : SiteLinkRepository {
+    override fun observeAll(): Flow<List<SiteLink>> = dao.observeAll()
+    override suspend fun insert(link: SiteLink): Long = dao.insert(link)
+    override suspend fun deleteBetween(a: Long, b: Long) = dao.deleteBetween(a, b)
 }

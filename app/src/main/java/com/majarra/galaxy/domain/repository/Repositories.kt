@@ -7,6 +7,7 @@ import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDetail
+import com.majarra.galaxy.data.local.SiteLink
 import com.majarra.galaxy.data.local.Withdrawal
 import kotlinx.coroutines.flow.Flow
 
@@ -14,7 +15,8 @@ import kotlinx.coroutines.flow.Flow
  * واجهات المستودعات — طبقة الـ Domain لا تعرف تفاصيل Room.
  * النسخة 2.2: مواقع، تصنيفات، تفاصيل، سجل صيانة، مرفقات، إعدادات،
  * كتالوج المواد الموحد، وسجل السحب والإرجاع.
- * النسخة 2.4: سجل النزول الطارئ/الاستكشاف (تعليمات هذه الجلسة).
+ * النسخة 2.4: سجل النزول الطارئ/الاستكشاف.
+ * النسخة 2.5: روابط شبكة المجرة (تعليمات هذه الجلسة).
  * ============================================================ */
 
 interface SiteRepository {
@@ -84,6 +86,17 @@ interface WithdrawalRepository {
 /** سجل النزول الطارئ/الاستكشاف — إدخال سجل جديد لكل نزول */
 interface EmergencyVisitRepository {
     suspend fun insert(visit: EmergencyVisit): Long
+}
+
+/** روابط شبكة المجرة بين المواقع (النسخة 2.5) */
+interface SiteLinkRepository {
+    fun observeAll(): Flow<List<SiteLink>>
+
+    /** @return معرف الصف الجديد، أو -1 إن كان الرابط موجودًا مسبقًا */
+    suspend fun insert(link: SiteLink): Long
+
+    /** حذف الرابط بين موقعين بأي اتجاه كان */
+    suspend fun deleteBetween(a: Long, b: Long)
 }
 
 /**

@@ -15,11 +15,13 @@ import com.majarra.galaxy.domain.model.WithdrawalStatus
  *   sites, site_details, maintenance_logs, attachments, app_settings
  * المضافة في النسخة 2.2 حسب تعليمات جلسة الإضافة/التعديل:
  *   materials (كتالوج المواد الموحد), withdrawals (سجل السحب والإرجاع)
- * المضافة في النسخة 2.4 حسب تعليمات هذه الجلسة:
+ * المضافة في النسخة 2.4 حسب تعليمات جلستها:
  *   emergency_visits (سجل النزول الطارئ/الاستكشاف لكل موقع)
+ * المضافة في النسخة 2.5 حسب تعليمات هذه الجلسة:
+ *   site_links (روابط شبكة المجرة بين المواقع)
  * جميع المفاتيح الخارجية بحذف متسلسل (CASCADE): حذف موقع يمسح
- * تفاصيله ومرفقاته وسجل صيانته وسحوباته ونزولاته تلقائيًا للحفاظ
- * على الاتساق.
+ * تفاصيله ومرفقاته وسجل صيانته وسحوباته ونزولاته وروابطه تلقائيًا
+ * للحفاظ على الاتساق.
  * ============================================================ */
 
 /**
@@ -223,4 +225,40 @@ data class EmergencyVisit(
     val problemDescription: String = "",
     val usedMaterials: String = "",
     val analysis: String = ""
+)
+
+/**
+ * روابط شبكة «واجهة المجرة» (النسخة 2.5 — تعليمات هذه الجلسة):
+ * كل سجل خط يربط موقعين في شبكة الاتصالات التنظيمية التي يبنيها
+ * المستخدم من واجهة المجرة.
+ *
+ * قواعد الاتساق:
+ *  - `fromSiteId` دائمًا الأصغر و`toSiteId` الأكبر (تطبيع الاتجاه في
+ *    LinkSitesUseCase)، فالفهرس الفريد على الزوج يمنع تكرار الرابط
+ *    مهما كان اتجاه إنشائه.
+ *  - مفتاحان خارجيان بحذف متسلسل: حذف أي موقع من الطرفين يمسح كل
+ *    روابطه تلقائيًا فلا تبقى خطوط تشير إلى موقع غير موجود.
+ */
+@Entity(
+    tableName = "site_links",
+    foreignKeys = [
+        ForeignKey(
+            entity = Site::class, parentColumns = ["id"], childColumns = ["fromSiteId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = Site::class, parentColumns = ["id"], childColumns = ["toSiteId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index(value = ["fromSiteId", "toSiteId"], unique = true),
+        Index("toSiteId")
+    ]
+)
+data class SiteLink(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val fromSiteId: Long,
+    val toSiteId: Long,
+    val createdDate: Long = System.currentTimeMillis()
 )

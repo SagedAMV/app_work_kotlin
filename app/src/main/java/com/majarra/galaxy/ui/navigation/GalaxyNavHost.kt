@@ -19,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -64,6 +65,7 @@ import com.majarra.galaxy.ui.anim.PinDots
 import com.majarra.galaxy.ui.anim.galaxyPressGlow
 import com.majarra.galaxy.ui.screens.categories.CategoriesScreen
 import com.majarra.galaxy.ui.screens.emergency.EmergencyVisitScreen
+import com.majarra.galaxy.ui.screens.galaxy.GalaxyNetworkScreen
 import com.majarra.galaxy.ui.screens.materials.MaterialsCatalogScreen
 import com.majarra.galaxy.ui.screens.settings.SettingsScreen
 import com.majarra.galaxy.ui.screens.sites.SiteDetailsScreen
@@ -71,11 +73,13 @@ import com.majarra.galaxy.ui.screens.sites.SitesScreen
 import com.majarra.galaxy.ui.screens.stats.StatsScreen
 
 /**
- * مسارات التنقل — النسخة 2.4: المواقع، التفاصيل، التصنيفات،
- * المواد الموحدة، الإحصائيات، الإعدادات، والنزول الطارئ.
+ * مسارات التنقل — النسخة 2.5: المواقع، المجرة (شبكة الروابط)،
+ * التفاصيل، التصنيفات، المواد الموحدة، الإحصائيات، الإعدادات،
+ * والنزول الطارئ.
  */
 object Routes {
     const val SITES = "sites"
+    const val GALAXY_NETWORK = "galaxy_network"
     const val STATS = "stats"
     const val SETTINGS = "settings"
     const val CATEGORIES = "categories"
@@ -86,7 +90,7 @@ object Routes {
     fun siteDetails(id: Long) = "site_details/$id"
     fun emergencyVisit(id: Long) = "emergency_visit/$id"
 
-    val topLevel = setOf(SITES, STATS, SETTINGS)
+    val topLevel = setOf(SITES, GALAXY_NETWORK, STATS, SETTINGS)
 }
 
 /** عنصر تبويب */
@@ -94,6 +98,7 @@ private data class TabItem(val route: String, val label: String, val icon: Image
 
 private val tabs = listOf(
     TabItem(Routes.SITES, "المواقع", Icons.Filled.CellTower),
+    TabItem(Routes.GALAXY_NETWORK, "المجرة", Icons.Filled.Hub),
     TabItem(Routes.STATS, "الإحصائيات", Icons.Filled.BarChart),
     TabItem(Routes.SETTINGS, "الإعدادات", Icons.Filled.Settings)
 )
@@ -232,7 +237,7 @@ private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) 
     }
 }
 
-/** الشريط السفلي — ثلاثة تبويبات في النسخة 2.1 */
+/** الشريط السفلي — أربعة تبويبات منذ النسخة 2.5 (المواقع، المجرة، الإحصائيات، الإعدادات) */
 @Composable
 private fun GalaxyBottomBar(navController: NavHostController, currentRoute: String?) {
     NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -287,6 +292,14 @@ private fun GalaxyNavHost(
                 onOpenSite = { navController.navigate(Routes.siteDetails(it)) },
                 onOpenCategories = { navController.navigate(Routes.CATEGORIES) },
                 onOpenMaterials = { navController.navigate(Routes.MATERIALS) }
+            )
+        }
+        // واجهة المجرة (النسخة 2.5 — تعليمات هذه الجلسة): شبكة المواقع
+        // وروابطها؛ «الانتقال للموقع» يفتح صفحة التفاصيل نفسها.
+        composable(Routes.GALAXY_NETWORK) {
+            GalaxyNetworkScreen(
+                onOpenSite = { navController.navigate(Routes.siteDetails(it)) },
+                snackbarHostState = snackbarHostState
             )
         }
         composable(Routes.STATS) { StatsScreen() }

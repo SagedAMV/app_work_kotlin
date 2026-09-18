@@ -12,6 +12,7 @@ import com.majarra.galaxy.data.repository.MaintenanceLogRepositoryImpl
 import com.majarra.galaxy.data.repository.MaterialRepositoryImpl
 import com.majarra.galaxy.data.repository.SettingsRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteDetailRepositoryImpl
+import com.majarra.galaxy.data.repository.SiteLinkRepositoryImpl
 import com.majarra.galaxy.data.repository.SiteRepositoryImpl
 import com.majarra.galaxy.data.repository.WithdrawalRepositoryImpl
 import com.majarra.galaxy.domain.repository.AttachmentRepository
@@ -21,6 +22,7 @@ import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
+import com.majarra.galaxy.domain.repository.SiteLinkRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import dagger.Binds
@@ -62,6 +64,7 @@ object AppModule {
     @Provides fun provideMaterialDao(db: GalaxyDatabase) = db.materialDao()
     @Provides fun provideWithdrawalDao(db: GalaxyDatabase) = db.withdrawalDao()
     @Provides fun provideEmergencyVisitDao(db: GalaxyDatabase) = db.emergencyVisitDao()
+    @Provides fun provideSiteLinkDao(db: GalaxyDatabase) = db.siteLinkDao()
 }
 
 /** ربط واجهات المستودعات بتطبيقاتها */
@@ -95,4 +98,7 @@ abstract class RepositoryModule {
 
     @Binds @Singleton
     abstract fun bindEmergencyVisitRepo(impl: EmergencyVisitRepositoryImpl): EmergencyVisitRepository
+
+    @Binds @Singleton
+    abstract fun bindSiteLinkRepo(impl: SiteLinkRepositoryImpl): SiteLinkRepository
 }

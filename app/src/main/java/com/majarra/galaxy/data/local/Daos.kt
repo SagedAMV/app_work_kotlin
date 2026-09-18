@@ -175,6 +175,28 @@ interface EmergencyVisitDao {
     suspend fun insert(visit: EmergencyVisit): Long
 }
 
+/**
+ * روابط شبكة المجرة (النسخة 2.5) — مراقبة كاملة لأن الشبكة تُرسم
+ * دفعة واحدة، والإدخال بـ IGNORE حتى يعود -1 عند محاولة تكرار رابط
+ * قائم (بدل استثناء يقطع التدفق).
+ */
+@Dao
+interface SiteLinkDao {
+    @Query("SELECT * FROM site_links ORDER BY createdDate ASC")
+    fun observeAll(): Flow<List<SiteLink>>
+
+    /** @return معرف الصف الجديد، أو -1 إن كان الرابط موجودًا مسبقًا */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(link: SiteLink): Long
+
+    /** حذف الرابط بين موقعين بأي اتجاه كان */
+    @Query(
+        "DELETE FROM site_links WHERE " +
+            "(fromSiteId = :a AND toSiteId = :b) OR (fromSiteId = :b AND toSiteId = :a)"
+    )
+    suspend fun deleteBetween(a: Long, b: Long)
+}
+
 /** سجل السحب والإرجاع — يُعرض داخل موقعه ويُعدّ المفتوح منه للإحصائيات */
 @Dao
 interface WithdrawalDao {
