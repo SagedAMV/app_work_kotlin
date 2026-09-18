@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مقترحات واجهة المجرة — تطبيق مجرة</title>
+<style>
+/* ══════════════════════════════════════════════════════════
+   مقترحات الانيميشن والتصميم لواجهة المجرة — الإصدار 2.5
+   ملف شخصي يعمل أوفلاين (بلا أي اعتماد خارجي).
+   الهوية البصرية مطابقة للتطبيق: أسود عميق + أزرق سماوي + أخضر نيون.
+   ══════════════════════════════════════════════════════════ */
+:root{
+  --bg:#04060B; --surface:#0B1220; --surface2:#111C31; --outline:#1E2A44;
+  --sky:#38BDF8; --neon:#3DFB7F; --amber:#FFC857; --red:#FF5A5A;
+  --text:#E8EEF7; --muted:#93A4BD;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:"Segoe UI",Tahoma,"Noto Naskh Arabic","Arial",sans-serif;line-height:1.7}
+.wrap{max-width:1080px;margin:0 auto;padding:24px 16px 120px}
+
+/* ── الترويسة ── */
+header{text-align:center;padding:36px 12px 20px;border-bottom:1px solid var(--outline);margin-bottom:24px;
+  background:radial-gradient(ellipse 70% 120px at 50% 0%,rgba(56,189,248,.10),transparent)}
+header h1{font-size:1.9rem;color:var(--sky);margin-bottom:8px}
+header p{color:var(--muted);max-width:760px;margin:0 auto;font-size:.98rem}
+header .steps{margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+header .steps span{background:var(--surface);border:1px solid var(--outline);border-radius:99px;padding:4px 14px;font-size:.85rem;color:var(--text)}
+
+/* ── شريط الملخص والفلاتر ── */
+.summary{position:sticky;top:0;z-index:50;background:rgba(4,6,11,.94);backdrop-filter:blur(6px);
+  border:1px solid var(--outline);border-radius:14px;padding:10px 14px;margin-bottom:22px;
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.chip{border-radius:99px;padding:4px 13px;font-size:.86rem;border:1px solid var(--outline);background:var(--surface)}
+.chip b{font-size:1rem}
+.chip.ok{color:var(--neon)} .chip.no{color:var(--red)} .chip.sk{color:var(--muted)}
+.filters{margin-inline-start:auto;display:flex;gap:6px;flex-wrap:wrap}
+.fbtn{cursor:pointer;background:var(--surface2);color:var(--text);border:1px solid var(--outline);
+  border-radius:99px;padding:4px 12px;font-size:.82rem;font-family:inherit}
+.fbtn.on{border-color:var(--sky);color:var(--sky)}
+
+/* ── أقسام الفئات ── */
+.cat-head{display:flex;align-items:center;gap:10px;margin:34px 0 14px}
+.cat-head h2{font-size:1.25rem;color:var(--text)}
+.cat-head .tag{font-size:.78rem;color:var(--sky);border:1px solid rgba(56,189,248,.4);border-radius:99px;padding:2px 10px}
+.cat-head .line{flex:1;height:1px;background:var(--outline)}
+
+/* ── بطاقة المقترح ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--outline);border-radius:16px;overflow:hidden;
+  transition:border-color .25s,box-shadow .25s,transform .15s;cursor:pointer;position:relative}
+.card:hover{transform:translateY(-2px)}
+.card.sel{border-color:var(--neon);box-shadow:0 0 0 1px var(--neon),0 8px 30px rgba(61,251,127,.12)}
+.card.rej{opacity:.55;border-color:var(--red)}
+.card .badge{position:absolute;top:10px;inset-inline-start:10px;z-index:5;font-size:.8rem;font-weight:700;
+  border-radius:99px;padding:2px 12px;pointer-events:none;transition:all .2s}
+.badge.ok{background:rgba(61,251,127,.15);color:var(--neon);border:1px solid var(--neon)}
+.badge.no{background:rgba(255,90,90,.15);color:var(--red);border:1px solid var(--red)}
+.card-head{padding:14px 16px 10px;display:flex;gap:10px;align-items:baseline}
+.num{color:var(--sky);font-weight:700;font-size:1.05rem;min-width:28px}
+.card-head h3{font-size:1.02rem;flex:1}
+
+/* ── منصة المعاينة ── */
+.stage{height:130px;background:#04060B;position:relative;overflow:hidden;border-block:1px solid var(--outline);direction:ltr}
+.node{position:absolute;border-radius:50%;background:var(--sky)}
+.lbl{position:absolute;color:var(--muted);font-size:9px;transform:translateX(-50%)}
+
+.card-body{padding:12px 16px 6px}
+.place{font-size:.83rem;color:var(--muted);margin-bottom:6px}
+.place b{color:var(--amber)}
+.desc{font-size:.9rem}
+details{margin:10px 0 4px}
+summary{cursor:pointer;color:var(--sky);font-size:.85rem;user-select:none}
+details p{font-size:.83rem;color:var(--muted);margin-top:6px;background:var(--surface2);
+  border-radius:8px;padding:8px 10px;direction:rtl}
+
+/* ── أزرار الاختيار داخل البطاقة ── */
+.acts{display:flex;gap:8px;padding:10px 16px 14px}
+.act{flex:1;cursor:pointer;font-family:inherit;font-size:.85rem;border-radius:10px;padding:7px 0;
+  border:1px solid var(--outline);background:var(--surface2);color:var(--text);transition:all .15s}
+.act:hover{border-color:var(--muted)}
+.act.ok-on{background:rgba(61,251,127,.14);border-color:var(--neon);color:var(--neon)}
+.act.no-on{background:rgba(255,90,90,.14);border-color:var(--red);color:var(--red)}
+
+/* ── زر التصدير العائم ── */
+.exportbar{position:fixed;bottom:0;inset-inline:0;z-index:60;background:rgba(4,6,11,.96);
+  border-top:1px solid var(--outline);padding:12px 16px;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
+.exportbar .hint{color:var(--muted);font-size:.85rem}
+#exportBtn{cursor:pointer;font-family:inherit;font-size:1rem;font-weight:700;color:#00243A;
+  background:var(--sky);border:none;border-radius:12px;padding:10px 28px;transition:all .2s}
+#exportBtn:hover{box-shadow:0 0 24px rgba(56,189,248,.5)}
+#resetBtn{cursor:pointer;font-family:inherit;font-size:.85rem;color:var(--muted);background:none;
+  border:1px solid var(--outline);border-radius:12px;padding:9px 16px}
+.hidden{display:none!important}
+
+/* ═══════════════ أنيميشنات المعاينة (محاكاة CSS لكل مقترح) ═══════════════ */
+@keyframes pulseNode{0%,100%{transform:scale(1)}50%{transform:scale(1.14)}}
+@keyframes breatheGlow{0%,100%{box-shadow:0 0 6px 1px rgba(56,189,248,.25)}50%{box-shadow:0 0 20px 8px rgba(56,189,248,.55)}}
+@keyframes ripple{0%{transform:scale(1);opacity:.85}100%{transform:scale(3.2);opacity:0}}
+@keyframes dragComet{0%{left:8%}45%{left:78%}55%{left:78%}100%{left:8%}}
+@keyframes trailFade{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(.2)}}
+@keyframes popIn{0%,55%{transform:scale(0);opacity:0}68%{transform:scale(1.25);opacity:1}76%,100%{transform:scale(1);opacity:1}}
+@keyframes leanIn{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(var(--lx,0),var(--ly,0)) scale(1.12)}}
+@keyframes heartbeat{0%,20%,44%,100%{transform:scale(1)}8%,32%{transform:scale(1.28)}}
+@keyframes collapseNode{0%,55%{transform:scale(1);opacity:1}75%,90%{transform:scale(0);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes flowDash{to{stroke-dashoffset:-44}}
+@keyframes signalMove{0%{offset-distance:0%;opacity:0}8%{opacity:1}92%{opacity:1}100%{offset-distance:100%;opacity:0}}
+@keyframes drawLine{0%{stroke-dashoffset:220}55%,100%{stroke-dashoffset:0}}
+@keyframes elasticW{0%,100%{stroke-width:2.5}50%{stroke-width:6}}
+@keyframes lineGrow{0%,10%{stroke-dashoffset:220}60%,100%{stroke-dashoffset:0}}
+@keyframes twinkle{0%,100%{opacity:.15}50%{opacity:.95}}
+@keyframes nebulaDrift{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(18px,-10px) scale(1.15)}}
+@keyframes driftStars{from{background-position:0 0}to{background-position:-220px 60px}}
+@keyframes centerGlow{0%,100%{opacity:.25;transform:translate(-50%,-50%) scale(.9)}50%{opacity:.6;transform:translate(-50%,-50%) scale(1.15)}}
+@keyframes radarRing{0%{transform:scale(.25);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+@keyframes spinIn{0%,8%{transform:rotate(-9deg) scale(.86);opacity:0}22%,100%{transform:rotate(0) scale(1);opacity:1}}
+@keyframes fitZoom{0%,12%{transform:scale(1.7) translate(14px,-10px)}38%,62%{transform:scale(1) translate(0,0)}88%,100%{transform:scale(1.7) translate(14px,-10px)}}
+@keyframes zoomLbl{0%,12%{opacity:0}38%,62%{opacity:1}88%,100%{opacity:0}}
+@keyframes dustPull{0%{transform:translate(var(--dx),var(--dy));opacity:0}25%{opacity:.9}100%{transform:translate(0,0);opacity:0}}
+@keyframes orbitDot{from{transform:rotate(0) translateX(11px)}to{transform:rotate(360deg) translateX(11px)}}
+@keyframes shooting{0%,72%{transform:translate(0,0) rotate(-24deg);opacity:0}76%{opacity:1}88%,100%{transform:translate(190px,-80px) rotate(-24deg);opacity:0}}
+.starfield{position:absolute;inset:0;background-image:radial-gradient(1.2px 1.2px at 18% 24%,#cfe9ff 50%,transparent 51%),
+ radial-gradient(1px 1px at 66% 64%,#9fd6ff 50%,transparent 51%),radial-gradient(1.4px 1.4px at 84% 22%,#e8f6ff 50%,transparent 51%),
+ radial-gradient(1px 1px at 38% 78%,#9fd6ff 50%,transparent 51%),radial-gradient(1.1px 1.1px at 52% 12%,#cfe9ff 50%,transparent 51%),
+ radial-gradient(.9px .9px at 8% 70%,#e8f6ff 50%,transparent 51%),radial-gradient(1px 1px at 92% 82%,#cfe9ff 50%,transparent 51%);
+ background-size:220px 130px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🌌 مقترحات الانيميشن والتصميم — واجهة المجرة</h1>
+    <p>
+      ثلاثون مقترحًا للانيميشن والتصميم مخصصة لواجهة المجرة (شبكة المواقع والروابط) في تطبيق «مجرة».
+      كل بطاقة فيها معاينة حية — <b>انقر البطاقة أو أزرارها</b> لتحديد اختيارك: قبول ✅ أو رفض ❌.
+      عند الانتهاء اضغط «تصدير اختياراتي» لتنزيل ملف <b>اختيارات.md</b> مرتبًا، ثم ارفعه إلى المستودع
+      بنفس الاسم ليُنفَّذ في الجلسة التالية.
+    </p>
+    <div class="steps">
+      <span>1️⃣ شاهد المعاينات</span><span>2️⃣ اختر ✅ أو ❌</span><span>3️⃣ صدّر اختيارات.md</span><span>4️⃣ ارفعه للمستودع</span>
+    </div>
+  </header>
+
+  <div class="summary" id="summary"></div>
+  <div id="content"></div>
+</div>
+
+<div class="exportbar">
+  <span class="hint" id="expHint"></span>
+  <button id="exportBtn">⬇️ تصدير اختياراتي (اختيارات.md)</button>
+  <button id="resetBtn">↺ إعادة تعيين الكل</button>
+</div>
+
+<script>
+/* ═══════════ بيانات المقترحات الثلاثين ═══════════
+   الفئة: nodes | links | space | motion | design
+   كل مقترح: رقم، عنوان، مكانه في التطبيق، الوصف، طريقة التنفيذ (Compose)، ومعاينة. */
+const CATS = {
+  nodes:{name:"العُقد (المواقع)",tag:"انيميشن عقد المواقع"},
+  links:{name:"الروابط (الخطوط)",tag:"انيميشن خطوط الشبكة"},
+  space:{name:"الخلفية الكونية",tag:"أجواء المجرة"},
+  motion:{name:"الانتقالات والتفاعل",tag:"حركة الشاشة والتفاعل"},
+  design:{name:"التصميم البصري",tag:"شكل العقد والخطوط"}
+};
+const OPTIONS = [
+/* ── 1-8: العقد ── */
+{id:1,cat:"nodes",title:"تنفّس العقَد الذاتي",
+ place:"كل عقدة موقع في واجهة المجرة — بدل الجمود الحالي.",
+ desc:"كل عقدة تنبض بلطف (تكبير/تصغير ~4٪) بإيقاع بطيء متفرد الطور لكل موقع، فتبدو الشبكة حية كسحاب نجوم نابضة دون تشتيت.",
+ impl:"`infiniteRepeatable(tween(~1600ms, RepeatMode.Reverse))` على قيمة واحدة، وتفاوت الطور لكل عقدة عبر تأخير نسبي من فهرسها — تُطبق داخل رسم Canvas الحالي.",
+ pv:`<div class="node" style="left:18%;top:34%;width:22px;height:22px;animation:pulseNode 1.7s ease-in-out infinite"></div>
+ <div class="node" style="left:52%;top:56%;width:18px;height:18px;background:#3DFB7F;animation:pulseNode 2.1s .4s ease-in-out infinite"></div>
+ <div class="node" style="left:78%;top:28%;width:16px;height:16px;background:#FFC857;animation:pulseNode 1.9s .8s ease-in-out infinite"></div>`},
+
+{id:2,cat:"nodes",title:"ذيل مذنّب أثناء السحب",
+ place:"سحب عقدة موقع بإصبعك لإعادة ترتيبها يدويًا.",
+ desc:"أثناء سحب العقدة يتخلف عنها ذيل نقاط بهتة تتلاشى كمذنّب، فيجعل حركة الترتيب ممتعة ويوضح مسار الحركة.",
+ impl:"قائمة صغيرة بآخر المواضع داخل حلقة الرسم مع تلاشي ألفا تدريجي — تُغذى من `dragNodeBy` وتُرسم قبل العقدة نفسها.",
+ pv:`<div class="node" style="top:52px;width:20px;height:20px;animation:dragComet 3.4s ease-in-out infinite"></div>
+ <div class="node" style="top:55px;width:9px;height:9px;opacity:.6;animation:dragComet 3.4s .12s ease-in-out infinite,trailFade 1s infinite"></div>
+ <div class="node" style="top:57px;width:6px;height:6px;opacity:.4;animation:dragComet 3.4s .22s ease-in-out infinite,trailFade 1s .3s infinite"></div>`},
+
+{id:3,cat:"nodes",title:"هالة متنفّسة بلون التصنيف",
+ place:"هالة خلف كل عقدة — تمييز بصري للتصنيفات عن بُعد.",
+ desc:"خلف كل عقدة هالة ضوئية ناعمة من لون تصنيفها تتنفس سطوعًا، فتُقرأ تصنيفات الشبكة من بعيد حتى قبل قراءة الأسماء.",
+ impl:"دائرة إضافية قبل العقدة بنصف قطر أكبر وفرشاة `Brush.radialGradient` بلون التصنيف مع ألفا متحركة بالانتقال اللانهائي نفسه.",
+ pv:`<div class="node" style="left:24%;top:40px;width:26px;height:26px;animation:breatheGlow 2.4s ease-in-out infinite"></div>
+ <div class="node" style="left:62%;top:52px;width:22px;height:22px;background:#3DFB7F;animation:breatheGlow 2.4s .9s ease-in-out infinite"></div>`},
+
+{id:4,cat:"nodes",title:"موجة نقر حول العقدة",
+ place:"لحظة نقر موقع لفتح قائمة الخيارات أو إتمام الربط.",
+ desc:"عند النقر تنطلق حلقة موجة تتسع وتتلاشى من العقدة — تأكيد لمسي فوري قبل ظهور الورقة السفلية.",
+ impl:"`Animatable` تنطلق عند نجاح `hitNode` في طبقة الإيماءات؛ الحلقة ترسم داخل نفس الـ Canvas مع ألفا متناقصة.",
+ pv:`<div class="node" style="left:calc(50% - 12px);top:48px;width:24px;height:24px"></div>
+ <div style="position:absolute;left:calc(50% - 12px);top:48px;width:24px;height:24px;border:2px solid var(--sky);border-radius:50%;animation:ripple 1.6s ease-out infinite"></div>
+ <div style="position:absolute;left:calc(50% - 12px);top:48px;width:24px;height:24px;border:2px solid var(--sky);border-radius:50%;animation:ripple 1.6s .55s ease-out infinite"></div>`},
+
+{id:5,cat:"nodes",title:"ظهور متدرّج من مركز المجرة",
+ place:"دخول شاشة المجرة أو عودة العرض بعد تغيير المواقع.",
+ desc:"العقد تظهر واحدة تلو الأخرى قافزةً من الصفر، بالترتيب من الأقرب لمركز المجرة للأبعد — كأن الشبكة تتكوّن أمامك.",
+ impl:"قيمة تقدم واحدة `0→1` عند التركيب؛ كل عقدة تحسب مقياس ظهورها من مسافتها للمركز مقارنةً بالتقدم (دالة ناعمة بلا تأخيرات منفصلة).",
+ pv:`<div class="node" style="left:47%;top:52px;width:20px;height:20px;animation:popIn 3.2s ease infinite"></div>
+ <div class="node" style="left:26%;top:30px;width:16px;height:16px;background:#3DFB7F;animation:popIn 3.2s .25s ease infinite"></div>
+ <div class="node" style="left:70%;top:70px;width:16px;height:16px;background:#FFC857;animation:popIn 3.2s .5s ease infinite"></div>
+ <div class="node" style="left:12%;top:76px;width:13px;height:13px;background:#FF5A5A;animation:popIn 3.2s .75s ease infinite"></div>`},
+
+{id:6,cat:"nodes",title:"اهتزاز المرشّحين نحو مصدر الربط",
+ place:"وضع الربط: كل المواقع المرشّحة للربط بالمصدر.",
+ desc:"أثناء وضع الربط تتمايل العقد المرشّحة قليلًا نحو عقدة المصدر وتكبر 6٪، في إشارة لاإرادية: «انقرني لأرتبط».",
+ impl:"إزاحة عالم صغيرة باتجاه متجه المصدر محسوبة من `linkPulse.value` القائم فعلًا — بلا أي انتقال إضافي جديد.",
+ pv:`<div class="node" style="left:47%;top:46px;width:24px;height:24px;box-shadow:0 0 16px 4px rgba(56,189,248,.5)"></div>
+ <div class="node" style="left:14%;top:30px;width:16px;height:16px;background:#3DFB7F;--lx:9px;--ly:5px;animation:leanIn 1.5s ease-in-out infinite"></div>
+ <div class="node" style="left:80%;top:64px;width:16px;height:16px;background:#FFC857;--lx:-9px;--ly:-5px;animation:leanIn 1.5s .3s ease-in-out infinite"></div>`},
+
+{id:7,cat:"nodes",title:"نبضة قلب مزدوجة عند نجاح الربط",
+ place:"لحظة نجاح «تم ربط الموقعين» في وضع الربط.",
+ desc:"عقدتا الموقعين المربوطين تنبضان نبضتين سريعتين معًا (كدقة قلب) لحظة تثبيت الخط — احتفال صغير بإنجاز الربط.",
+ impl:"إشارة «آخر ربط ناجح» (زوج معرفات + طابع زمني) في الـ ViewModel؛ الرسم يترجم عمرها لمقياس نبض مزدوج بدالة `sin` مضمومة.",
+ pv:`<div class="node" style="left:32%;top:48px;width:22px;height:22px;animation:heartbeat 2.6s ease-in-out infinite"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="37%" y1="58" x2="63%" y2="58" stroke="#38BDF8" stroke-width="2" opacity=".55"/></svg>
+ <div class="node" style="left:63%;top:48px;width:22px;height:22px;background:#3DFB7F;animation:heartbeat 2.6s .1s ease-in-out infinite"></div>`},
+
+{id:8,cat:"nodes",title:"انهيار العقدة عند حذف الموقع",
+ place:"حذف موقع نهائيًا بينما شبكته معروضة.",
+ desc:"بدل اختفاء الموقع فجأة، تنهار عقدته إلى الصفر وتنطفئ خطوطه بتلاشٍ قصير — وداع بصري هادئ يحفظ الإدراك المكاني.",
+ impl:"إبقاء الموضع المحذوف في خريطة عرض مؤقتة مع عداد تنازلي للتلاشي (قائمة «الخارجين») داخل الـ ViewModel، ويُرسم بألفا متناقصة.",
+ pv:`<div class="node" style="left:30%;top:46px;width:20px;height:20px"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="35%" y1="56" x2="64%" y2="56" stroke="#38BDF8" stroke-width="2" style="animation:collapseNode 3.5s ease infinite"/></svg>
+ <div class="node" style="left:64%;top:46px;width:20px;height:20px;background:#FF5A5A;animation:collapseNode 3.5s ease infinite"></div>`},
+
+/* ── 9-14: الروابط ── */
+{id:9,cat:"links",title:"شرطات متدفّقة (بيانات تجري)",
+ place:"كل خطوط الشبكة بين المواقع المرتبطة.",
+ desc:"الخطوط ترسم كشرطات قصيرة تجري باستمرار من عقدة لأخرى كنبضات بيانات في شبكة اتصالات حقيقية.",
+ impl:"`PathEffect.dashPathEffect(floatArrayOf(14f,18f), phase)` حيث الطور قيمة لانهائية متحركة — سطر واحد بدل كل `drawLine` حالي.",
+ pv:`<div class="node" style="left:12%;top:52px;width:18px;height:18px"></div><div class="node" style="left:78%;top:52px;width:18px;height:18px;background:#3DFB7F"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="16%" y1="61" x2="80%" y2="61" stroke="#38BDF8" stroke-width="2.5" stroke-dasharray="8 14" style="animation:flowDash 1.2s linear infinite"/></svg>`},
+
+{id:10,cat:"links",title:"خط متدرّج بين لوني التصنيفين",
+ place:"الخطوط التي تصل موقعين من تصنيفين مختلفين.",
+ desc:"كل خط يتلوّن بتدرّج من لون تصنيف طرفه الأول إلى لون تصنيف طرفه الثاني — الخريطة اللونية للشبكة تُقرأ بنظرة واحدة.",
+ impl:"`Brush.linearGradient(start=موضع أ, end=موضع ب, ألوان الطرفين)` بدل اللون الموحد — الألوان متوفرة فعلًا في `nodeColors`.",
+ pv:`<div class="node" style="left:12%;top:52px;width:18px;height:18px"></div><div class="node" style="left:78%;top:52px;width:18px;height:18px;background:#3DFB7F"></div>
+ <div style="position:absolute;left:15%;top:59px;width:66%;height:3.5px;border-radius:3px;background:linear-gradient(90deg,#38BDF8,#3DFB7F)"></div>`},
+
+{id:11,cat:"links",title:"إشارة ضوئية تعبر الرابط",
+ place:"الروابط النشطة — إشارات دورية بين المواقع.",
+ desc:"نقطة ضوئية صغيرة تنطلق دوريًا على طول كل رابط من عقدة إلى أختها، فتوحي بأن الشبكة تنبض بالحركة.",
+ impl:"قيمة لانهائية `0→1` لكل إطار؛ النقطة ترسم عند `lerp(موضع أ, موضع ب, القيمة)` مع ذيل قصير بتدرّج ألفا.",
+ pv:`<div class="node" style="left:12%;top:52px;width:18px;height:18px"></div><div class="node" style="left:78%;top:52px;width:18px;height:18px;background:#3DFB7F"></div>
+ <div style="position:absolute;left:15%;top:59px;width:66%;height:2px;background:rgba(56,189,248,.4)"></div>
+ <div style="position:absolute;left:15%;top:55px;width:9px;height:9px;border-radius:50%;background:#E8F6FF;box-shadow:0 0 10px 2px #38BDF8;animation:signalMove 2.6s linear infinite"></div>`},
+
+{id:12,cat:"links",title:"الخطوط تُرسم عند الدخول",
+ place:"دخول شاشة المجرة أو إضافة رابط جديد.",
+ desc:"الخطوط لا تظهر فجأة بل تُرسم تدريجيًا من عقدة المصدر إلى الهدف كخيوط تُمدّ بين النجوم.",
+ impl:"`PathMeasure` مع كسر تقدم واحد لكل الشبكة يظهر عبر `Animatable` تعمل مرة واحدة في `LaunchedEffect` ثم تثبت على 1.",
+ pv:`<div class="node" style="left:12%;top:52px;width:18px;height:18px"></div><div class="node" style="left:78%;top:52px;width:18px;height:18px;background:#3DFB7F"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="16%" y1="61" x2="80%" y2="61" stroke="#38BDF8" stroke-width="2.5" stroke-dasharray="220" style="animation:drawLine 3.2s ease infinite"/></svg>`},
+
+{id:13,cat:"links",title:"خط مرن يسمن أثناء السحب",
+ place:"الروابط الموصولة بعقدة يجري سحبها يدويًا.",
+ desc:"أثناء سحب عقدة، الخطوط الموصولة بها تزداد سماكة وتتوهج قليلًا كأنها أوتار مشدودة — إحساس فيزيائي بالترابط.",
+ impl:"سماكة الخط الحالية ثابتة 3f؛ تصير `3f + 2.5f×مؤشر-السحب` حيث المؤشر يقرأ من حالة «العقدة المسحوبة» الموجودة في طبقة الإيماءات.",
+ pv:`<div class="node" style="left:12%;top:40px;width:18px;height:18px"></div><div class="node" style="left:74%;top:66px;width:20px;height:20px;background:#3DFB7F;animation:pulseNode 1.3s ease-in-out infinite"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="16%" y1="49" x2="78%" y2="76" stroke="#38BDF8" style="animation:elasticW 1.3s ease-in-out infinite"/></svg>`},
+
+{id:14,cat:"links",title:"امتداد الرابط الجديد لحظة إنشائه",
+ place:"نجاح إنشاء رابط جديد في وضع الربط.",
+ desc:"الخط الجديد لا يظهر مكتملًا بل يمتد من عقدة المصدر نحو الهدف خلال نصف ثانية ثم يستقر — تأكيد بصري لمكان تثبيته.",
+ impl:"نفس تقنية الخيار 12 لكن بمفتاح «آخر رابط أُنشئ + طابع زمني» — الخط الأحدث يُرسم بكسر تقدم حسب عمره والبقية مكتملة.",
+ pv:`<div class="node" style="left:12%;top:52px;width:18px;height:18px"></div><div class="node" style="left:78%;top:52px;width:18px;height:18px;background:#3DFB7F"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="16%" y1="61" x2="80%" y2="61" stroke="#3DFB7F" stroke-width="3" stroke-dasharray="220" style="animation:lineGrow 3s ease infinite"/></svg>`},
+
+/* ── 15-20: الخلفية الكونية ── */
+{id:15,cat:"space",title:"ميدان نجوم ثابت",
+ place:"خلفية شاشة المجرة كلها — أجواء الفضاء.",
+ desc:"نقاط نجوم خافتة ثابتة موزعة حتميًا خلف الشبكة (بلا حركة) — عمق كوني فوري بأقل تكلفة أداء ممكنة.",
+ impl:"قائمة مواضع محسوبة بدالة تجزئة حتمية من العدد (بلا عشوائية مثل `NetworkLayout`)، ترسم مرة واحدة خلف الخطوط في نفس الـ Canvas.",
+ pv:`<div class="starfield"></div>
+ <div class="node" style="left:38%;top:44px;width:20px;height:20px"></div><div class="node" style="left:66%;top:70px;width:15px;height:15px;background:#3DFB7F"></div>`},
+
+{id:16,cat:"space",title:"نجوم تومض بهدوء",
+ place:"خلفية شاشة المجرة — طبقة فوق النجوم الثابتة.",
+ desc:"ثلث النجوم يومض ببطء بأطوار مختلفة، فترمش المجرة كسماء حقيقية ليلًا دون أي تشتيت للحركة.",
+ impl:"نفس مواضع الخيار 15 + ألفا لكل نجمة = `0.4+0.6×|sin(الزمن×سرعة+طور)|` — الطور من تجزئة فهرس النجمة.",
+ pv:`<div class="starfield" style="animation:twinkle 3.4s ease-in-out infinite"></div>
+ <div class="starfield" style="transform:translateX(31px);animation:twinkle 2.7s .9s ease-in-out infinite reverse"></div>
+ <div class="node" style="left:44%;top:50px;width:20px;height:20px"></div>`},
+
+{id:17,cat:"space",title:"سُدُم ملوّنة تنجرف ببطء",
+ place:"خلفية المجرة — سحب ضبابية بعيدة.",
+ desc:"بقعتا ضوء ضخمتان شديدتا الخفوت (سماوي ونيون) تنجرفان وتتوسعان ببطء شديد كسديم خلف الشبكة.",
+ impl:"دائرتان كبيرتان بفرشاة `radialGradient` بألفا ≤ 0.07 وإزاحة من انتقال لانهائي بطيء (10+ ثوانٍ) — ترسمان قبل كل شيء.",
+ pv:`<div style="position:absolute;left:6%;top:12px;width:120px;height:120px;border-radius:50%;filter:blur(18px);background:radial-gradient(circle,rgba(56,189,248,.3),transparent 70%);animation:nebulaDrift 7s ease-in-out infinite"></div>
+ <div style="position:absolute;left:52%;top:30px;width:110px;height:110px;border-radius:50%;filter:blur(18px);background:radial-gradient(circle,rgba(61,251,127,.22),transparent 70%);animation:nebulaDrift 8s 1.5s ease-in-out infinite reverse"></div>
+ <div class="node" style="left:46%;top:54px;width:18px;height:18px"></div>`},
+
+{id:18,cat:"space",title:"انزياح النجوم مع التحريك (عمق)",
+ place:"تحريك الشاشة بإصبعك — طبقات الخلفية.",
+ desc:"النجوم البعيدة تنزاح ببطء معاكس لاتجاه تحريكك (ثلث سرعة الشبكة)، فينشأ إحساس عمق ثلاثي الأبعاد.",
+ impl:"النجوم ترسم بإزاحة `pan×0.3` بدل ثباتها — سطر واحد إضافي في تحويل الرسم الحالي، والقيمة من `transform.pan` المتاحة فعلًا.",
+ pv:`<div class="starfield" style="animation:driftStars 9s linear infinite"></div>
+ <div class="node" style="left:42%;top:48px;width:20px;height:20px;animation:dragComet 6s ease-in-out infinite alternate"></div>`},
+
+{id:19,cat:"space",title:"توهّج مركزي خلف قلب الشبكة",
+ place:"مركز المجرة خلف العقد جميعها.",
+ desc:"هالة ضوئية خافتة تتنفس ببطء خلف مركز الشبكة فتعطي «قلب المجرة» وزنًا بصريًا وتشدّ العين للتكوين.",
+ impl:"دائرة بفرشاة شعاعية عند مركز ثقل المواضع المحسوبة (متوسط س/ص) بألفا متحركة — المواضع كلها متوفرة في `ui.positions`.",
+ pv:`<div style="position:absolute;left:50%;top:50%;width:150px;height:150px;border-radius:50%;background:radial-gradient(circle,rgba(56,189,248,.28),transparent 65%);animation:centerGlow 3.4s ease-in-out infinite"></div>
+ <div class="node" style="left:41%;top:50px;width:17px;height:17px"></div><div class="node" style="left:55%;top:58px;width:14px;height:14px;background:#3DFB7F"></div>`},
+
+{id:20,cat:"space",title:"حلقات رادار خافتة",
+ place:"خلفية المجرة — إحساس محطة الاتصالات.",
+ desc:"حلقات دائرية تنطلق من مركز الشبكة وتتسع حتى تتلاشى كنبضات رادار، بوتيرة هادئة كل بضع ثوانٍ.",
+ impl:"حلقتان أو ثلاث بحدود `Stroke` بألفا متناقصة ونصف قطر متزايد من نفس الانتقال اللانهائي — ترسم خلف الخطوط.",
+ pv:`<div class="node" style="left:47%;top:52px;width:16px;height:16px"></div>
+ <div style="position:absolute;left:calc(50% - 40px);top:25px;width:80px;height:80px;border:1.5px solid rgba(56,189,248,.55);border-radius:50%;animation:radarRing 3s linear infinite"></div>
+ <div style="position:absolute;left:calc(50% - 40px);top:25px;width:80px;height:80px;border:1.5px solid rgba(56,189,248,.55);border-radius:50%;animation:radarRing 3s 1.5s linear infinite"></div>`},
+
+/* ── 21-26: الانتقالات والتفاعل ── */
+{id:21,cat:"motion",title:"دخول المجرة بدوران خفيف",
+ place:"فتح تبويب «المجرة» نفسه.",
+ desc:"الشبكة كلها تدخل بدوران صغير (-8 درجات) مع تكبير من 86٪ وتستقر في نصف ثانية — افتتاحية تليق بمجرة.",
+ impl:"`Animatable` واحدة تعمل عند أول تركيب؛ القيمة تطبق على تحويل الرسم نفسه (دوران حول مركز الشاشة فوق الإزاحة والتكبير القائمين).",
+ pv:`<div style="position:absolute;inset:0;animation:spinIn 3.4s ease infinite">
+ <div class="node" style="left:30%;top:36px;width:18px;height:18px"></div><div class="node" style="left:56%;top:62px;width:15px;height:15px;background:#3DFB7F"></div><div class="node" style="left:72%;top:30px;width:12px;height:12px;background:#FFC857"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="34%" y1="45" x2="59%" y2="70" stroke="#38BDF8" stroke-width="2" opacity=".5"/><line x1="59%" y1="70" x2="75%" y2="36" stroke="#38BDF8" stroke-width="2" opacity=".5"/></svg></div>`},
+
+{id:22,cat:"motion",title:"ملاءمة عرض ناعمة بنابض",
+ place:"زر «ملاءمة العرض» (الأيقونة أسفل الشاشة).",
+ desc:"العودة للشبكة الكاملة لا تقفز بل تنزلق بنابض لطيف خلال 400 مللي ثانية — انتقال يحفظ الإحساس بالاتجاه.",
+ impl:"`GalaxyTransform.fit` تصير هدفًا لـ `Animatable<Offset>` + `Animatable<Float>` (بان/تكبير) بدل الإسناد الفوري — البنية الحالية جاهزة لذلك.",
+ pv:`<div style="position:absolute;inset:0;animation:fitZoom 4.6s ease-in-out infinite">
+ <div class="node" style="left:34%;top:44px;width:18px;height:18px"></div><div class="node" style="left:58%;top:64px;width:14px;height:14px;background:#3DFB7F"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="38%" y1="53" x2="61%" y2="71" stroke="#38BDF8" stroke-width="2" opacity=".5"/></svg></div>`},
+
+{id:23,cat:"motion",title:"أسماء تظهر مع مستوى التكبير",
+ place:"أسماء المواقع تحت العقد عند التصغير البعيد.",
+ desc:"عند التصغير الشديد تتلاشى الأسماء تدريجيًا لتخفيف الزحام، وتعود للظهور الناعم كلما اقتربت — نظافة دائمة للشبكة.",
+ impl:"ألفا الاسم = دالة من `transform.zoom` (تلاشي بين حدين) — الرسم الحالي يمر عبر `textMeasurer` فيكفي ضرب ألفا الأسلوب بالقيمة.",
+ pv:`<div style="position:absolute;inset:0;animation:fitZoom 4.6s ease-in-out infinite">
+ <div class="node" style="left:38%;top:40px;width:18px;height:18px"></div>
+ <span class="lbl" style="left:43%;top:62px;animation:zoomLbl 4.6s ease-in-out infinite">موقع أ</span>
+ <div class="node" style="left:62%;top:60px;width:14px;height:14px;background:#3DFB7F"></div>
+ <span class="lbl" style="left:65%;top:78px;animation:zoomLbl 4.6s ease-in-out infinite">موقع ب</span></div>`},
+
+{id:24,cat:"motion",title:"غبار نجوم ينجذب للمصدر",
+ place:"وضع الربط المفعّل — أجواء حول عقدة المصدر.",
+ desc:"جسيمات غبار ضوئية دقيقة تنجذب ببطء نحو عقدة المصدر وتدور حولها ما دام وضع الربط مفعّلًا — «الجاذبية تعمل».",
+ impl:"12 جسيمًا بمواضع قطرية متحركة حول موضع المصدر (مواصفات لانهائية ببطء متفاوت) — ترسم فقط عندما `linkingFromId != null`.",
+ pv:`<div class="node" style="left:47%;top:48px;width:22px;height:22px;box-shadow:0 0 14px 4px rgba(56,189,248,.45)"></div>
+ <div style="position:absolute;left:50%;top:58px;width:4px;height:4px;border-radius:50%;background:#E8F6FF;--dx:-46px;--dy:-20px;animation:dustPull 2.8s linear infinite"></div>
+ <div style="position:absolute;left:50%;top:58px;width:3px;height:3px;border-radius:50%;background:#9fd6ff;--dx:40px;--dy:24px;animation:dustPull 3.4s .7s linear infinite"></div>
+ <div style="position:absolute;left:50%;top:58px;width:3px;height:3px;border-radius:50%;background:#E8F6FF;--dx:18px;--dy:-38px;animation:dustPull 3s 1.4s linear infinite"></div>`},
+
+{id:25,cat:"motion",title:"أيقونة الشعار العلوي بمدار دوّار",
+ place:"شعار «وضع الربط مفعّل» أعلى الشاشة.",
+ desc:"أيقونة الرابط في الشعار العلوي تحوم حولها نقطة تدور في مدار صغير — إشارة مستمرة أن الوضع حيّ.",
+ impl:"`graphicsLayer{rotationZ}` بقيمة لانهائية على عنصر صغير بجوار أيقونة الشعار القائمة — لا يتجاوز سطرين فوق `Icon` الحالي.",
+ pv:`<div style="position:absolute;left:50%;top:44px;transform:translateX(-50%);background:var(--surface2);border:1px solid rgba(56,189,248,.45);border-radius:12px;padding:8px 16px;display:flex;gap:9px;align-items:center">
+ <span style="position:relative;width:22px;height:22px;display:inline-block">
+  <span style="position:absolute;inset:5px;border-radius:50%;border:2px solid var(--sky)"></span>
+  <span style="position:absolute;left:9px;top:9px;width:5px;height:5px;border-radius:50%;background:var(--neon);animation:orbitDot 2.2s linear infinite"></span></span>
+ <span style="font-size:11px;color:var(--text)">وضع الربط مفعّل…</span></div>`},
+
+{id:26,cat:"motion",title:"شهاب نجاح يعبر الشاشة",
+ place:"لحظة نجاح أي عملية ربط في المجرة.",
+ desc:"شهاب ضوئي سريع يعبر طرف الشاشة العلوي لحظة نجاح الربط — لمسة احتفالية خاطفة لا تعيق العمل.",
+ impl:"خط قصير متوهج بميل ثابت يقطع مسافة أفقية خلال 500 مللي ثانية بإشارة من حدث «تم الربط» القائم في الـ ViewModel.",
+ pv:`<div class="starfield"></div>
+ <div class="node" style="left:44%;top:66px;width:18px;height:18px"></div>
+ <div style="position:absolute;left:14%;top:96px;width:52px;height:2.5px;border-radius:3px;background:linear-gradient(90deg,transparent,#E8F6FF);animation:shooting 3.8s ease-in infinite"></div>`},
+
+/* ── 27-30: التصميم البصري ── */
+{id:27,cat:"design",title:"كواكب ذات حلقات",
+ place:"شكل عقدة كل موقع — بديل الدائرة المصمتة.",
+ desc:"كل عقدة تصير «كوكبًا»: دائرة مصمتة يحيط بها حلقة خارجية بلون التصنيف بينهما فجوة — شكل أغنى يظل مقروءًا صغيرًا.",
+ impl:"دائرتان بدل واحدة: المصمتة الحالية + حلقة `Stroke` بنصف قطر أكبر 8 وحدات — تعديل مباشر في حلقة رسم العقد القائمة.",
+ pv:`<div style="position:absolute;left:24%;top:38px;width:30px;height:30px;border-radius:50%;border:2.5px solid rgba(56,189,248,.8)"></div>
+ <div class="node" style="left:calc(24% + 6px);top:44px;width:18px;height:18px"></div>
+ <div style="position:absolute;left:62%;top:48px;width:26px;height:26px;border-radius:50%;border:2.5px solid rgba(61,251,127,.8)"></div>
+ <div class="node" style="left:calc(62% + 5px);top:53px;width:16px;height:16px;background:#3DFB7F"></div>`},
+
+{id:28,cat:"design",title:"حجم العقدة بعدد روابطها",
+ place:"أحجام العقد — قراءة أهمية الموقع بصريًا.",
+ desc:"المواقع كثيرة الروابط (العُقد المحورية) تكبر عقدُها تدريجيًا، والصغيرة المنعزلة تصغر — الطبولوجيا تُقرأ من الأحجام.",
+ impl:"نصف القطر = `NODE_RADIUS×(1+0.12×min(عدد الروابط,4))` — عدد الروابط لكل موقع يُحسب مرة واحدة من `ui.links` بقائمة `remember`.",
+ pv:`<div class="node" style="left:40%;top:36px;width:34px;height:34px;box-shadow:0 0 14px rgba(56,189,248,.4)"></div>
+ <div class="node" style="left:14%;top:66px;width:16px;height:16px;background:#3DFB7F"></div>
+ <div class="node" style="left:74%;top:62px;width:20px;height:20px;background:#FFC857"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="45%" y1="62" x2="17%" y2="72" stroke="#38BDF8" stroke-width="2" opacity=".5"/><line x1="52%" y1="60" x2="78%" y2="70" stroke="#38BDF8" stroke-width="2" opacity=".5"/></svg>`},
+
+{id:29,cat:"design",title:"أقواس منحنية بدل الخطوط المستقيمة",
+ place:"شكل الروابط كلها — طابع الأبراج السماوية.",
+ desc:"الخطوط المستقيمة تصير أقواسًا منحنية انحناءً لطيفًا كنقاط الأبراج المرسومة — نعومة كونية بلا غموض في الاتجاه.",
+ impl:"`drawPath` بمسار `quadraticBezierTo` نقطة تحكمه عمودية على منتصف الوتر بإزاحة ثابتة نسبية للطول — بديل مباشر لكل `drawLine`.",
+ pv:`<div class="node" style="left:12%;top:72px;width:18px;height:18px"></div><div class="node" style="left:76%;top:34px;width:18px;height:18px;background:#3DFB7F"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><path d="M 50 82 Q 160 30 260 44" stroke="#38BDF8" stroke-width="2.5" fill="none" opacity=".7"/></svg>`},
+
+{id:30,cat:"design",title:"وضع خريطة الأبراج الكامل",
+ place:"إعادة تنسيق شاملة لهوية واجهة المجرة.",
+ desc:"الشبكة كلها تتحول لخريطة أبراج كلاسيكية: عقد بيضاء بحلقات ملونة، خطوط أرق وأنعم، والأسماء بخط الرقعة تحت كل عقدة كعناوين الخرائط.",
+ impl:"حزمة تعديلات تصميمية في حلقة الرسم الحالية: ألوان العقد→أبيض/حلقات، سماكة الخطوط 1.5، أسلوب النص بخط العناوين `ArefRuqaa` — بلا أي منطق جديد.",
+ pv:`<div class="starfield"></div>
+ <div style="position:absolute;left:20%;top:34px;width:16px;height:16px;border-radius:50%;background:#E8F6FF;border:2px solid #38BDF8"></div>
+ <div style="position:absolute;left:58%;top:26px;width:13px;height:13px;border-radius:50%;background:#E8F6FF;border:2px solid #FFC857"></div>
+ <div style="position:absolute;left:72%;top:66px;width:14px;height:14px;border-radius:50%;background:#E8F6FF;border:2px solid #3DFB7F"></div>
+ <svg style="position:absolute;inset:0" width="100%" height="100%"><line x1="24%" y1="42" x2="61%" y2="33" stroke="#9fd6ff" stroke-width="1.2" opacity=".65"/><line x1="62%" y1="34" x2="75%" y2="72" stroke="#9fd6ff" stroke-width="1.2" opacity=".65"/></svg>
+ <span class="lbl" style="left:23%;top:56px;font-family:'Times New Roman',serif;color:#E8F6FF;font-size:10px">البرج الأول</span>
+ <span class="lbl" style="left:76%;top:86px;font-family:'Times New Roman',serif;color:#E8F6FF;font-size:10px">برج العقدة</span>`}
+];
+
+/* ═══════════ حالة الاختيار (مقبول / مرفوض / بلا إجابة) ═══════════ */
+const KEY="galaxy-ui-choices-v1";
+let state={};
+try{ state=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){ state={}; }
+const save=()=>{ try{ localStorage.setItem(KEY,JSON.stringify(state)); }catch(e){} };
+const statusOf=id=>state[id]||"skip";
+
+/* ═══════════ بناء الواجهة ═══════════ */
+const content=document.getElementById("content");
+let filter="all";
+
+function catHeader(key){
+  const c=CATS[key], ids=OPTIONS.filter(o=>o.cat===key);
+  return `<div class="cat-head"><h2>${c.name}</h2><span class="tag">${c.tag}</span>
+    <span class="tag">${ids[0].id}–${ids[ids.length-1].id}</span><div class="line"></div></div>`;
+}
+
+function card(o){
+  const st=statusOf(o.id);
+  const cls= st==="ok" ? "card sel" : st==="no" ? "card rej" : "card";
+  const badge= st==="ok" ? `<span class="badge ok">✅ مقبول</span>` :
+               st==="no" ? `<span class="badge no">❌ مرفوض</span>` : "";
+  return `<article class="${cls}" data-id="${o.id}" data-cat="${o.cat}">
+    ${badge}
+    <div class="card-head"><span class="num">${o.id})</span><h3>${o.title}</h3></div>
+    <div class="stage">${o.pv}</div>
+    <div class="card-body">
+      <p class="place">📍 <b>مكانه في التطبيق:</b> ${o.place}</p>
+      <p class="desc">${o.desc}</p>
+      <details><summary>طريقة التنفيذ المقترحة (Compose)</summary><p>${o.impl}</p></details>
+    </div>
+    <div class="acts">
+      <button class="act ${st==="ok"?"ok-on":""}" data-set="ok">✅ قبول</button>
+      <button class="act ${st==="no"?"no-on":""}" data-set="no">❌ رفض</button>
+    </div>
+  </article>`;
+}
+
+function render(){
+  let html="";
+  for(const key of Object.keys(CATS)){
+    const items=OPTIONS.filter(o=>o.cat===key && (filter==="all"||statusOf(o.id)===filter));
+    if(!items.length) continue;
+    html+=catHeader(key)+`<div class="grid">${items.map(card).join("")}</div>`;
+  }
+  content.innerHTML=html;
+  renderSummary();
+}
+
+function renderSummary(){
+  const n=OPTIONS.length;
+  const ok=OPTIONS.filter(o=>statusOf(o.id)==="ok").length;
+  const no=OPTIONS.filter(o=>statusOf(o.id)==="no").length;
+  const sk=n-ok-no;
+  document.getElementById("summary").innerHTML=
+    `<span class="chip">الإجمالي <b>${n}</b></span>
+     <span class="chip ok">✅ مقبول <b>${ok}</b></span>
+     <span class="chip no">❌ مرفوض <b>${no}</b></span>
+     <span class="chip sk">⬜ بلا إجابة <b>${sk}</b></span>
+     <div class="filters">
+       ${[["all","الكل"],["ok","المقبول"],["no","المرفوض"],["skip","بلا إجابة"]].map(([k,t])=>
+        `<button class="fbtn ${filter===k?"on":""}" data-f="${k}">${t}</button>`).join("")}
+     </div>`;
+  document.getElementById("expHint").textContent =
+    ok+no===0 ? "لم تختر بعد — انقر البطاقات أولًا" :
+    `اخترت ${ok} قبولًا و${no} رفضًا — جاهز للتصدير`;
+}
+
+/* ═══════════ التفاعل: نقر البطاقة يبدّل الحالة ثلاثيًا، والأزرار مباشرة ═══════════ */
+content.addEventListener("click",e=>{
+  const btn=e.target.closest(".act");
+  const cardEl=e.target.closest(".card");
+  if(!cardEl) return;
+  const id=+cardEl.dataset.id;
+  if(btn){ // زر صريح: قبول/رفض (ضغطه مرة ثانية يلغي الاختيار)
+    const want=btn.dataset.set;
+    state[id]= statusOf(id)===want ? "skip" : want;
+  }else{
+    if(e.target.closest("summary")||e.target.closest("details")) return;
+    const cur=statusOf(id);
+    state[id]= cur==="skip" ? "ok" : cur==="ok" ? "no" : "skip";
+  }
+  save(); render();
+});
+
+document.addEventListener("click",e=>{
+  const f=e.target.closest(".fbtn");
+  if(f){ filter=f.dataset.f; render(); }
+});
+
+document.getElementById("resetBtn").addEventListener("click",()=>{
+  if(confirm("إعادة تعيين كل الاختيارات؟")){ state={}; save(); render(); }
+});
+
+/* ═══════════ تصدير اختيارات.md ═══════════ */
+const CAT_NAME={nodes:"عُقد",links:"روابط",space:"خلفية",motion:"انتقالات",design:"تصميم"};
+const stateMd={ok:"✅ مقبول",no:"❌ مرفوض",skip:"⬜ بلا إجابة"};
+
+function buildMarkdown(){
+  const n=OPTIONS.length;
+  const ok=OPTIONS.filter(o=>statusOf(o.id)==="ok").length;
+  const no=OPTIONS.filter(o=>statusOf(o.id)==="no").length;
+  const sk=n-ok-no;
+  let dateStr;
+  try{
+    dateStr=new Intl.DateTimeFormat("ar-IQ",{weekday:"long",day:"numeric",month:"long",
+      year:"numeric",hour:"numeric",minute:"2-digit",hour12:true}).format(new Date());
+  }catch(e){ dateStr=new Date().toISOString(); }
+
+  let md=`# اختيارات مقترحات الانيميشن — تطبيق مجرة
+
+> صُدِّر من ملف \`مقترحات_واجهة_المجرة.html\` بتاريخ: ${dateStr}
+>
+> هذه إجابات جلسة مقترحات الانيميشن والتصميم الخاصة بواجهة المجرة (تحضير الإصدار القادم بعد 2.5.0). تُنفَّذ الاختيارات المقبولة على كود Kotlin في الجلسة التالية — اقتراحًا اقتراحًا حسب ترقيمه هنا، داخل \`GalaxyNetworkScreen.kt\` و\`GalaxyAnim.kt\`.
+
+## الخلاصة
+
+| البند | العدد |
+|---|---|
+| إجمالي المقترحات | ${n} |
+| تمت الإجابة | ${ok+no} |
+| مقبول | ${ok} |
+| مرفوض | ${no} |
+| بلا إجابة | ${sk} |
+
+## الاختيارات التفصيلية
+
+`;
+  for(const o of OPTIONS){
+    const st=statusOf(o.id);
+    md+=`### ${o.id}) ${o.title} — [${CAT_NAME[o.cat]}]
+
+مكانه في التطبيق: ${o.place}
+
+الوصف: ${o.desc}
+
+طريقة التنفيذ المقترحة (Compose): ${o.impl}
+
+**اختياري: ${stateMd[st]}**
+
+---
+
+`;
+  }
+  md+=`> ملاحظة: الاختيارات المعلمة بـ «⬜ بلا إجابة» لم يُتخذ فيها قرار — لا تُنفَّذ.
+`;
+  return md;
+}
+
+document.getElementById("exportBtn").addEventListener("click",()=>{
+  const md=buildMarkdown();
+  const blob=new Blob(["\uFEFF"+md],{type:"text/markdown;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="اختيارات.md";
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); },400);
+});
+
+render();
+</script>
+</body>
+</html>
