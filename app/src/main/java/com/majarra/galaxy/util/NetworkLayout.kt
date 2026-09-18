@@ -40,7 +40,9 @@ object NetworkLayout {
     private const val GRAVITY = 0.0035f        // شدّ نحو المركز
     private const val DAMPING = 0.85f          // إخماد السرعة
     private const val MAX_STEP = 14f           // سقف الإزاحة في التكرار الواحد
-    private const val GOLDEN_ANGLE = PI * (3.0 - sqrt(5.0))
+
+    // ليست ثابتة ترجمة (فيها استدعاء دالة) لذلك عادية لا const
+    private val GOLDEN_ANGLE = PI * (3.0 - sqrt(5.0))
 
     /**
      * يحسب مواضع العقد.

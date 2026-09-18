@@ -10,6 +10,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -51,13 +53,13 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.input.pointer.awaitEachGesture
-import androidx.compose.ui.input.pointer.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -149,8 +151,10 @@ class GalaxyNetworkViewModel @Inject constructor(
         _overrides,
         _linkingFromId
     ) { sites, links, overrides, linkingFrom ->
-        val key = sites.map { it.id }.sorted() to
-            links.map { it.fromSiteId to it.toSiteId }.sorted()
+        // Pair لا يقارن مباشرة: ترتيب صريح بالطرفين لعلامة التوزيع
+        val linkPairs = links.map { it.fromSiteId to it.toSiteId }
+            .sortedWith(compareBy({ it.first }, { it.second }))
+        val key = sites.map { it.id }.sorted() to linkPairs
         if (key != layoutKey) {
             layoutKey = key
             baseLayout = NetworkLayout.compute(
@@ -433,8 +437,8 @@ fun GalaxyNetworkScreen(
 
             val pulse = linkPulse.value
             withTransform({
-                translate(pan = transform.pan)
-                scale(transform.zoom, pivot = Offset.Zero)
+                translate(transform.pan.x, transform.pan.y)
+                scale(transform.zoom, transform.zoom, Offset.Zero)
             }) {
                 // 1) الخطوط أولًا حتى تمر تحت العقد
                 for (link in ui.links) {
