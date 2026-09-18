@@ -276,7 +276,7 @@ fun MorphingActionButton(
  * (0 → 125% → 100%) في خانته (اختيار 4-2).
  */
 @Composable
-fun PinDots(pin: String, maxLen: Int = 8, modifier: Modifier = Modifier) {
+fun PinDots(pin: String, modifier: Modifier = Modifier, maxLen: Int = 8) {
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -332,8 +332,8 @@ fun PinDots(pin: String, maxLen: Int = 8, modifier: Modifier = Modifier) {
 @Composable
 fun DrawnCheck(
     checked: Boolean,
-    onToggle: ((Boolean) -> Unit)? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onToggle: ((Boolean) -> Unit)? = null
 ) {
     val fraction by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
