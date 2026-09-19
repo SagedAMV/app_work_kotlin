@@ -13,16 +13,18 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,10 +73,13 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -528,16 +533,69 @@ private fun DueSitesBanner(
 
 /* ═══════════════════ صف موقع في القائمة ═══════════════════ */
 
+/* ألوان الخلفية المنكشفة أثناء السحب — ثوابت ملف لأنها تُستعمل في
+ * صندوقَي الكشف وفي توهج إطار الموقع المتأخر معًا. */
+private val SwipeDeleteColor = Color(0xFFFF5A5A)
+private val SwipeArchiveColor = Color(0xFFFFC857)
+
+/** نصف خلفية «الحذف» المنكشفة — شفافته تتبع مسافة السحب الموجبة */
+@Composable
+private fun RowScope.SwipeDeleteReveal(reveal: Float) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .background(SwipeDeleteColor.copy(alpha = 0.12f + 0.78f * reveal)),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.graphicsLayer { alpha = reveal }
+        ) {
+            Icon(Icons.Filled.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+            Text("حذف", color = Color.White, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+/** نصف خلفية «الأرشفة» المنكشفة — شفافته تتبع مسافة السحب السالبة */
+@Composable
+private fun RowScope.SwipeArchiveReveal(reveal: Float) {
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .background(SwipeArchiveColor.copy(alpha = 0.10f + 0.72f * reveal)),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.graphicsLayer { alpha = reveal }
+        ) {
+            Icon(Icons.Filled.Archive, contentDescription = null, tint = Color(0xFF3A2A00), modifier = Modifier.size(18.dp))
+            Text("أرشفة", color = Color(0xFF3A2A00), style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
 /**
- * صف موقع — النسخة 2.6 (الجولة الثالثة):
- * - اختيار 45: بطاقة بزجاجية خفيفة (تدرج من لون التصنيف)، شريط جانبي
- *   بلون التصنيف على جهة البداية، وإطار متوهج أحمر إن كان الموقع
- *   متجاوزًا لموعده، وحلقة عد تنازلي للاستحقاق (اختيار 37).
- * - اختيار 42: البطاقة النشطة قابلة للسحب — يسارًا تكشف «أرشفة»
- *   ويمينًا تكشف «حذفًا» (بتأكيد لاحق). السحب يدوي بـ `Animatable`
- *   و`detectDragGestures` (واجهات مستقرة بلا تجريبية) مع مقاومة بعد
- *   الحد الأقصى وعودة بنابض عند الإفلات دون العتبة.
- * - البطاقات المؤرشفة بلا سحب (لها زر استعادة فقط).
+ * صف موقع — النسخة 2.7 (جلسة تنفيذ اختيارات الاختيار 1 ثلاثي):
+ * - المشكلة 1 (تمرير القائمة ينحرف): السحب الجانبي أصبح مقفل المحور —
+ *   لا يبدأ إلا بعد أن تتجاوز الحركة الأفقية عتبة النظام وهي الغالبة؛
+ *   الحركة العمودية لا تُستهلك في البطاقة أبدًا فتصل كاملة لقائمة
+ *   `LazyColumn`. كان `detectDragGestures` القديم يلتقط أي اتجاه
+ *   ويستهلك الحدث فيسرق النزول في القائمة.
+ * - المشكلة 2 (السحب عكس الإصبع): الإزاحة الآن بـ `absoluteOffset`
+ *   الفيزيائية التي لا تعكسها اتجاهات التخطيط — كانت `offset` تقلب
+ *   القيمة الموجبة في اتجاه العربية (الموجب يدفع يسارًا في RTL)
+ *   بينما إشارات اللمس فيزيائية دائمًا. كما رُتّب نصفا الخلفية
+ *   المنكشفة حسب اتجاه التخطيط حتى يطابق الفعل المنكشف جهة السحب.
+ * - ثوابت من الإصدارات السابقة: بطاقة بزجاجية خفيفة (اختيار 45)،
+ *   شريط جانبي بلون التصنيف، إطار متوهج للمتأخر، حلقة عد تنازلي
+ *   (اختيار 37)، مقاومة بعد الحد الأقصى وعودة بنابض، والمؤرشفة بلا
+ *   سحب (زر استعادة فقط).
  */
 @Composable
 private fun SiteRow(
@@ -575,61 +633,88 @@ private fun SiteRow(
     val threshold = with(density) { 130.dp.toPx() }
     val offsetX = remember(site.id) { Animatable(0f) }
     val scope = rememberCoroutineScope()
-    val deleteColor = Color(0xFFFF5A5A)
-    val archiveColor = Color(0xFFFFC857)
     // نسب انكشاف الفعلين حسب مسافة السحب (0..1)
     val deleteReveal = (offsetX.value / threshold).coerceIn(0f, 1f)
     val archiveReveal = (-offsetX.value / threshold).coerceIn(0f, 1f)
 
+    val layoutDirection = LocalLayoutDirection.current
+
     Box(modifier = Modifier.fillMaxWidth()) {
-        // الخلفية المنكشفة: الحذف في النصف الأيسر والأرشفة في الأيمن
-        // (السحب يمينًا يزيح البطاقة فيظهر الأيسر = حذف، والعكس أرشفة)
+        // الخلفية المنكشفة — ترتيب نصفيها حسب اتجاه التخطيط (تتمة
+        // اختيار المشكلة 2): بالإزاحة المطلقة السحب يمينًا يزيح البطاقة
+        // يمينًا فيكشف النصف الأيسر دائمًا، وعتبة السحب الموجبة تعني
+        // «حذفًا» — فيجب أن يحمل النصف الأيسر صندوق الحذف. الأيسر هو
+        // آخر أبناء `Row` في الاتجاه العربي وأولهم في اللاتيني، لذا
+        // يُعكس الترتيب هنا. السحب يسارًا يكشف الأرشفة بالتماثل.
         Row(
             modifier = Modifier
                 .matchParentSize()
                 .clip(RoundedCornerShape(16.dp))
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(deleteColor.copy(alpha = 0.12f + 0.78f * deleteReveal)),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.graphicsLayer { alpha = deleteReveal }
-                ) {
-                    Icon(Icons.Filled.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                    Text("حذف", color = Color.White, style = MaterialTheme.typography.labelLarge)
-                }
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(archiveColor.copy(alpha = 0.10f + 0.72f * archiveReveal)),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.graphicsLayer { alpha = archiveReveal }
-                ) {
-                    Icon(Icons.Filled.Archive, contentDescription = null, tint = Color(0xFF3A2A00), modifier = Modifier.size(18.dp))
-                    Text("أرشفة", color = Color(0xFF3A2A00), style = MaterialTheme.typography.labelLarge)
-                }
+            if (layoutDirection == LayoutDirection.Rtl) {
+                SwipeArchiveReveal(archiveReveal)
+                SwipeDeleteReveal(deleteReveal)
+            } else {
+                SwipeDeleteReveal(deleteReveal)
+                SwipeArchiveReveal(archiveReveal)
             }
         }
 
         // البطاقة الأمامية المنزلقة
         Box(
             modifier = Modifier
-                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                // اختيار المشكلة 2: إزاحة مطلقة فيزيائية لا تعكسها
+                // اتجاهات التخطيط — البطاقة تتبع الإصبع في العربية
+                // واللاتينية معًا (كانت `offset` تقلب الموجب في RTL).
+                .absoluteOffset { IntOffset(offsetX.value.roundToInt(), 0) }
                 .pointerInput(site.id) {
-                    detectDragGestures(
-                        onDragEnd = {
+                    // اختيار المشكلة 1: قفل المحور الأفقي. السحب الجانبي
+                    // يبدأ فقط بعد أن تتجاوز الحركة الأفقية عتبة النظام
+                    // وهي الغالبة؛ أي حركة عمودية لا تُستهلك هنا أبدًا
+                    // فتصل كاملة لقائمة التمرير وتنزل القائمة طبيعيًا.
+                    // (بدل `detectDragGestures` التي كانت تلتقط كل اتجاه
+                    // وتستهلك الحدث فيسرق النزول في القائمة.)
+                    val touchSlop = viewConfiguration.touchSlop
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        var accX = 0f
+                        var accY = 0f
+                        var dragging = false
+                        var lastX = down.position.x
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            // نتتبع إصبع البداية فقط ونهمل أي أصابع أخرى
+                            val change = event.changes.firstOrNull { it.id == down.id }
+                                ?: event.changes.firstOrNull()
+                                ?: break
+                            if (!change.pressed) break
+                            if (!dragging) {
+                                // قبل التسليح: إن خطفت جهة أخرى الحدث
+                                // (القائمة بدأت تمريرًا) ننسحب بلا أثر
+                                if (change.isConsumed) break
+                                accX += change.position.x - change.previousPosition.x
+                                accY += change.position.y - change.previousPosition.y
+                                if (abs(accX) > touchSlop && abs(accX) > abs(accY)) {
+                                    // غلبة أفقية: بدأ سحب البطاقة
+                                    dragging = true
+                                    lastX = change.position.x
+                                    change.consume()
+                                } else if (abs(accY) > touchSlop) {
+                                    // غلبة عمودية: الإيماءة للقائمة نهائيًا
+                                    break
+                                }
+                            } else {
+                                val dx = change.position.x - lastX
+                                lastX = change.position.x
+                                val raw = offsetX.value + dx
+                                // مقاومة خفيفة بعد 60٪ من عرض البطاقة
+                                val limit = size.width * 0.6f
+                                scope.launch { offsetX.snapTo(raw.coerceIn(-limit, limit)) }
+                                change.consume()
+                            }
+                        }
+                        if (dragging) {
+                            // نهاية السحب: نفس منطق العتبات السابق
                             val x = offsetX.value
                             scope.launch {
                                 when {
@@ -650,14 +735,7 @@ private fun SiteRow(
                                     )
                                 }
                             }
-                        },
-                        onDragCancel = { scope.launch { offsetX.animateTo(0f, tween(150)) } }
-                    ) { change, dragAmount ->
-                        val raw = offsetX.value + dragAmount.x
-                        // مقاومة خفيفة بعد 60٪ من عرض البطاقة
-                        val limit = size.width * 0.6f
-                        scope.launch { offsetX.snapTo(raw.coerceIn(-limit, limit)) }
-                        change.consume()
+                        }
                     }
                 }
         ) {
@@ -684,7 +762,7 @@ private fun SiteRow(
                     // توهج إطار أحمر للمتأخر عن موعده
                     if (overdue) {
                         drawRoundRect(
-                            color = deleteColor.copy(alpha = 0.55f),
+                            color = SwipeDeleteColor.copy(alpha = 0.55f),
                             cornerRadius = CornerRadius(16.dp.toPx()),
                             style = Stroke(width = 1.8.dp.toPx())
                         )

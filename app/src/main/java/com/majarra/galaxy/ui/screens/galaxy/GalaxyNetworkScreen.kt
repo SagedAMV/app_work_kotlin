@@ -132,10 +132,16 @@ import kotlin.math.sqrt
  *        12 رسم عند الدخول، 13 سماكة أثناء السحب، 14 امتداد الجديد
  *  السماء: 15 نجوم ثابتة، 16 وميض، 17 سدم، 18 عمق التحريك،
  *        19 توهج مركزي، 20 حلقات رادار
- *  الحركة: 21 دخول بدوران، 22 ملاءمة نابضة، 23 أسماء حسب التكبير،
+ * الحركة: 21 دخول بدوران، 22 ملاءمة نابضة، 23 أسماء حسب التكبير،
  *        24 غبار الربط، 25 مدار شعار الربط، 26 شهاب النجاح
- *  التصميم: 27+30 عقد بحلقات ملونة (دمج)، 28 حجم حسب الروابط،
+ * التصميم: 27+30 عقد بحلقات ملونة (دمج)، 28 حجم حسب الروابط،
  *        29 أقواس منحنية
+ *
+ * جلسة تنفيذ اختيارات (المشكلة 3): إعادة تهيئة مراجع القرصة
+ * (المركز والمدى) عند تغيّر عدد الأصابع مع تجميد تلك اللقطة —
+ * كان المركز يُحفظ على موضع الإصبع الأول، وعند نزول الثاني ينتقل
+ * لمنتصف المسافة بينهما فيُطبَّق الفرق القديم في لقطة واحدة:
+ * القفزة المفاجئة التي كانت تحدث عند بدء التكبير.
  * ============================================================ */
 
 /** عقدة غادر موقعها (حُذف) حديثًا — تُرسم وهي تذبل بدل الاختفاء المفاجئ (مقترح 8) */
@@ -602,10 +608,20 @@ fun GalaxyNetworkScreen(
                         var lastSpan = 0f
 
                         var pressed: List<PointerInputChange>
+                        var prevCount = 1 // الإيماءة بدأت بإصبع واحد
                         do {
                             val event = awaitPointerEvent()
                             pressed = event.changes.filter { it.pressed }
                             if (pressed.isEmpty()) break
+
+                            // اختيار المشكلة 3: عند انضمام إصبع أو رفعه
+                            // يتغيّر تعريف المركز (من إصبع واحد إلى منتصف
+                            // إصبعين أو العكس). تطبيق فرق المركز القديم على
+                            // المركز الجديد في تلك اللقطة كان سبب القفزة
+                            // المفاجئة — الحل: إعادة تهيئة المراجع وتجميد
+                            // هذه اللقطة بلا تحريك ولا تكبير.
+                            val countChanged = pressed.size != prevCount
+                            prevCount = pressed.size
 
                             if (pressed.size >= 2) {
                                 // تكبير بإصبعين مع تحريك مركز القرصة
@@ -619,17 +635,25 @@ fun GalaxyNetworkScreen(
                                     if (d > span) span = d
                                 }
                                 span *= 2f
-                                if (lastSpan > 0f && span > 0f) {
-                                    transform.zoomAbout(centroid, span / lastSpan)
+                                if (countChanged) {
+                                    // لقطة إعادة التهيئة: تحديث المراجع
+                                    // فقط — لا تحريك ولا تكبير
+                                    lastCentroid = centroid
+                                    lastSpan = span
+                                } else {
+                                    if (lastSpan > 0f && span > 0f) {
+                                        transform.zoomAbout(centroid, span / lastSpan)
+                                    }
+                                    transform.panBy(centroid - lastCentroid)
+                                    lastCentroid = centroid
+                                    lastSpan = span
                                 }
-                                transform.panBy(centroid - lastCentroid)
-                                lastCentroid = centroid
-                                lastSpan = span
                                 pressed.forEach { it.consume() }
                             } else {
                                 val change = pressed.first()
-                                if (lastSpan > 0f) {
-                                    // إصبع واحد بعد القرصة: تحديث المراجع بلا قفزة
+                                if (lastSpan > 0f || countChanged) {
+                                    // إصبع واحد بعد قرصة أو بعد تغيّر عدد
+                                    // الأصابع: تحديث المراجع بلا قفزة
                                     lastCentroid = change.position
                                     lastSpan = 0f
                                 }
