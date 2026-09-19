@@ -1,32 +1,41 @@
 package com.majarra.galaxy.ui.screens.emergency
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
@@ -44,6 +53,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -58,6 +72,7 @@ import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.usecase.SaveEmergencyVisitUseCase
 import com.majarra.galaxy.ui.anim.DrawnCheck
+import com.majarra.galaxy.ui.anim.GalaxyNumberMorph
 import com.majarra.galaxy.ui.anim.GalaxySnackbarHost
 import com.majarra.galaxy.ui.anim.GlowButton
 import com.majarra.galaxy.ui.anim.StaggeredItem
@@ -243,37 +258,16 @@ fun EmergencyVisitScreen(
                         supportingText = reasonError?.let { { Text(it) } }
                     )
 
-                    // أزرار النتيجة الثلاثة بجانب بعض حسب تعليمات هذه الجلسة
+                    // نتيجة النزول بزر مقسّم بحبة منزلق (اختيار 38 من
+                    // الجولة الثالثة) بدل ثلاثة أزرار منفصلة
                     SectionTitle("نتيجة النزول")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutcomeChoice(
-                            outcome = VisitOutcome.NO_PROBLEM,
-                            selected = outcome == VisitOutcome.NO_PROBLEM,
-                            onSelect = {
-                                outcome = it
-                                outcomeError = null
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutcomeChoice(
-                            outcome = VisitOutcome.RESOLVED,
-                            selected = outcome == VisitOutcome.RESOLVED,
-                            onSelect = {
-                                outcome = it
-                                outcomeError = null
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                        OutcomeChoice(
-                            outcome = VisitOutcome.UNRESOLVED,
-                            selected = outcome == VisitOutcome.UNRESOLVED,
-                            onSelect = {
-                                outcome = it
-                                outcomeError = null
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+                    OutcomeSegmented(
+                        selected = outcome,
+                        onSelect = {
+                            outcome = it
+                            outcomeError = null
+                        }
+                    )
                     outcomeError?.let {
                         Text(
                             it,
@@ -342,48 +336,117 @@ fun EmergencyVisitScreen(
     }
 }
 
-/* ═══════════════════ زر نتيجة النزول ═══════════════════ */
+/* ═══════════════════ زر نتيجة النزول المقسّم ═══════════════════ */
 
 /**
- * زر نتيجة واحد من الثلاثة: غير محدد = مخطط، محدد = معبأ بلونه الدلالي
- * (أخضر/أساسي/أحمر). الألوان من نسق التطبيق لا قيم ثابتة.
+ * زر النتيجة المقسّم (اختيار 38 = خيار 12 من اختيارات الجولة
+ * الثالثة): حبة بلون النتيجة الدلالي تنزلق بنابض خلف الخيار المختار
+ * مع ظهور علامة صح داخله — نمط M3 SegmentedButton بمؤشر مخصص.
+ * المواقع تُقاس فعليًا عند التخطيط فيصح الانزلاق بأي اتجاه عرض.
  */
 @Composable
-private fun OutcomeChoice(
-    outcome: VisitOutcome,
-    selected: Boolean,
-    onSelect: (VisitOutcome) -> Unit,
-    modifier: Modifier = Modifier
+private fun OutcomeSegmented(
+    selected: VisitOutcome?,
+    onSelect: (VisitOutcome) -> Unit
 ) {
-    val selectedColor = when (outcome) {
-        VisitOutcome.NO_PROBLEM -> MaterialTheme.colorScheme.tertiary
-        VisitOutcome.RESOLVED -> MaterialTheme.colorScheme.primary
-        VisitOutcome.UNRESOLVED -> MaterialTheme.colorScheme.error
-    }
-    val label: @Composable () -> Unit = {
-        Text(
-            outcome.label,
-            textAlign = TextAlign.Center,
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(vertical = 2.dp)
-        )
-    }
-    if (selected) {
-        Button(
-            onClick = { onSelect(outcome) },
-            modifier = modifier,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = selectedColor,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ),
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
-        ) { label() }
-    } else {
-        OutlinedButton(
-            onClick = { onSelect(outcome) },
-            modifier = modifier,
-            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 10.dp)
-        ) { label() }
+    val outcomes = VisitOutcome.entries
+    val selectedIndex = selected?.let { s -> outcomes.indexOf(s) } ?: -1
+    val density = LocalDensity.current
+
+    val rowLeftPx = remember { mutableStateOf(0f) }
+    val itemLayouts = remember { mutableStateOf<Map<Int, Pair<Float, Float>>>(emptyMap()) }
+    val measured = if (selectedIndex >= 0) itemLayouts.value[selectedIndex] else null
+
+    val pillLeft by animateDpAsState(
+        targetValue = with(density) { ((measured?.first ?: 0f) - rowLeftPx.value).toDp() },
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
+        label = "outcome-pill-left"
+    )
+    val pillWidth by animateDpAsState(
+        targetValue = with(density) { (measured?.second ?: 0f).toDp() },
+        animationSpec = spring(dampingRatio = 0.75f, stiffness = 400f),
+        label = "outcome-pill-width"
+    )
+    val pillColor by animateColorAsState(
+        targetValue = when (selected) {
+            VisitOutcome.NO_PROBLEM -> MaterialTheme.colorScheme.tertiary
+            VisitOutcome.RESOLVED -> MaterialTheme.colorScheme.primary
+            VisitOutcome.UNRESOLVED -> MaterialTheme.colorScheme.error
+            null -> Color.Transparent
+        },
+        animationSpec = tween(280),
+        label = "outcome-pill-color"
+    )
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .onPlaced { rowLeftPx.value = it.positionInRoot().x }
+        ) {
+            if (measured != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopLeft)
+                        .absoluteOffset(x = pillLeft, y = 3.dp)
+                        .width(pillWidth)
+                        .height(38.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .background(pillColor)
+                )
+            }
+            Row(Modifier.fillMaxWidth()) {
+                outcomes.forEachIndexed { index, outcome ->
+                    val isSelected = index == selectedIndex
+                    val textColor = when {
+                        !isSelected -> MaterialTheme.colorScheme.onSurfaceVariant
+                        outcome == VisitOutcome.UNRESOLVED -> Color.White
+                        else -> Color(0xFF00243A)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPlaced { c ->
+                                val m = c.positionInRoot().x to c.size.width.toFloat()
+                                if (itemLayouts.value[index] != m) {
+                                    itemLayouts.value = itemLayouts.value + (index to m)
+                                }
+                            }
+                            .clickable { onSelect(outcome) }
+                            .padding(vertical = 10.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            AnimatedVisibility(
+                                visible = isSelected,
+                                enter = fadeIn(tween(180)) + scaleIn(tween(220)),
+                                exit = fadeOut(tween(120))
+                            ) {
+                                Icon(
+                                    Icons.Filled.Check,
+                                    contentDescription = null,
+                                    tint = textColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                            Text(
+                                outcome.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = textColor,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -474,11 +537,23 @@ private fun UsedMaterialsSection(
                     }
                 }
                 if (selected.isNotEmpty()) {
-                    Text(
-                        "المواد المختارة: ${selected.size}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    // مروف الأرقام عند تغيّر عدد المواد المحددة
+                    // (اختيار 34 من الجولة الثالثة)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "المواد المختارة:",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        GalaxyNumberMorph(
+                            value = selected.size,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
         }

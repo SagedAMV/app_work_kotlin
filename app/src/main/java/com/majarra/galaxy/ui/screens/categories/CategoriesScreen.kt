@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -16,7 +17,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -45,6 +46,7 @@ import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.usecase.DeleteCategoryUseCase
 import com.majarra.galaxy.domain.usecase.SaveCategoryUseCase
 import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
+import com.majarra.galaxy.ui.anim.GalaxyRevealDialog
 import com.majarra.galaxy.ui.anim.SlidingColorPalette
 import com.majarra.galaxy.ui.components.ColorDot
 import com.majarra.galaxy.ui.components.ConfirmDialog
@@ -232,11 +234,24 @@ private fun CategoryDialog(
     var colorHex by rememberSaveable(existing?.id) { mutableStateOf(existing?.colorHex ?: PALETTE.first()) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (existing == null) "تصنيف جديد" else "تعديل التصنيف") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    // كشف دائري عند الفتح (اختيار 32 من الجولة الثالثة)
+    GalaxyRevealDialog(onDismissRequest = onDismiss) { requestClose ->
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    if (existing == null) "تصنيف جديد" else "تعديل التصنيف",
+                    style = MaterialTheme.typography.headlineSmall
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = {
@@ -259,14 +274,19 @@ private fun CategoryDialog(
                         error = null
                     }
                 )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
+                    Button(
+                        onClick = { onSave(name, colorHex) { message -> error = message } },
+                        enabled = name.isNotBlank()
+                    ) { Text("حفظ") }
+                }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSave(name, colorHex) { message -> error = message } },
-                enabled = name.isNotBlank()
-            ) { Text("حفظ") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
-    )
+        }
+    }
 }

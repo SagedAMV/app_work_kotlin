@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -22,7 +23,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -53,6 +54,7 @@ import com.majarra.galaxy.domain.usecase.DeleteMaterialUseCase
 import com.majarra.galaxy.domain.usecase.RenameMaterialUseCase
 import com.majarra.galaxy.domain.usecase.SaveMaterialUseCase
 import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
+import com.majarra.galaxy.ui.anim.GalaxyRevealDialog
 import com.majarra.galaxy.ui.anim.GalaxySnackbarHost
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.EmptyState
@@ -290,11 +292,20 @@ private fun MaterialEditDialog(
     var name by remember { mutableStateOf(initialName) }
     var error by remember { mutableStateOf<String?>(null) }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    // كشف دائري عند الفتح (اختيار 32 من الجولة الثالثة)
+    GalaxyRevealDialog(onDismissRequest = onDismiss) { requestClose ->
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.headlineSmall)
                 OutlinedTextField(
                     value = name,
                     onValueChange = {
@@ -313,14 +324,18 @@ private fun MaterialEditDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
+                    Button(
+                        onClick = { onSave(name) { message -> error = message } },
+                        enabled = name.isNotBlank()
+                    ) { Text("حفظ") }
+                }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onSave(name) { message -> error = message } },
-                enabled = name.isNotBlank()
-            ) { Text("حفظ") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }
-    )
+        }
+    }
 }

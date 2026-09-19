@@ -81,6 +81,7 @@ class MaintenanceLogRepositoryImpl @Inject constructor(
 ) : MaintenanceLogRepository {
     override fun observeBySite(siteId: Long): Flow<List<MaintenanceLog>> = dao.observeBySite(siteId)
     override suspend fun countAll(): Int = dao.countAll()
+    override suspend fun getAll(): List<MaintenanceLog> = dao.getAll()
     override suspend fun insert(log: MaintenanceLog): Long = dao.insert(log)
     override suspend fun delete(log: MaintenanceLog) = dao.delete(log)
 }

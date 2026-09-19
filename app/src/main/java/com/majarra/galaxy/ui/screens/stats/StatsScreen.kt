@@ -1,12 +1,19 @@
 package com.majarra.galaxy.ui.screens.stats
 
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
@@ -21,9 +28,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,15 +50,25 @@ import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import com.majarra.galaxy.domain.usecase.CheckMaintenanceDueUseCase
+import com.majarra.galaxy.ui.anim.GalaxyNumberMorph
 import com.majarra.galaxy.ui.anim.OdometerNumber
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.YearMonth
+import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 import javax.inject.Inject
+
+/** شهر واحد في أعمدة نشاط الصيانة (اختيار 35) */
+data class MonthStat(val label: String, val count: Int)
 
 /** أرقام شاشة الإحصائيات — تُحمَّل دفعة واحدة عند فتح الشاشة */
 data class StatsUi(
@@ -58,7 +80,9 @@ data class StatsUi(
     val attachmentsImages: Int = 0,
     val dueSites: Int = 0,
     val openWithdrawals: Int = 0,
-    val catalogMaterials: Int = 0
+    val catalogMaterials: Int = 0,
+    /** نشاط الصيانة لآخر ستة أشهر (اختيار 35 من الجولة الثالثة) */
+    val monthlyMaintenance: List<MonthStat> = emptyList()
 ) {
     val attachmentsFiles: Int get() = attachmentsTotal - attachmentsImages
 }
@@ -94,7 +118,30 @@ class StatsViewModel @Inject constructor(
                 attachmentsImages = images,
                 dueSites = runCatching { checkMaintenanceDue().size }.getOrDefault(0),
                 openWithdrawals = withdrawalRepo.countOpen(),
-                catalogMaterials = materialRepo.getAll().size
+                catalogMaterials = materialRepo.getAll().size,
+                monthlyMaintenance = buildMonthlyMaintenance()
+            )
+        }
+    }
+
+    /**
+     * توزيع سجلات الصيانة على آخر ستة أشهر (اختيار 35). قراءة واحدة
+     * لكل السجلات ثم عدّ محلي — بلا استعلام لكل شهر.
+     */
+    private suspend fun buildMonthlyMaintenance(): List<MonthStat> {
+        val logs = logRepo.getAll()
+        val thisMonth = YearMonth.now()
+        val arabic = Locale.forLanguageTag("ar")
+        return (5 downTo 0).map { back ->
+            val ym = thisMonth.minusMonths(back.toLong())
+            val count = logs.count { log ->
+                val z = Instant.ofEpochMilli(log.maintenanceDate)
+                    .atZone(ZoneId.systemDefault())
+                z.year == ym.year && z.monthValue == ym.monthValue
+            }
+            MonthStat(
+                label = ym.month.getDisplayName(TextStyle.SHORT, arabic),
+                count = count
             )
         }
     }
@@ -168,6 +215,9 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
             )
         }
 
+        // أعمدة نشاط الصيانة النابضة (اختيار 35 من الجولة الثالثة)
+        MaintenanceBarsCard(monthly = stats.monthlyMaintenance)
+
         SectionTitle("السحوبات والمواد الموحدة")
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatCard(
@@ -193,6 +243,85 @@ fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+/**
+ * أعمدة نشاط الصيانة الشهري (اختيار 35 = خيار 8 من اختيارات الجولة
+ * الثالثة): أعمدة تنمو بنابض مبالغ قليلًا (overshoot) عند الظهور
+ * بتأخير متتابع، مع القيمة الرقمية فوق كل عمود بمروف الأرقام.
+ */
+@Composable
+private fun MaintenanceBarsCard(monthly: List<MonthStat>) {
+    if (monthly.isEmpty()) return
+    GalaxyCard {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("نشاط الصيانة — آخر ٦ أشهر", style = MaterialTheme.typography.titleSmall)
+            if (monthly.all { it.count == 0 }) {
+                Text(
+                    "لا توجد سجلات صيانة في الأشهر الستة الأخيرة",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                val maxCount = monthly.maxOf { it.count }.coerceAtLeast(1)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(132.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Bottom
+                ) {
+                    monthly.forEachIndexed { index, month ->
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            GalaxyNumberMorph(
+                                value = month.count,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            // النمو بنابض مبالغ قليلًا وتأخير متتابع
+                            var grown by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                delay(120L + index * 90L)
+                                grown = true
+                            }
+                            val fullHeight = 8 + 84 * month.count / maxCount
+                            val height by animateDpAsState(
+                                targetValue = if (grown) fullHeight.dp else 8.dp,
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                    stiffness = Spring.StiffnessLow
+                                ),
+                                label = "bar-$index"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(height)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(
+                                        if (index == monthly.lastIndex) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                                        }
+                                    )
+                            )
+                            Text(
+                                month.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
             }
         }
     }

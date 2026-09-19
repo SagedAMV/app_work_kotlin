@@ -32,7 +32,13 @@ class SettingsRepositoryImpl @Inject constructor(
         return SettingsRepository.Prefs(
             darkMode = values[KEY_DARK]?.toBoolean() ?: true,
             lockEnabled = values[KEY_LOCK]?.toBoolean() ?: false,
-            hasPin = !values[KEY_PIN_HASH].isNullOrBlank()
+            hasPin = !values[KEY_PIN_HASH].isNullOrBlank(),
+            reminderDays = values[KEY_REMINDER_DAYS]?.toIntOrNull()
+                ?.coerceIn(
+                    SettingsRepository.MIN_REMINDER_DAYS,
+                    SettingsRepository.MAX_REMINDER_DAYS
+                )
+                ?: SettingsRepository.DEFAULT_REMINDER_DAYS
         )
     }
 
@@ -46,6 +52,14 @@ class SettingsRepositoryImpl @Inject constructor(
     override val current: SettingsRepository.Prefs get() = readPrefs()
 
     override suspend fun setDarkMode(enabled: Boolean) = put(KEY_DARK, enabled.toString())
+
+    override suspend fun setReminderDays(days: Int) = put(
+        KEY_REMINDER_DAYS,
+        days.coerceIn(
+            SettingsRepository.MIN_REMINDER_DAYS,
+            SettingsRepository.MAX_REMINDER_DAYS
+        ).toString()
+    )
 
     override suspend fun setLockEnabled(enabled: Boolean) {
         // لا معنى لتفعيل قفل بلا رمز محفوظ — الواجهة تمنع ذلك أيضًا،
@@ -99,6 +113,7 @@ class SettingsRepositoryImpl @Inject constructor(
         const val KEY_LAST_DUE_NOTICE = "last_due_notice_day"
         const val KEY_LAST_BACKUP_TS = "last_backup_ts"
         const val KEY_LAST_BACKUP_REMINDER = "last_backup_reminder_day"
+        const val KEY_REMINDER_DAYS = "reminder_days"
         const val PIN_MIN_LENGTH = 4
         const val PIN_MAX_LENGTH = 8
     }

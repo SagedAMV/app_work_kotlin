@@ -101,6 +101,9 @@ interface MaintenanceLogDao {
     @Query("SELECT COUNT(*) FROM maintenance_logs")
     suspend fun countAll(): Int
 
+    @Query("SELECT * FROM maintenance_logs")
+    suspend fun getAll(): List<MaintenanceLog>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(log: MaintenanceLog): Long
 

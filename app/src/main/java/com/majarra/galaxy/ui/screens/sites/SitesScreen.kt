@@ -1,6 +1,9 @@
 package com.majarra.galaxy.ui.screens.sites
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -8,12 +11,17 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -25,11 +33,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -39,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -50,12 +59,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,15 +84,19 @@ import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.usecase.ArchiveSiteUseCase
 import com.majarra.galaxy.domain.usecase.CheckMaintenanceDueUseCase
+import com.majarra.galaxy.domain.usecase.DeleteSiteUseCase
 import com.majarra.galaxy.domain.usecase.DueSite
 import com.majarra.galaxy.domain.usecase.ObserveSitesUseCase
 import com.majarra.galaxy.domain.usecase.SaveSiteUseCase
 import com.majarra.galaxy.ui.anim.BreathingDueBadge
+import com.majarra.galaxy.ui.anim.DueCountdownRing
 import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
+import com.majarra.galaxy.ui.anim.GalaxyRevealDialog
 import com.majarra.galaxy.ui.anim.GlowButton
 import com.majarra.galaxy.ui.anim.StaggeredItem
 import com.majarra.galaxy.ui.anim.rememberAlertPulse
 import com.majarra.galaxy.ui.components.ColorDot
+import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.formatDate
@@ -107,6 +130,7 @@ class SitesViewModel @Inject constructor(
     private val observeSites: ObserveSitesUseCase,
     private val saveSite: SaveSiteUseCase,
     private val archiveSite: ArchiveSiteUseCase,
+    private val deleteSite: DeleteSiteUseCase,
     categoryRepo: CategoryRepository,
     private val checkMaintenanceDue: CheckMaintenanceDueUseCase
 ) : ViewModel() {
@@ -173,6 +197,16 @@ class SitesViewModel @Inject constructor(
     fun restore(site: Site) {
         viewModelScope.launch { archiveSite(site, archived = false) }
     }
+
+    /** أرشفة موقع من القائمة مباشرة (سحب البطاقة — اختيار 42) */
+    fun archive(site: Site) {
+        viewModelScope.launch { archiveSite(site, archived = true) }
+    }
+
+    /** حذف نهائي بعد تأكيد (سحب البطاقة — اختيار 42) */
+    fun delete(site: Site) {
+        viewModelScope.launch { deleteSite(site) }
+    }
 }
 
 /** شاشة قائمة المواقع: شريط مستحق + بحث + فلاتر تصنيف/أرشيف + قائمة */
@@ -203,6 +237,13 @@ fun SitesScreen(
     // انهيار ارتفاع العنصر قبل إزالته من البيانات (مقترح 14)
     var collapsingId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
+    // أيام الاستحقاق لكل موقع — للحلقات العدّادة وشارات الحالة على
+    // البطاقات (اختيارا 37 و45 من الجولة الثالثة). المؤرشفة بلا مواعيد.
+    val dueDaysById = remember(dueSites) {
+        dueSites.associate { it.siteId to it.dueDate.daysFromNow() }
+    }
+    // موقع بانتظار تأكيد الحذف بعد سحبه (اختيار 42)
+    var siteToDelete by remember { mutableStateOf<Site?>(null) }
     // مفتاح الظهور المتتابع: يتغير مع البحث/الفلتر فتعاد حركة الدخول (مقترح 13)
     val staggerTrigger = "$query|" + when (currentFilter) {
         is ListFilter.Active -> "all"
@@ -335,6 +376,7 @@ fun SitesScreen(
                                     site = site,
                                     categories = categories,
                                     archived = showArchived,
+                                    dueDays = if (showArchived) null else dueDaysById[site.id],
                                     onClick = {
                                         // فتح التفاصيل مباشرة — انميشن واحد هو انتقال
                                         // التنقل نفسه (إصلاح الانميشن المزدوج)
@@ -347,7 +389,18 @@ fun SitesScreen(
                                             viewModel.restore(site)
                                             collapsingId = null
                                         }
-                                    }
+                                    },
+                                    // سحب البطاقة (اختيار 42): يسارًا أرشفة،
+                                    // يمينًا حذف بعد تأكيد
+                                    onSwipeArchive = {
+                                        collapsingId = site.id
+                                        scope.launch {
+                                            delay(260)
+                                            viewModel.archive(site)
+                                            collapsingId = null
+                                        }
+                                    },
+                                    onSwipeDelete = { siteToDelete = site }
                                 )
                             }
                         }
@@ -370,6 +423,20 @@ fun SitesScreen(
                     onError = reportError
                 )
             }
+        )
+    }
+
+    // تأكيد الحذف النهائي بعد سحبة اليمين (اختيار 42)
+    siteToDelete?.let { doomed ->
+        ConfirmDialog(
+            title = "حذف الموقع",
+            text = "سيُحذف الموقع «${doomed.name}» مع كل تفاصيله ومرفقاته وسجل صيانته نهائيًا.",
+            confirmText = "حذف",
+            onConfirm = {
+                viewModel.delete(doomed)
+                siteToDelete = null
+            },
+            onDismiss = { siteToDelete = null }
         )
     }
 }
@@ -426,12 +493,17 @@ private fun DueSitesBanner(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // حلقة عد تنازلي تستنزف وتتغير ألوانها حسب
+                        // الخطورة (اختيار 37 من الجولة الثالثة)
+                        DueCountdownRing(days = days, size = 38.dp)
                         Text(
                             due.siteName,
                             style = MaterialTheme.typography.bodyMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp)
                         )
                         // شارة تتنفس لونيًا للمتأخر (مقترح 16)
                         BreathingDueBadge(days)
@@ -451,48 +523,237 @@ private fun DueSitesBanner(
 
 /* ═══════════════════ صف موقع في القائمة ═══════════════════ */
 
+/**
+ * صف موقع — النسخة 2.6 (الجولة الثالثة):
+ * - اختيار 45: بطاقة بزجاجية خفيفة (تدرج من لون التصنيف)، شريط جانبي
+ *   بلون التصنيف على جهة البداية، وإطار متوهج أحمر إن كان الموقع
+ *   متجاوزًا لموعده، وحلقة عد تنازلي للاستحقاق (اختيار 37).
+ * - اختيار 42: البطاقة النشطة قابلة للسحب — يسارًا تكشف «أرشفة»
+ *   ويمينًا تكشف «حذفًا» (بتأكيد لاحق). السحب يدوي بـ `Animatable`
+ *   و`detectDragGestures` (واجهات مستقرة بلا تجريبية) مع مقاومة بعد
+ *   الحد الأقصى وعودة بنابض عند الإفلات دون العتبة.
+ * - البطاقات المؤرشفة بلا سحب (لها زر استعادة فقط).
+ */
 @Composable
 private fun SiteRow(
     site: Site,
     categories: List<Category>,
     archived: Boolean,
+    dueDays: Long?,
     onClick: () -> Unit,
-    onRestore: () -> Unit
+    onRestore: () -> Unit,
+    onSwipeArchive: () -> Unit,
+    onSwipeDelete: () -> Unit
 ) {
     val category = categories.firstOrNull { it.id == site.categoryId }
-    GalaxyCard(onClick = onClick) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (category != null) ColorDot(category.colorHex)
-                Text(
-                    site.name,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                if (archived) {
-                    OutlinedButton(onClick = onRestore, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
-                        Icon(Icons.Filled.Unarchive, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text("استعادة", modifier = Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelSmall)
-                    }
+    val categoryColor = category?.let { c ->
+        runCatching { Color(android.graphics.Color.parseColor(c.colorHex)) }
+            .getOrDefault(MaterialTheme.colorScheme.primary)
+    } ?: MaterialTheme.colorScheme.outline
+    val overdue = dueDays != null && dueDays <= 0
+
+    if (archived) {
+        // المؤرشفة: بطاقة عادية بزر استعادة — لا سحب هنا
+        GalaxyCard(onClick = onClick) {
+            SiteCardContent(
+                site = site,
+                category = category,
+                dueDays = null,
+                archived = true,
+                onRestore = onRestore
+            )
+        }
+        return
+    }
+
+    val density = LocalDensity.current
+    val threshold = with(density) { 130.dp.toPx() }
+    val offsetX = remember(site.id) { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    val deleteColor = Color(0xFFFF5A5A)
+    val archiveColor = Color(0xFFFFC857)
+    // نسب انكشاف الفعلين حسب مسافة السحب (0..1)
+    val deleteReveal = (offsetX.value / threshold).coerceIn(0f, 1f)
+    val archiveReveal = (-offsetX.value / threshold).coerceIn(0f, 1f)
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // الخلفية المنكشفة: الحذف في النصف الأيسر والأرشفة في الأيمن
+        // (السحب يمينًا يزيح البطاقة فيظهر الأيسر = حذف، والعكس أرشفة)
+        Row(
+            modifier = Modifier
+                .matchParentSize()
+                .clip(RoundedCornerShape(16.dp))
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(deleteColor.copy(alpha = 0.12f + 0.78f * deleteReveal)),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.graphicsLayer { alpha = deleteReveal }
+                ) {
+                    Icon(Icons.Filled.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Text("حذف", color = Color.White, style = MaterialTheme.typography.labelLarge)
                 }
             }
-            if (site.notes.isNotBlank()) {
-                Text(
-                    site.notes,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(archiveColor.copy(alpha = 0.10f + 0.72f * archiveReveal)),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.graphicsLayer { alpha = archiveReveal }
+                ) {
+                    Icon(Icons.Filled.Archive, contentDescription = null, tint = Color(0xFF3A2A00), modifier = Modifier.size(18.dp))
+                    Text("أرشفة", color = Color(0xFF3A2A00), style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+
+        // البطاقة الأمامية المنزلقة
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(offsetX.value.roundToInt(), 0) }
+                .pointerInput(site.id) {
+                    detectDragGestures(
+                        onDragEnd = {
+                            val x = offsetX.value
+                            scope.launch {
+                                when {
+                                    x > threshold -> {
+                                        offsetX.animateTo(size.width.toFloat() * 0.85f, tween(180))
+                                        onSwipeDelete()
+                                        // إن أُلغي الحذف من حوار التأكيد تعود
+                                        // البطاقة لمكانها بدل بقائها مزاحة
+                                        offsetX.snapTo(0f)
+                                    }
+                                    x < -threshold -> {
+                                        offsetX.animateTo(-size.width.toFloat() * 0.85f, tween(180))
+                                        onSwipeArchive()
+                                    }
+                                    else -> offsetX.animateTo(
+                                        0f,
+                                        spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+                                    )
+                                }
+                            }
+                        },
+                        onDragCancel = { scope.launch { offsetX.animateTo(0f, tween(150)) } }
+                    ) { change, dragAmount ->
+                        val raw = offsetX.value + dragAmount.x
+                        // مقاومة خفيفة بعد 60٪ من عرض البطاقة
+                        val limit = size.width * 0.6f
+                        scope.launch { offsetX.snapTo(raw.coerceIn(-limit, limit)) }
+                        change.consume()
+                    }
+                }
+        ) {
+            GalaxyCard(
+                onClick = onClick,
+                modifier = Modifier.drawBehind {
+                    // زجاجية خفيفة من لون التصنيف (اختيار 45)
+                    drawRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(categoryColor.copy(alpha = 0.10f), Color.Transparent),
+                            start = Offset(0f, 0f),
+                            end = Offset(size.width * 0.65f, size.height)
+                        )
+                    )
+                    // شريط جانبي بلون التصنيف على جهة البداية
+                    // (يمين البطاقة في الاتجاه العربي)
+                    val barWidth = 4.dp.toPx()
+                    drawRoundRect(
+                        color = categoryColor,
+                        topLeft = Offset(size.width - barWidth, 10.dp.toPx()),
+                        size = Size(barWidth, (size.height - 20.dp.toPx()).coerceAtLeast(0f)),
+                        cornerRadius = CornerRadius(barWidth / 2f)
+                    )
+                    // توهج إطار أحمر للمتأخر عن موعده
+                    if (overdue) {
+                        drawRoundRect(
+                            color = deleteColor.copy(alpha = 0.55f),
+                            cornerRadius = CornerRadius(16.dp.toPx()),
+                            style = Stroke(width = 1.8.dp.toPx())
+                        )
+                    }
+                }
+            ) {
+                SiteCardContent(
+                    site = site,
+                    category = category,
+                    dueDays = dueDays,
+                    archived = false,
+                    onRestore = null
                 )
             }
+        }
+    }
+}
+
+/** محتوى بطاقة الموقع — مشترك بين النشطة القابلة للسحب والمؤرشفة */
+@Composable
+private fun SiteCardContent(
+    site: Site,
+    category: Category?,
+    dueDays: Long?,
+    archived: Boolean,
+    onRestore: (() -> Unit)?
+) {
+    val overdue = dueDays != null && dueDays <= 0
+    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (category != null) ColorDot(category.colorHex)
+            Text(
+                site.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            if (archived && onRestore != null) {
+                OutlinedButton(onClick = onRestore, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)) {
+                    Icon(Icons.Filled.Unarchive, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Text("استعادة", modifier = Modifier.padding(start = 4.dp), style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            // حلقة العد التنازلي للاستحقاق (اختيار 37)
+            if (dueDays != null) {
+                DueCountdownRing(days = dueDays, size = 40.dp)
+            }
+        }
+        if (site.notes.isNotBlank()) {
+            Text(
+                site.notes,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 "آخر تعديل: ${site.lastModified.formatDate()}" +
                     if (category != null) " — ${category.name}" else "",
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.weight(1f, fill = false)
             )
+            // الشارة المتنفسة للمتأخر فقط — الحلقة تكفي لغيره (اختيار 45)
+            if (overdue && dueDays != null) {
+                BreathingDueBadge(dueDays)
+            }
         }
     }
 }
@@ -502,6 +763,8 @@ private fun SiteRow(
 /**
  * حوار إضافة موقع — الاسم إلزامي، والملاحظات والتصنيف اختياريان.
  * أخطاء التحقق تظهر داخل الحوار بدل إغلاقه.
+ * يظهر بكشف دائري يتمدد من أسفل الشاشة (اختيار 32 من الجولة
+ * الثالثة) عبر `GalaxyRevealDialog` بدل الظهور المفاجئ.
  */
 @Composable
 private fun AddSiteDialog(
@@ -517,11 +780,20 @@ private fun AddSiteDialog(
 
     val selectedCategory = categories.firstOrNull { it.id == categoryId }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("موقع جديد") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    GalaxyRevealDialog(onDismissRequest = onDismiss) { requestClose ->
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 6.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("موقع جديد", style = MaterialTheme.typography.headlineSmall)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = {
@@ -573,17 +845,20 @@ private fun AddSiteDialog(
                         )
                     }
                 }
+                }
+                // أزرار الحوار — توهج الضغط على الحفظ (مقترح 1)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
+                    GlowButton(
+                        onClick = { onSave(name, notes, categoryId) { message -> error = message } },
+                        enabled = name.isNotBlank()
+                    ) { Text("حفظ") }
+                }
             }
-        },
-        confirmButton = {
-            // توهج الضغط (مقترح 1)
-            GlowButton(
-                onClick = { onSave(name, notes, categoryId) { message -> error = message } },
-                enabled = name.isNotBlank()
-            ) { Text("حفظ") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("إلغاء") }
         }
-    )
+    }
 }

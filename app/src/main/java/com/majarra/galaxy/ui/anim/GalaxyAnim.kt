@@ -4,10 +4,15 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -15,6 +20,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +34,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,15 +43,21 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,35 +70,57 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /* ============================================================
- * مكتبة انيميشنات «مجرة» — الإصدار 2.3
- * تنفيذ اختيارات جلسة المقترحات (ملف اختيارات.md):
+ * مكتبة انيميشنات «مجرة» — الإصدار 2.6
+ * الجولة الأولى (2.3 — اختيارات الجلسة الأولى):
  *  1) نبض توهج للأزرار        2) تمدد شريطي لزر الإضافة
  *  3) تحول زر الحالة لدائرة   4) قفز أرقام القفل
  *  5) رسم خط علامة الصح       6) حلقة منزلقة للألوان
  * 10) حوار بتكبير نابض       12) سنابار بشريط مهلة
  * 13) ظهور متتابع للقوائم    15) عجلة أرقام الإحصائيات
  * 16) تنفس لوني للشارات       8) فتح التفاصيل بانتقال واحد
+ * ----------------------------------------------------------
+ * الجولة الثالثة (2.6 — اختيارات_الجولة_الثالثة، ترقيم 31-47):
+ * 32) كشف دائري لحوارات الإضافة     34) مروف الأرقام عند التغير
+ * 37) حلقة عد تنازلي للاستحقاق      39) منزلق بفقاعة قيمة
+ * 40) مفتاح الوضع ليلي بشمس وقمر    41) جزيئات علامة الصح
+ * 43) شيمر سديمي للتحميل            44) انفجار نجوم النجاح
+ * 47) قفل الكوكبات (ترقية خانات الرمز)
+ * (31 شريط التنقل المنزلق و33 الرجوع التوقعي في ملف التنقل،
+ *  و35/36/38/42/45/46 تصاميم منفذة داخل شاشاتها مباشرة)
  * ============================================================
- * ملاحظة: «تحول الحاوية» القديم (مقترح 8) أُزيل في هذه الجلسة حسب
- * تعليمات إصلاح الانميشن المزدوج — فتح الموقع صار انميشنًا واحدًا. */
+ * ملاحظة: «تحول الحاوية» القديم (مقترح 8) أُزيل سابقًا حسب
+ * تعليمات إصلاح الانميشن المزدوج — فتح الموقع انميشن واحد. */
 
 /* ═══════════════ 1) نبض توهج — توهج سماوي حول الزر أثناء الضغط ═══════════════ */
 
@@ -269,54 +305,90 @@ fun MorphingActionButton(
     }
 }
 
-/* ═══════════════ 4) شاشة القفل — قفز أرقام الرمز ═══════════════ */
+/* ═══════════════ 4+47) شاشة القفل — كوكبة الرمز ═══════════════ */
 
 /**
- * خانات الرمز السري: كل رقم يُدخل تظهر نقطته بقفزة نابضة
- * (0 → 125% → 100%) في خانته (اختيار 4-2).
+ * خانات الرمز السري على هيئة كوكبة (اختيار 4-2 ثم ترقية اختيار 47
+ * من اختيارات الجولة الثالثة): كل رقم يُدخل يُشعل نجمته بتكبير نابض
+ * ويمد خطًا نحو النجمة التالية حتى تكتمل الكوكبة فتومض بهالة جماعية.
+ *
+ * الترقية أبقت نفس التوقيع القديم `PinDots` حتى لا يتغير أي مستدعٍ،
+ * فالتنفيذ استُبدل بالكامل من نقاط جامدة إلى سماء مصغرة. المواقع
+ * النسبية للنجوم محسوبة بثبات (بلا عشوائية) كعادة التطبيق.
  */
 @Composable
 fun PinDots(pin: String, modifier: Modifier = Modifier, maxLen: Int = 8) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(9.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        repeat(maxLen) { index ->
-            val filled = index < pin.length
-            Box(
-                modifier = Modifier.size(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .border(
-                            width = 1.5.dp,
-                            color = if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                            shape = CircleShape
-                        )
+    // ارتفاع الموجة لكل نجمة — نمط ثابت يعطي شكل كوكبة متعرجة
+    val wave = remember { floatArrayOf(0.22f, -0.26f, 0.12f, -0.30f, 0.24f, -0.14f, 0.28f, -0.22f) }
+    // تقدم التعبئة يمشي بنابض مع طول الرمز فيتحرك «رأس» الكوكبة
+    val fill by animateFloatAsState(
+        targetValue = pin.length.toFloat(),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "constellation-fill"
+    )
+    // وميض الاكتمال: هالة جماعية عندما تمتلئ كل الخانات
+    val flash = remember { Animatable(0f) }
+    LaunchedEffect(pin.length) {
+        if (pin.length >= maxLen) {
+            flash.snapTo(0f)
+            flash.animateTo(1f, animationSpec = tween(550))
+        } else {
+            flash.snapTo(0f)
+        }
+    }
+    val starColor = MaterialTheme.colorScheme.primary
+    val dimColor = MaterialTheme.colorScheme.outline
+
+    Canvas(modifier = modifier.fillMaxWidth().height(56.dp)) {
+        val w = size.width
+        val h = size.height
+        val count = maxLen.coerceAtLeast(2)
+        fun starCenter(i: Int): Offset {
+            val t = i / (count - 1f)
+            val x = w * (0.07f + 0.86f * t)
+            val y = h * (0.5f + 0.32f * wave[i % wave.size])
+            return Offset(x, y)
+        }
+        // خطوط الكوكبة بين النجوم المضاءة — آخر خط يُرسم مع التقدم
+        for (i in 0 until count - 1) {
+            val seg = (fill - i).coerceIn(0f, 1f)
+            if (seg <= 0f) continue
+            val from = starCenter(i)
+            val to = starCenter(i + 1)
+            val end = Offset(from.x + (to.x - from.x) * seg, from.y + (to.y - from.y) * seg)
+            drawLine(
+                color = starColor.copy(alpha = 0.45f),
+                start = from,
+                end = end,
+                strokeWidth = 1.6.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+        }
+        // النجوم: مضاءة (متوهجة) أو خافتة بحلقة
+        for (i in 0 until count) {
+            val lit = (fill - i).coerceIn(0f, 1f)
+            val center = starCenter(i)
+            if (lit > 0f) {
+                // هالة النجمة المضاءة — تكبر مع وميض الاكتمال
+                drawCircle(
+                    color = starColor.copy(alpha = (0.20f + 0.30f * flash.value) * lit),
+                    radius = (10.dp + 4.dp * flash.value).toPx() * lit,
+                    center = center
                 )
-                // النقطة الداخلية تقفز بنوابض عند امتلاء الخانة
-                // (بديل مقياس الرسم بدل AnimatedVisibility — أمتن داخل الصفوف)
-                val dotScale by animateFloatAsState(
-                    targetValue = if (filled) 1f else 0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    ),
-                    label = "pin-dot-$index"
+                drawCircle(
+                    color = starColor,
+                    radius = 4.5.dp.toPx() * (0.4f + 0.6f * lit),
+                    center = center
                 )
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .graphicsLayer {
-                            scaleX = dotScale
-                            scaleY = dotScale
-                        }
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary)
+            } else {
+                drawCircle(
+                    color = dimColor.copy(alpha = 0.8f),
+                    radius = 3.5.dp.toPx(),
+                    center = center,
+                    style = Stroke(width = 1.4.dp.toPx())
                 )
             }
         }
@@ -328,24 +400,49 @@ fun PinDots(pin: String, modifier: Modifier = Modifier, maxLen: Int = 8) {
 /**
  * مربع تحديد تُرسم داخله علامة الصح خطًا متحركًا كأنها كُتبت
  * باليد (اختيار 5-1) — بديل بصري لـ Checkbox الافتراضي.
+ *
+ * ترقية الجولة الثالثة (اختيار 41 — جزيئات): عند اكتمال رسم الصح
+ * تتطاير 6 شظايا نجمية صغيرة بألوان الهوية من مركز المربع. الجزيئات
+ * تعمل فقط عند التحوّل من غير محدد إلى محدد (وليس عند أول تركيب
+ * لعنصر محدد مسبقًا). `celebrate = false` يعطّل الجزيئات لمن يريد
+ * العلامة المرسومة وحدها.
  */
 @Composable
 fun DrawnCheck(
     checked: Boolean,
     modifier: Modifier = Modifier,
-    onToggle: ((Boolean) -> Unit)? = null
+    onToggle: ((Boolean) -> Unit)? = null,
+    celebrate: Boolean = true
 ) {
     val fraction by animateFloatAsState(
         targetValue = if (checked) 1f else 0f,
         animationSpec = tween(240),
         label = "check-draw"
     )
+    // جزيئات الاحتفال (اختيار 41): تقدم 0→1 عند اكتمال التحديد
+    val burst = remember { Animatable(0f) }
+    val composedOnce = remember { mutableStateOf(false) }
+    LaunchedEffect(checked) {
+        val firstComposition = !composedOnce.value
+        composedOnce.value = true
+        if (checked && !firstComposition && celebrate) {
+            burst.snapTo(0f)
+            burst.animateTo(1f, animationSpec = tween(420))
+        } else if (!checked) {
+            burst.snapTo(0f)
+        }
+    }
     val borderColor by animateColorAsState(
         targetValue = if (checked) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
         animationSpec = tween(180),
         label = "check-border"
     )
     val checkColor = MaterialTheme.colorScheme.secondary
+    val sparkColors = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary
+    )
     val path = remember {
         Path().apply {
             moveTo(4.5f, 11f)
@@ -382,6 +479,23 @@ fun DrawnCheck(
                         join = StrokeJoin.Round
                     )
                 )
+            }
+            // جزيئات الاختيار 41: 6 شظايا تنطلق من المركز بزوايا ثابتة
+            if (burst.value > 0f && burst.value < 1f) {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                val maxRadius = 16.dp.toPx()
+                repeat(6) { i ->
+                    val angle = (i * 60f + 18f) * PI.toFloat() / 180f
+                    val radius = maxRadius * burst.value
+                    drawCircle(
+                        color = sparkColors[i % 3].copy(alpha = 1f - burst.value),
+                        radius = 1.4.dp.toPx() * (1f - burst.value * 0.5f),
+                        center = Offset(
+                            x = center.x + cos(angle) * radius,
+                            y = center.y + sin(angle) * radius
+                        )
+                    )
+                }
             }
         }
     }
@@ -708,4 +822,413 @@ fun rememberAlertPulse(active: Boolean): Float {
         }
     }
     return pulse.value
+}
+
+/* ═══════════════ الجولة الثالثة — اختيارات 2.6 ═══════════════ */
+
+/* ═══════════════ 32) كشف دائري لحوارات الإضافة ═══════════════ */
+
+/**
+ * غلاف حوار «كشف دائري» (اختيار 32 = خيار 3 من اختيارات الجولة
+ * الثالثة): يتمدد محتوى الحوار من نقطة أسفل الشاشة (ناحية الزر
+ * العائم الذي فتحه) بتكبير من `TransformOrigin(0.5f, 1f)` بدل
+ * الظهور المفاجئ، ويغلق بانكماش قصير قبل تنفيذ أي إجراء.
+ * نفس عقد `GalaxyDialogShell` (`requestClose`) حتى يسهل الاستبدال.
+ */
+@Composable
+fun GalaxyRevealDialog(
+    onDismissRequest: () -> Unit,
+    content: @Composable (requestClose: ((() -> Unit) -> Unit)) -> Unit
+) {
+    var entered by remember { mutableStateOf(false) }
+    var closing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    val requestClose: ((() -> Unit) -> Unit) = { action ->
+        if (!closing) {
+            closing = true
+            scope.launch {
+                delay(200)
+                action()
+            }
+        }
+    }
+
+    val scale by animateFloatAsState(
+        targetValue = if (entered && !closing) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (entered) 380 else 180,
+            easing = FastOutSlowInEasing
+        ),
+        label = "reveal-scale"
+    )
+
+    LaunchedEffect(Unit) { entered = true }
+
+    Dialog(onDismissRequest = { requestClose(onDismissRequest) }) {
+        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = scale
+                        transformOrigin = TransformOrigin(0.5f, 1f)
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                content(requestClose)
+            }
+        }
+    }
+}
+
+/* ═══════════════ 34) مروف الأرقام عند تغيّر القيم ═══════════════ */
+
+/**
+ * رقم ينزلق قديمه للأعلى ويدخل الجديد من الأسفل عند تغيّر القيمة
+ * (اختيار 34 = خيار 6) — حياة في البيانات دون عجلة العدّاد الكاملة
+ * (تلك لظهور الشاشة أول مرة في `OdometerNumber`).
+ */
+@Composable
+fun GalaxyNumberMorph(
+    value: Int,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier = Modifier,
+    suffix: String = ""
+) {
+    AnimatedContent(
+        targetState = value,
+        modifier = modifier,
+        transitionSpec = {
+            (slideInVertically(animationSpec = tween(260)) { it } + fadeIn(tween(220)))
+                .togetherWith(
+                    slideOutVertically(animationSpec = tween(220)) { -it } + fadeOut(tween(180))
+                )
+        },
+        label = "number-morph"
+    ) { v ->
+        Text(v.toString() + suffix, style = style, color = color)
+    }
+}
+
+/* ═══════════════ 37) حلقة عد تنازلي لاستحقاق الصيانة ═══════════════ */
+
+/**
+ * حلقة تستنزف مع اقتراب موعد الصيانة وتتلون حسب الخطورة:
+ * سماوي (> 14 يومًا) ← كهرماني (1-14) ← أحمر (تجاوز/اليوم)،
+ * وفي مركزها عدد الأيام (اختيار 37 = خيار 10). نافذة الحساب 30
+ * يومًا كنسبة الاستنزاف، والسالب يُقص عند الصفر مع بقاء اللون الأحمر.
+ */
+@Composable
+fun DueCountdownRing(
+    days: Long,
+    modifier: Modifier = Modifier,
+    size: Dp = 42.dp
+) {
+    val windowDays = 30f
+    val targetFraction = (days.coerceAtLeast(0).toFloat() / windowDays).coerceIn(0f, 1f)
+    val fraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = tween(700, easing = FastOutSlowInEasing),
+        label = "due-ring-fraction"
+    )
+    val ringColor by animateColorAsState(
+        targetValue = when {
+            days <= 0 -> Color(0xFFFF5A5A)
+            days <= 7 -> Color(0xFFFFC857)
+            else -> Color(0xFF38BDF8)
+        },
+        animationSpec = tween(400),
+        label = "due-ring-color"
+    )
+    val numberColor = ringColor
+
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = 4.5.dp.toPx()
+            val radius = (this.size.minDimension - stroke) / 2f
+            val center = Offset(this.size.width / 2f, this.size.height / 2f)
+            drawCircle(
+                color = ringColor.copy(alpha = 0.15f),
+                radius = radius,
+                center = center,
+                style = Stroke(width = stroke)
+            )
+            if (fraction > 0f) {
+                drawArc(
+                    color = ringColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f * fraction,
+                    useCenter = false,
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2, radius * 2),
+                    style = Stroke(width = stroke, cap = StrokeCap.Round)
+                )
+            }
+        }
+        Text(
+            kotlin.math.abs(days).toString(),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = numberColor
+        )
+    }
+}
+
+/* ═══════════════ 39) منزلق بفقاعة قيمة طافية ═══════════════ */
+
+/**
+ * منزلق تظهر فوق مقبضه فقاعة بالقيمة الحالية أثناء السحب وتختفي
+ * بعد الإفلات بنابض (اختيار 39 = خيار 13). موضع الفقاعة محسوب من
+ * عرض المنزلق الفعلي ونسبة القيمة، صحيح في اتجاهي العرض (يُحسب
+ * فيزيائيًا من المنتصف فلا يعتمد على اتجاه التخطيط).
+ */
+@Composable
+fun GalaxyBubbleSlider(
+    value: Int,
+    onValueChange: (Int) -> Unit,
+    valueRange: IntRange,
+    modifier: Modifier = Modifier,
+    format: (Int) -> String = { it.toString() }
+) {
+    val scope = rememberCoroutineScope()
+    var bubbleVisible by remember { mutableStateOf(false) }
+    var hideJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var widthPx by remember { mutableFloatState() }
+    val density = LocalDensity.current
+
+    val span = (valueRange.last - valueRange.first).coerceAtLeast(1)
+    val fraction = (value - valueRange.first).toFloat() / span
+    // في الاتجاهين: المقبض في المنتصف عند 0.5 — الإزاحة من المنتصف
+    // تصح فيزيائيًا سواء كان التخطيط RTL أم LTR. (toPx يحتاج كثافة)
+    val thumbTravel = widthPx - with(density) { 20.dp.toPx() }
+    val offsetPx = (0.5f - fraction) * thumbTravel
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { widthPx = it.width.toFloat() }
+    ) {
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { f ->
+                onValueChange(f.toInt())
+                bubbleVisible = true
+                hideJob?.cancel()
+                hideJob = scope.launch {
+                    delay(900)
+                    bubbleVisible = false
+                }
+            },
+            valueRange = valueRange.first.toFloat()..valueRange.last.toFloat(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 30.dp)
+        )
+        AnimatedVisibility(
+            visible = bubbleVisible && widthPx > 0f,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .absoluteOffset { IntOffset(offsetPx.toInt(), 0) },
+            enter = fadeIn(tween(150)) + scaleIn(
+                initialScale = 0.6f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+            ),
+            exit = fadeOut(tween(250))
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                shadowElevation = 4.dp
+            ) {
+                Text(
+                    format(value),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+    }
+}
+
+/** حالة `mutableStateOf` لـ Float باسم أوضح */
+private fun mutableFloatState() = mutableStateOf(0f)
+
+/* ═══════════════ 40) مفتاح الوضع الليلي بشمس وقمر ═══════════════ */
+
+/**
+ * مفتاح تبديل الوضع: المقبض يحمل قمرًا ينقلب شمسًا أثناء الانزلاق
+ * والمسار يتلون بينهما، مع شرارات نجمية صغيرة لحظة التبديل
+ * (اختيار 40 = خيار 14). `checked = true` يعني الوضع الليلي.
+ */
+@Composable
+fun GalaxySunMoonSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val trackColor by animateColorAsState(
+        targetValue = if (checked) Color(0xFF13294A) else Color(0xFFBFD9F0),
+        animationSpec = tween(450),
+        label = "switch-track"
+    )
+    val iconSpin by animateFloatAsState(
+        targetValue = if (checked) 0f else 180f,
+        animationSpec = tween(500, easing = FastOutSlowInEasing),
+        label = "switch-spin"
+    )
+    // شرارات لحظة التبديل (وليس عند أول تركيب)
+    val spark = remember { Animatable(0f) }
+    val composedOnce = remember { mutableStateOf(false) }
+    LaunchedEffect(checked) {
+        val first = !composedOnce.value
+        composedOnce.value = true
+        if (!first) {
+            spark.snapTo(0f)
+            spark.animateTo(1f, animationSpec = tween(520))
+        }
+    }
+
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        // الشرارات حول المفتاح أثناء التبديل
+        Canvas(Modifier.matchParentSize()) {
+            val p = spark.value
+            if (p > 0f && p < 1f) {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                repeat(7) { i ->
+                    val angle = (i * 51f + 14f) * PI.toFloat() / 180f
+                    val radius = (26.dp + 10.dp * (i % 3)).toPx() * p
+                    drawCircle(
+                        color = if (i % 2 == 0) Color(0xFF38BDF8).copy(alpha = 1f - p) else Color(0xFFFFC857).copy(alpha = 1f - p),
+                        radius = 1.6.dp.toPx(),
+                        center = Offset(center.x + cos(angle) * radius, center.y + sin(angle) * radius)
+                    )
+                }
+            }
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedTrackColor = trackColor,
+                uncheckedTrackColor = trackColor,
+                checkedThumbColor = Color(0xFF0B1220),
+                uncheckedThumbColor = Color(0xFFFFC857)
+            ),
+            thumbContent = {
+                Box(Modifier.size(24.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Filled.DarkMode,
+                        contentDescription = null,
+                        tint = Color(0xFFCFE6FF),
+                        modifier = Modifier
+                            .size(15.dp)
+                            .graphicsLayer {
+                                rotationZ = iconSpin
+                                alpha = if (checked) 1f else 0f
+                                scaleX = if (checked) 1f else 0.5f
+                                scaleY = if (checked) 1f else 0.5f
+                            }
+                    )
+                    Icon(
+                        Icons.Filled.LightMode,
+                        contentDescription = null,
+                        tint = Color(0xFF7A4D00),
+                        modifier = Modifier
+                            .size(15.dp)
+                            .graphicsLayer {
+                                rotationZ = iconSpin - 180f
+                                alpha = if (checked) 0f else 1f
+                                scaleX = if (checked) 0.5f else 1f
+                                scaleY = if (checked) 0.5f else 1f
+                            }
+                    )
+                }
+            }
+        )
+    }
+}
+
+/* ═══════════════ 43) شيمر سديمي أثناء التحميل ═══════════════ */
+
+/**
+ * هيكل تحميل «سديمي»: سطح بلون متغير يلمع عليه تدرج منجرف بلا
+ * نهاية بألوان الهوية (اختيار 43 = خيار 18) — الانتظار يبقى داخل
+ * عالم المجرة بدل السبينر العام.
+ */
+@Composable
+fun GalaxyShimmerBox(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "shimmer")
+    val shift by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmer-shift"
+    )
+    val base = MaterialTheme.colorScheme.surfaceVariant
+    val glowA = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+    val glowB = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)
+    Box(
+        modifier = modifier.drawBehind {
+            drawRect(color = base)
+            val bandWidth = this.size.width * 0.9f
+            val startX = -bandWidth + (this.size.width + bandWidth * 2f) * shift
+            drawRect(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Transparent, glowA, glowB, Color.Transparent),
+                    start = Offset(startX, 0f),
+                    end = Offset(startX + bandWidth, this.size.height * 0.5f)
+                )
+            )
+        }
+    )
+}
+
+/* ═══════════════ 44) انفجار نجوم عند نجاح العمليات ═══════════════ */
+
+/**
+ * طبقة نجوم تتطاير من المركز لحظة نجاح عملية مهمة (اختيار 44 =
+ * خيار 20): 12 نجمة بألوان الهوية بزوايا وأنصاف أقطار ثابتة
+ * (بلا عشوائية كعادة التطبيق). تُشغَّل عند تغيّر `trigger` لقيمة
+ * أكبر من صفر — يزود المستدعي عدادًا يرفعه بعد كل نجاح.
+ * تُوضع فوق الهدف بمقاس يكفي انتشار النجوم (120-160 نقطة).
+ */
+@Composable
+fun GalaxyStarBurst(trigger: Int, modifier: Modifier = Modifier) {
+    val progress = remember { Animatable(0f) }
+    LaunchedEffect(trigger) {
+        if (trigger > 0) {
+            progress.snapTo(0f)
+            progress.animateTo(1f, animationSpec = tween(850))
+        }
+    }
+    val colors = listOf(
+        MaterialTheme.colorScheme.primary,
+        MaterialTheme.colorScheme.secondary,
+        MaterialTheme.colorScheme.tertiary
+    )
+    Canvas(modifier = modifier) {
+        val p = progress.value
+        if (trigger > 0 && p > 0f && p < 1f) {
+            val center = Offset(this.size.width / 2f, this.size.height / 2f)
+            repeat(12) { i ->
+                val angle = (i * 30f + 12f) * PI.toFloat() / 180f
+                val spread = (34.dp + 22.dp * ((i * 7) % 5) / 5f).toPx()
+                val radius = spread * p
+                drawCircle(
+                    color = colors[i % 3].copy(alpha = 1f - p),
+                    radius = 2.4.dp.toPx() * (1f - p * 0.5f),
+                    center = Offset(center.x + cos(angle) * radius, center.y + sin(angle) * radius)
+                )
+            }
+        }
+    }
 }

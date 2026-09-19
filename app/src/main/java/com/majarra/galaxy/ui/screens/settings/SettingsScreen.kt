@@ -3,6 +3,7 @@ package com.majarra.galaxy.ui.screens.settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -39,6 +41,9 @@ import com.majarra.galaxy.security.AppRestarter
 import com.majarra.galaxy.security.BackupManager
 import com.majarra.galaxy.security.BackupResult
 import com.majarra.galaxy.security.SafeWipe
+import com.majarra.galaxy.ui.anim.GalaxyBubbleSlider
+import com.majarra.galaxy.ui.anim.GalaxyStarBurst
+import com.majarra.galaxy.ui.anim.GalaxySunMoonSwitch
 import com.majarra.galaxy.ui.components.ConfirmDialog
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
@@ -68,6 +73,9 @@ class SettingsViewModel @Inject constructor(
     val restartRequired = _restartRequired
 
     fun setDarkMode(enabled: Boolean) = viewModelScope.launch { settings.setDarkMode(enabled) }
+
+    /** عدد أيام التذكير قبل موعد الصيانة (اختيار 39) */
+    fun setReminderDays(days: Int) = viewModelScope.launch { settings.setReminderDays(days) }
 
     /** حفظ رمز سري جديد وتفعيل القفل معه */
     fun setPin(pin: String) {
@@ -143,6 +151,16 @@ fun SettingsScreen(
     var showPinDialog by remember { mutableStateOf(false) }
     var confirmWipe by remember { mutableStateOf(false) }
 
+    // انفجار نجوم عند نجاح التصدير/الاستيراد (اختيار 44 من الجولة
+    // الثالثة): يُشغَّل عندما تحمل رسالة الحالة خبر نجاح
+    var backupBurst by remember { mutableStateOf(0) }
+    LaunchedEffect(message) {
+        val current = message
+        if (current != null && (current.contains("بنجاح") || current.startsWith("تم استيراد"))) {
+            backupBurst++
+        }
+    }
+
     // مشغلات SAF للنسخ الاحتياطي
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -164,7 +182,7 @@ fun SettingsScreen(
             color = MaterialTheme.colorScheme.primary
         )
 
-        // المظهر
+        // المظهر — مفتاح بشمس وقمر (اختيار 40 من الجولة الثالثة)
         GalaxyCard {
             Row(
                 modifier = Modifier
@@ -180,7 +198,25 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Switch(checked = prefs.darkMode, onCheckedChange = viewModel::setDarkMode)
+                GalaxySunMoonSwitch(checked = prefs.darkMode, onCheckedChange = viewModel::setDarkMode)
+            }
+        }
+
+        // تنبيه الصيانة — منزلق بفقاعة طافية (اختيار 39)
+        GalaxyCard {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("التذكير بالصيانة", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "قبل كم يومًا من الموعد تريد التنبيه؟ (الافتراضي 30 يومًا)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                GalaxyBubbleSlider(
+                    value = prefs.reminderDays,
+                    onValueChange = viewModel::setReminderDays,
+                    valueRange = 5..90,
+                    format = { "$it يومًا" }
+                )
             }
         }
 
@@ -214,32 +250,35 @@ fun SettingsScreen(
             }
         }
 
-        // النسخ الاحتياطي
+        // النسخ الاحتياطي — فوقه طبقة انفجار النجوم عند النجاح (اختيار 44)
         SectionTitle("النسخ الاحتياطي المحلي")
-        GalaxyCard {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "تصدير/استيراد ملف قاعدة البيانات بالكامل — بدون إنترنت وبدون تشفير معقد.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            exportLauncher.launch("majarra-backup-${DateFormats.backupStamp()}.db")
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("تصدير")
-                    }
-                    OutlinedButton(
-                        onClick = { importLauncher.launch(arrayOf("*/*")) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("استيراد")
+        Box {
+            GalaxyCard {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "تصدير/استيراد ملف قاعدة البيانات بالكامل — بدون إنترنت وبدون تشفير معقد.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = {
+                                exportLauncher.launch("majarra-backup-${DateFormats.backupStamp()}.db")
+                            },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("تصدير")
+                        }
+                        OutlinedButton(
+                            onClick = { importLauncher.launch(arrayOf("*/*")) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("استيراد")
+                        }
                     }
                 }
             }
+            GalaxyStarBurst(trigger = backupBurst, modifier = Modifier.matchParentSize())
         }
 
         // مسح البيانات

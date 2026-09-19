@@ -3,6 +3,7 @@ package com.majarra.galaxy.domain.usecase
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.SiteDetail
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
+import com.majarra.galaxy.domain.repository.SettingsRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
 import java.time.Instant
@@ -10,7 +11,12 @@ import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
 
-/** نافذة التنبيه حسب إجابة الاسئله.md: إشعار قبل الموعد بثلاثين يومًا أو عند تجاوزه */
+/**
+ * نافذة التنبيه الافتراضية حسب إجابة الاسئله.md: إشعار قبل الموعد
+ * بثلاثين يومًا أو عند تجاوزه. منذ الجولة الثالثة (اختيار 39) صارت
+ * النافذة إعدادًا قابلًا للتغيير من شاشة الإعدادات، وهذا الثابت هو
+ * القيمة الافتراضية وحدّ التراجع إن غاب الإعداد.
+ */
 const val DUE_WINDOW_DAYS = 30
 
 /**
@@ -65,18 +71,26 @@ data class DueSite(val siteId: Long, val siteName: String, val dueDate: Long)
 
 /**
  * فحص المواقع التي تستحق تنبيه الصيانة (مستحقة الآن أو خلال نافذة
- * [DUE_WINDOW_DAYS] يومًا — 30 يومًا حسب إجابة الاسئله.md).
+ * التذكير — 30 يومًا افتراضيًا حسب إجابة الاسئله.md، وقابلة للتغيير
+ * من الإعدادات منذ اختيار 39 في الجولة الثالثة).
  * تُستدعى عند فتح التطبيق فقط — بلا عمال خلفية ولا جدولة دورية.
  */
 class CheckMaintenanceDueUseCase @Inject constructor(
     private val siteRepo: SiteRepository,
-    private val detailRepo: SiteDetailRepository
+    private val detailRepo: SiteDetailRepository,
+    private val settings: SettingsRepository
 ) {
     suspend operator fun invoke(): List<DueSite> {
-        // الحد الأقصى: آخر يوم تُقبل فيه الصيانة ضمن نافذة التنبيه
-        // (اليوم + 7 أيام). المقارنة بين أيام تقويمية لا مللي ثانية
-        // حتى لا تتأثر النتيجة بساعة الفحص أو بفارق المنطقة الزمنية.
-        val lastDueDay = LocalDate.now().plusDays(DUE_WINDOW_DAYS.toLong())
+        // نافذة التذكير من الإعدادات (قصّها للمدى الآمن دفاعيًا)
+        val windowDays = settings.current.reminderDays
+            .coerceIn(
+                SettingsRepository.MIN_REMINDER_DAYS,
+                SettingsRepository.MAX_REMINDER_DAYS
+            )
+        // الحد الأقصى: آخر يوم تُقبل فيه الصيانة ضمن نافذة التنبيه.
+        // المقارنة بين أيام تقويمية لا مللي ثانية حتى لا تتأثر
+        // النتيجة بساعة الفحص أو بفارق المنطقة الزمنية.
+        val lastDueDay = LocalDate.now().plusDays(windowDays.toLong())
         val dueDetails = detailRepo.getAll().filter { detail ->
             val due = detail.nextMaintenanceDue ?: return@filter false
             !due.toLocalDate().isAfter(lastDueDay)

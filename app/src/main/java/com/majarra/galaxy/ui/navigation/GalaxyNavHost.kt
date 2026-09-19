@@ -1,20 +1,31 @@
 package com.majarra.galaxy.ui.navigation
 
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
@@ -25,12 +36,10 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -42,12 +51,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import kotlinx.coroutines.CancellationException
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -142,7 +158,36 @@ fun GalaxyRoot(
     val currentRoute = backStack?.destination?.route
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // معاينة الرجوع التكبيرية (اختيار 33 = خيار 4 من اختيارات الجولة
+    // الثالثة): أثناء إيماءة الرجوع تتقلص الشاشة الحالية قليلًا
+    // وتخفت، فإن اكتملت الإيماءة يحدث الرجوع فعليًا وإلا تعود
+    // بالنابض. يتطلب `android:enableOnBackInvokedCallback` في المنفست
+    // (مضاف) ويعمل على أندرويد 13+ ويتجاهله الأقدم بهدوء.
+    //
+    // ملاحظة تركيبية مهمة: المعالج يُركَّب «بعد» الـ Scaffold حتى
+    // يُسجَّل عند مشتت الرجوع بعد معالج مضيف التنقل نفسه (الأخير
+    // تسجيلًا يُقدَّم)، فيأخذ أسبقية الإيماءة ويعرض المعاينة ثم ينفذ
+    // الرجوع بنفسه. يُعطَّل في جذر المكدس حتى يخرج التطبيق طبيعيًا.
+    var backProgress by remember { mutableStateOf(0f) }
+    val smoothBack by animateFloatAsState(
+        targetValue = backProgress,
+        animationSpec = tween(130),
+        label = "back-progress-smooth"
+    )
+
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
+        modifier = Modifier.graphicsLayer {
+            val p = smoothBack
+            scaleX = 1f - 0.08f * p
+            scaleY = 1f - 0.08f * p
+            translationY = -8.dp.toPx() * p
+            alpha = 1f - 0.2f * p
+            if (p > 0f) {
+                clip = true
+                shape = RoundedCornerShape(24.dp * p)
+            }
+        },
         containerColor = MaterialTheme.colorScheme.background,
         // سنابار بشريط مهلة متناقص (اختيارات 2.3 — مقترح 12)
         snackbarHost = { GalaxySnackbarHost(snackbarHostState) },
@@ -157,6 +202,18 @@ fun GalaxyRoot(
             snackbarHostState = snackbarHostState,
             modifier = Modifier.padding(padding)
         )
+    }
+    PredictiveBackHandler(enabled = navController.previousBackStackEntry != null) { progressFlow ->
+        try {
+            progressFlow.collect { event -> backProgress = event.progress }
+            // اكتملت الإيماءة: رجوع خطوة
+            backProgress = 0f
+            navController.popBackStack()
+        } catch (e: CancellationException) {
+            // أُلغيت الإيماءة في منتصفها — الشاشة تعود لنصابها
+            backProgress = 0f
+        }
+    }
     }
 }
 
@@ -202,7 +259,8 @@ private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) 
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            // خانات الرمز: كل رقم يدخل تظهر نقطته بقفزة نابضة (اختيارات 2.3 — مقترح 4)
+            // كوكبة الرمز: كل رقم يُدخل يُشعل نجمته ويمد خطًا نحو
+            // التالية حتى تكتمل فتومض (اختيار 47 — ترقية مقترح 4)
             PinDots(pin = pin)
             OutlinedTextField(
                 value = pin,
@@ -237,28 +295,101 @@ private fun PinLockScreen(verifyPin: (String) -> Boolean, onUnlock: () -> Unit) 
     }
 }
 
-/** الشريط السفلي — أربعة تبويبات منذ النسخة 2.5 (المواقع، المجرة، الإحصائيات، الإعدادات) */
+/**
+ * الشريط السفلي — أربعة تبويبات منذ النسخة 2.5 (المواقع، المجرة،
+ * الإحصائيات، الإعدادات) مع مؤشر الجولة الثالثة (اختيار 31 = خيار 2):
+ * حبة سماوية متوهجة تنزلق بنابض بين التبويبات، والأيقونة النشطة
+ * تتحول للون داكن فوق المؤشر. المواقع تُقاس فعليًا عند التخطيط
+ * (`onPlaced`) فيصح الانزلاق في اتجاهي العرض دون افتراضات.
+ */
 @Composable
 private fun GalaxyBottomBar(navController: NavHostController, currentRoute: String?) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-        tabs.forEach { tab ->
-            NavigationBarItem(
-                selected = currentRoute == tab.route,
-                onClick = {
-                    navController.navigate(tab.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
-                            saveState = true
-                        }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { Icon(tab.icon, contentDescription = tab.label) },
-                label = { Text(tab.label, style = MaterialTheme.typography.labelSmall) },
-                colors = NavigationBarItemDefaults.colors(
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+    val selectedIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+    val density = LocalDensity.current
+
+    // قياسات التخطيط: موضع الشريط ثم موضع كل تبويب وعرضه (بكسل جذر)
+    val barLeftPx = remember { mutableStateOf(0f) }
+    val itemLayouts = remember { mutableStateOf<Map<Int, Pair<Float, Float>>>(emptyMap()) }
+
+    val item = itemLayouts.value[selectedIndex]
+    val relativeLeftPx = (item?.first ?: 0f) - barLeftPx.value
+    val itemWidthPx = item?.second ?: 0f
+    val pillWidth = 56.dp
+    val indicatorLeft by animateDpAsState(
+        targetValue = with(density) { relativeLeftPx.toDp() } +
+            (with(density) { itemWidthPx.toDp() } - pillWidth) / 2,
+        animationSpec = spring(dampingRatio = 0.72f, stiffness = 380f),
+        label = "nav-indicator-left"
+    )
+    val sky = MaterialTheme.colorScheme.primary
+    val activeTint = MaterialTheme.colorScheme.onPrimary
+    val idleTint = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Surface(tonalElevation = 3.dp, color = MaterialTheme.colorScheme.surface) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .onPlaced { barLeftPx.value = it.positionInRoot().x }
+        ) {
+            // الحبة المنزلاقة المتوهجة — تحت المحتوى (ترتيب الأشقاء)
+            if (item != null) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopLeft)
+                        .absoluteOffset(x = indicatorLeft, y = 6.dp)
+                        .width(pillWidth)
+                        .height(32.dp)
+                        .shadow(
+                            elevation = 9.dp,
+                            shape = RoundedCornerShape(99.dp),
+                            ambientColor = sky.copy(alpha = 0.55f),
+                            spotColor = sky.copy(alpha = 0.55f)
+                        )
+                        .clip(RoundedCornerShape(99.dp))
+                        .background(sky)
                 )
-            )
+            }
+            Row(Modifier.fillMaxWidth()) {
+                tabs.forEachIndexed { index, tab ->
+                    val selected = index == selectedIndex
+                    val tint by animateColorAsState(
+                        targetValue = if (selected) activeTint else idleTint,
+                        animationSpec = tween(220),
+                        label = "nav-tint-$index"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .onPlaced { c ->
+                                val measured = c.positionInRoot().x to c.size.width.toFloat()
+                                if (itemLayouts.value[index] != measured) {
+                                    itemLayouts.value = itemLayouts.value + (index to measured)
+                                }
+                            }
+                            .clickable {
+                                navController.navigate(tab.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            }
+                            .padding(vertical = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Box(Modifier.height(32.dp), contentAlignment = Alignment.Center) {
+                                Icon(tab.icon, contentDescription = tab.label, tint = tint)
+                            }
+                            Text(tab.label, style = MaterialTheme.typography.labelSmall, color = tint)
+                        }
+                    }
+                }
+            }
         }
     }
 }

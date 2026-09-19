@@ -6,6 +6,8 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -36,6 +38,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -71,7 +74,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -83,6 +85,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -94,6 +98,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
+import coil.compose.AsyncImagePainter
 import com.majarra.galaxy.data.local.Attachment
 import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.MaintenanceLog
@@ -124,7 +129,10 @@ import com.majarra.galaxy.domain.usecase.SetNextMaintenanceUseCase
 import com.majarra.galaxy.domain.usecase.StartWithdrawalMaintenanceUseCase
 import com.majarra.galaxy.domain.usecase.WithdrawItemUseCase
 import com.majarra.galaxy.ui.anim.DrawnCheck
+import com.majarra.galaxy.ui.anim.DueCountdownRing
+import com.majarra.galaxy.ui.anim.GalaxyShimmerBox
 import com.majarra.galaxy.ui.anim.GalaxySnackbarHost
+import com.majarra.galaxy.ui.anim.GalaxyStarBurst
 import com.majarra.galaxy.ui.anim.GlowButton
 import com.majarra.galaxy.ui.anim.MorphingActionButton
 import com.majarra.galaxy.ui.anim.StaggeredItem
@@ -141,6 +149,7 @@ import com.majarra.galaxy.util.MaterialLines
 import com.majarra.galaxy.util.daysFromNow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -432,10 +441,13 @@ fun SiteDetailsScreen(
         scope.launch { snackbarHostState.showSnackbar(text) }
     }
 
-    // رسائل الحالة عبر الشريط السفلي العام
+    // رسائل الحالة عبر الشريط السفلي العام + انفجار نجوم عند نجاح
+    // إرجاع مادة مسحوبة (اختيار 44 من الجولة الثالثة)
     val message by viewModel.message.collectAsStateWithLifecycle()
+    var successBurst by remember { mutableStateOf(0) }
     LaunchedEffect(message) {
         message?.let {
+            if (it.startsWith("تم إرجاع")) successBurst++
             snackbarHostState.showSnackbar(it)
             viewModel.clearMessage()
         }
@@ -450,48 +462,61 @@ fun SiteDetailsScreen(
         if (uri != null) viewModel.addAttachment(uri, AttachmentType.PDF)
     }
 
+    // لون تصنيف الموقع — يغذي تدرج الرأس (اختيار 46)
+    val siteCategory = categories.firstOrNull { it.id == site?.categoryId }
+
     Scaffold(
         // سنابار بشريط مهلة متناقص (اختيارات 2.3 — مقترح 12)
         snackbarHost = { GalaxySnackbarHost(snackbarHostState) },
         topBar = {
-            TopAppBar(
-                title = { Text(site?.name ?: "تفاصيل الموقع") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
-                    }
-                },
-                actions = {
-                    // أرشفة/استعادة (إجابة الاسئله.md)
-                    val currentSite = site
-                    if (currentSite != null) {
-                        IconButton(onClick = {
-                            if (currentSite.archived) {
-                                viewModel.setArchived(false) { }
-                            } else {
-                                viewModel.setArchived(true, onDone = onBack)
-                            }
-                        }) {
-                            Icon(
-                                if (currentSite.archived) Icons.Filled.Unarchive else Icons.Filled.Archive,
-                                contentDescription = if (currentSite.archived) "استعادة من الأرشيف" else "أرشفة الموقع"
-                            )
+            // رأس التفاصيل بتدرج يتبع لون التصنيف (اختيار 46 من
+            // الجولة الثالثة): كل موقع له سماؤه — التدرج يتحول بمزج
+            // بطيء عند تغيير التصنيف.
+            SiteDetailsHeader(
+                categoryColorHex = siteCategory?.colorHex
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع")
+                }
+                Text(
+                    site?.name ?: "تفاصيل الموقع",
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                // أرشفة/استعادة (إجابة الاسئله.md)
+                val currentSite = site
+                if (currentSite != null) {
+                    IconButton(onClick = {
+                        if (currentSite.archived) {
+                            viewModel.setArchived(false) { }
+                        } else {
+                            viewModel.setArchived(true, onDone = onBack)
                         }
-                    }
-                    IconButton(onClick = { showEditInfo = true }) {
-                        Icon(Icons.Filled.Edit, contentDescription = "تعديل")
-                    }
-                    IconButton(onClick = { confirmDeleteSite = true }) {
-                        Icon(Icons.Filled.Delete, contentDescription = "حذف")
+                    }) {
+                        Icon(
+                            if (currentSite.archived) Icons.Filled.Unarchive else Icons.Filled.Archive,
+                            contentDescription = if (currentSite.archived) "استعادة من الأرشيف" else "أرشفة الموقع"
+                        )
                     }
                 }
-            )
+                IconButton(onClick = { showEditInfo = true }) {
+                    Icon(Icons.Filled.Edit, contentDescription = "تعديل")
+                }
+                IconButton(onClick = { confirmDeleteSite = true }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "حذف")
+                }
+            }
         }
     ) { padding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+        ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
             // زر «طارئ» — يفتح شاشة النزول الطارئ/الاستكشاف لهذا الموقع
             // (النسخة 2.4 — تعليمات هذه الجلسة). يظهر فور فتح الموقع
@@ -579,6 +604,13 @@ fun SiteDetailsScreen(
                 }
             }
         }
+        // انفجار نجوم نجاح الإرجاع (اختيار 44) — طبقة فوق المحتوى
+        // كله؛ لا تعترض اللمس لأن الـ Canvas بلا أي معالج إشارات
+        GalaxyStarBurst(
+            trigger = successBurst,
+            modifier = Modifier.matchParentSize()
+        )
+        }
     }
 
     // عارض الصور ملء الشاشة (إجابة الاسئله.md: تكبير/تصغير بالسحب)
@@ -651,6 +683,50 @@ fun SiteDetailsScreen(
             },
             onDismiss = { withdrawalToDelete = null }
         )
+    }
+}
+
+/* ═══════════════════ رأس التفاصيل المتدرج ═══════════════════ */
+
+/**
+ * رأس شاشة التفاصيل (اختيار 46 من الجولة الثالثة): تدرج لوني ناعم
+ * مشتق من لون تصنيف الموقع — «كل موقع له سماؤه». عند تغيير
+ * التصنيف تمتزج الألوان ببطء (600 مللي ثانية) بدل القفز.
+ * المحتوى (رجوع + عنوان + أفعال) يأتي من المستدعي عبر `actions`.
+ */
+@Composable
+private fun SiteDetailsHeader(
+    categoryColorHex: String?,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit
+) {
+    val parsed = categoryColorHex?.let { hex ->
+        runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrNull()
+    }
+    val headerColor by animateColorAsState(
+        targetValue = parsed ?: MaterialTheme.colorScheme.primary,
+        animationSpec = tween(600),
+        label = "header-gradient-color"
+    )
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        headerColor.copy(alpha = 0.30f),
+                        headerColor.copy(alpha = 0.12f),
+                        Color.Transparent
+                    )
+                )
+            )
+            .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 8.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            actions()
+        }
     }
 }
 
@@ -1272,6 +1348,18 @@ private fun MaintenanceTab(
     // اقتراح الموعد القادم بعد تسجيل صيانة (إجابة الاسئله.md)
     var suggestedDue by remember { mutableStateOf<Long?>(null) }
 
+    // السجلات الجديدة (اختيار 36 من الجولة الثالثة): تُحفظ المعرفات
+    // التي رُكبت أثناء فتح التبويب، وأي سجل يظهر بعدها تُنبض نقطته
+    // بحلقة سماوية — الخط الزمني «يُكتب» أمام المستخدم.
+    val seenLogIds = remember { mutableStateOf(logs.map { it.id }.toSet()) }
+    var freshLogIds by remember { mutableStateOf(emptySet<Long>()) }
+    LaunchedEffect(logs) {
+        val current = logs.map { it.id }.toSet()
+        val fresh = current - seenLogIds.value
+        if (fresh.isNotEmpty()) freshLogIds = fresh
+        seenLogIds.value = current
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -1287,20 +1375,30 @@ private fun MaintenanceTab(
                         Text("لا يوجد موعد محدد", color = MaterialTheme.colorScheme.outline)
                     } else {
                         val days = due.daysFromNow()
-                        Text("الموعد: ${due.formatDate()}", style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            when {
-                                days < 0 -> "متأخر ${-days} يوم"
-                                days == 0L -> "اليوم"
-                                else -> "بعد $days يوم"
-                            },
-                            color = if (days <= 0) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.secondary
-                            },
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        // حلقة عد تنازلي تستنزف وتتدرج ألوانها حسب
+                        // الخطورة (اختيار 37 من الجولة الثالثة)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            DueCountdownRing(days = days, size = 48.dp)
+                            Column {
+                                Text("الموعد: ${due.formatDate()}", style = MaterialTheme.typography.titleSmall)
+                                Text(
+                                    when {
+                                        days < 0 -> "متأخر ${-days} يوم"
+                                        days == 0L -> "اليوم"
+                                        else -> "بعد $days يوم"
+                                    },
+                                    color = if (days <= 0) {
+                                        MaterialTheme.colorScheme.error
+                                    } else {
+                                        MaterialTheme.colorScheme.secondary
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = { showDuePicker = true }) { Text("تحديد الموعد") }
@@ -1346,6 +1444,7 @@ private fun MaintenanceTab(
                     log = log,
                     index = index,
                     isLast = index == logs.lastIndex,
+                    isFresh = log.id in freshLogIds,
                     onDelete = { logToDelete = log }
                 )
             }
@@ -1423,12 +1522,17 @@ private fun MaintenanceTab(
  * صف واحد في الخط الزمني لسجل الصيانة (مقترح 18): نقطة وخط عمودي
  * يظهران برسم تدريجي متتابع (تأخير 180 مللي لكل سجل)، ثم تظهر
  * البطاقة بتلاشي مرتبط بنفس التقدم.
+ *
+ * ترقية الجولة الثالثة (اختيار 36): السجل الجديد المضاف أثناء فتح
+ * التبويب تُنبض نقطته بحلقتين سماويتين متعاقبتين — الخط «يمتد»
+ * أمام المستخدم بدل الإدراج الصامت.
  */
 @Composable
 private fun TimelineLogRow(
     log: MaintenanceLog,
     index: Int,
     isLast: Boolean,
+    isFresh: Boolean,
     onDelete: () -> Unit
 ) {
     // التقدم يبدأ صفرًا عند أول تركيب للسجل ويتحرك بتأخير متزايد
@@ -1437,6 +1541,18 @@ private fun TimelineLogRow(
         animationSpec = tween(durationMillis = 420, delayMillis = 250 + index * 180),
         label = "timeline-$index"
     )
+    // نبض الحلقة للسجل الجديد (اختيار 36): حلقتان متعاقبتان
+    val ping = remember { Animatable(0f) }
+    LaunchedEffect(isFresh) {
+        if (isFresh) {
+            repeat(2) {
+                ping.snapTo(0f)
+                ping.animateTo(1f, animationSpec = tween(750))
+                delay(140)
+            }
+            ping.snapTo(0f)
+        }
+    }
     val primary = MaterialTheme.colorScheme.primary
     val lineColor = MaterialTheme.colorScheme.outline
 
@@ -1445,7 +1561,8 @@ private fun TimelineLogRow(
             modifier = Modifier.width(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // نقطة الدخول — تكبر مع التقدم
+            // نقطة الدخول — تكبر مع التقدم، وتنبض حلقة حولها إن كان
+            // السجل جديدًا (اختيار 36)
             Box(
                 modifier = Modifier
                     .padding(top = 16.dp)
@@ -1453,6 +1570,15 @@ private fun TimelineLogRow(
                     .graphicsLayer {
                         scaleX = progress
                         scaleY = progress
+                    }
+                    .drawBehind {
+                        val p = ping.value
+                        if (isFresh && p > 0f) {
+                            drawCircle(
+                                color = primary.copy(alpha = 0.65f * (1f - p)),
+                                radius = 6.dp.toPx() + 11.dp.toPx() * p
+                            )
+                        }
                     }
                     .clip(CircleShape)
                     .background(primary)
@@ -1685,22 +1811,38 @@ private fun AttachmentsTab(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     // شبكة متتابعة: الصور تظهر واحدة تلو الأخرى (مقترح 20)
+                    // وخلف كل صورة شيمر سديمي حتى يكتمل التحميل
+                    // (اختيار 43 من الجولة الثالثة)
                     itemsIndexed(images, key = { _, image -> image.id }) { index, image ->
                         StaggeredItem(index = index, trigger = images.size) {
-                            AsyncImage(
-                                model = image.filePath,
-                                contentDescription = "صورة مرفقة",
-                                contentScale = ContentScale.Crop,
+                            var loaded by remember(image.id) { mutableStateOf(false) }
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(104.dp)
-                                    .pointerInput(image.id) {
-                                        detectTapGestures(
-                                            onTap = { onOpenImage(image) },
-                                            onLongPress = { onDelete(image) }
-                                        )
-                                    }
-                            )
+                                    .clip(RoundedCornerShape(10.dp))
+                            ) {
+                                if (!loaded) {
+                                    GalaxyShimmerBox(Modifier.matchParentSize())
+                                }
+                                AsyncImage(
+                                    model = image.filePath,
+                                    contentDescription = "صورة مرفقة",
+                                    contentScale = ContentScale.Crop,
+                                    onState = { state ->
+                                        loaded = state is AsyncImagePainter.State.Success
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(104.dp)
+                                        .pointerInput(image.id) {
+                                            detectTapGestures(
+                                                onTap = { onOpenImage(image) },
+                                                onLongPress = { onDelete(image) }
+                                            )
+                                        }
+                                )
+                            }
                         }
                     }
                 }

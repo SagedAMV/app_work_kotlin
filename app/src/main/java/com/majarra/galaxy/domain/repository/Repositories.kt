@@ -52,6 +52,8 @@ interface SiteDetailRepository {
 interface MaintenanceLogRepository {
     fun observeBySite(siteId: Long): Flow<List<MaintenanceLog>>
     suspend fun countAll(): Int
+    /** كل السجلات — لأعمدة النشاط الشهري في الإحصائيات (اختيار 35) */
+    suspend fun getAll(): List<MaintenanceLog>
     suspend fun insert(log: MaintenanceLog): Long
     suspend fun delete(log: MaintenanceLog)
 }
@@ -107,8 +109,16 @@ interface SettingsRepository {
     data class Prefs(
         val darkMode: Boolean = true,
         val lockEnabled: Boolean = false,
-        val hasPin: Boolean = false
+        val hasPin: Boolean = false,
+        /** عدد أيام التذكير قبل موعد الصيانة (اختيار 39) — الافتراضي 30 */
+        val reminderDays: Int = DEFAULT_REMINDER_DAYS
     )
+
+    companion object {
+        const val DEFAULT_REMINDER_DAYS = 30
+        const val MIN_REMINDER_DAYS = 5
+        const val MAX_REMINDER_DAYS = 90
+    }
 
     val preferences: Flow<Prefs>
 
@@ -120,6 +130,9 @@ interface SettingsRepository {
     val current: Prefs
 
     suspend fun setDarkMode(enabled: Boolean)
+
+    /** عدد أيام التذكير قبل الصيانة — يُقصّ إلى المدى 5-90 يومًا */
+    suspend fun setReminderDays(days: Int)
 
     /** تفعيل القفل يتطلب وجود رمز سري محفوظ مسبقًا */
     suspend fun setLockEnabled(enabled: Boolean)
