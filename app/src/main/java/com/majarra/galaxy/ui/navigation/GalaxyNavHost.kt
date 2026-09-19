@@ -369,7 +369,11 @@ private fun GalaxyBottomBar(navController: NavHostController, currentRoute: Stri
                                     itemLayouts.value = itemLayouts.value + (index to measured)
                                 }
                             }
-                            .clickable {
+                            // إصلاح UX: النقر على التبويب المفتوح أصلًا كان
+                            // يعيد التنقل فيُعاد بناء الشاشة وتظهر حركة
+                            // الدخول مرة أخرى بلا فائدة. النقر الآن معطّل
+                            // على التبويب النشط (بلا تأثير لمعان كاذب).
+                            .clickable(enabled = !selected) {
                                 navController.navigate(tab.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
                                         saveState = true
@@ -437,7 +441,9 @@ private fun GalaxyNavHost(
             )
         }
         composable(Routes.STATS) { StatsScreen() }
-        composable(Routes.SETTINGS) { SettingsScreen() }
+        // الإعدادات تتشارك مضيف السنابار العام حتى تُعرض رسائل نجاحها
+        // كسنابار خفيفة بدل حوار يوقف المستخدم
+        composable(Routes.SETTINGS) { SettingsScreen(snackbarHostState = snackbarHostState) }
         composable(Routes.CATEGORIES) {
             CategoriesScreen(onBack = { navController.popBackStack() })
         }

@@ -18,6 +18,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
@@ -141,6 +143,11 @@ class SettingsViewModel @Inject constructor(
  */
 @Composable
 fun SettingsScreen(
+    /**
+     * مضيف السنابار العام من جذر التطبيق. إن غاب (استخدام مستقل) تسقط
+     * الشاشة إلى حوار الرسالة القديم بلا أي فقدان وظيفي.
+     */
+    snackbarHostState: SnackbarHostState? = null,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val prefs by viewModel.prefs.collectAsStateWithLifecycle()
@@ -155,9 +162,17 @@ fun SettingsScreen(
     // الثالثة): يُشغَّل عندما تحمل رسالة الحالة خبر نجاح
     var backupBurst by remember { mutableStateOf(0) }
     LaunchedEffect(message) {
-        val current = message
-        if (current != null && (current.contains("بنجاح") || current.startsWith("تم استيراد"))) {
+        val current = message ?: return@LaunchedEffect
+        if (current.contains("بنجاح") || current.startsWith("تم استيراد")) {
             backupBurst++
+        }
+        // إصلاح UX: كانت كل رسالة نجاح بسيطة (حفظ رمز، تصدير نسخة…)
+        // تُعرض في حوار يوقف المستخدم ويطلب «حسنًا». الآن تُعرض سنابار
+        // خفيفة عبر مضيف الجذر، ويبقى الحوار للحالة الوحيدة التي تحتاج
+        // قرارًا فعليًا: إعادة التشغيل بعد الاستيراد أو المسح.
+        if (!restartRequired && snackbarHostState != null) {
+            snackbarHostState.showSnackbar(current)
+            viewModel.dismissMessage()
         }
     }
 
@@ -188,7 +203,10 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                // إصلاح محاذاة: كان المفتاح يلتصق بأعلى الخلية بعيدًا عن
+                // مركز النص ذي السطرين
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("الوضع الليلي", style = MaterialTheme.typography.titleSmall)
@@ -226,7 +244,8 @@ fun SettingsScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("قفل التطبيق", style = MaterialTheme.typography.titleSmall)
@@ -303,8 +322,8 @@ fun SettingsScreen(
         }
     }
 
-    // رسائل الحالة
-    message?.let { msg ->
+    // حوار الحالة — لا يظهر إلا عند طلب إعادة التشغيل (أو بلا مضيف سنابار)
+    message?.takeIf { restartRequired || snackbarHostState == null }?.let { msg ->
         AlertDialog(
             onDismissRequest = { viewModel.dismissMessage() },
             text = { Text(msg) },

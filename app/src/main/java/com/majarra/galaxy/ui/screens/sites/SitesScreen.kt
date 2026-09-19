@@ -277,6 +277,10 @@ fun SitesScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
+            // إصلاح واجهة: كان العنوان وزرّا الرأس أبناءَ Row مباشرين مع
+            // SpaceBetween، فيتوزع الثلاثة على كامل العرض ويبقى أحد الزرين
+            // معلقًا في منتصف الشاشة. الآن الزرّان مجموعة واحدة في النهاية
+            // والعنوان في البداية — صف رأس متوازن على أي عرض شاشة.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -286,14 +290,20 @@ fun SitesScreen(
                     if (showArchived) "المواقع المؤرشفة" else "المواقع",
                     style = MaterialTheme.typography.headlineMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(vertical = 8.dp)
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .padding(vertical = 8.dp)
                 )
                 // إدارة التصنيفات + كتالوج المواد الموحد (النسخة 2.2)
-                IconButton(onClick = onOpenMaterials) {
-                    Icon(Icons.Filled.Inventory2, contentDescription = "المواد الموحدة")
-                }
-                IconButton(onClick = onOpenCategories) {
-                    Icon(Icons.Filled.Category, contentDescription = "إدارة التصنيفات")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onOpenMaterials) {
+                        Icon(Icons.Filled.Inventory2, contentDescription = "المواد الموحدة")
+                    }
+                    IconButton(onClick = onOpenCategories) {
+                        Icon(Icons.Filled.Category, contentDescription = "إدارة التصنيفات")
+                    }
                 }
             }
 
@@ -613,7 +623,11 @@ private fun SiteRow(
         runCatching { Color(android.graphics.Color.parseColor(c.colorHex)) }
             .getOrDefault(MaterialTheme.colorScheme.primary)
     } ?: MaterialTheme.colorScheme.outline
-    val overdue = dueDays != null && dueDays <= 0
+    // إصلاح اتساق: «مستحق اليوم» ليس «متأخرًا». الشريط العلوي وتبويب
+    // الصيانة يعتبران التأخر بسبب سالب فقط، أما البطاقة فكانت تصبغ
+    // اليوم الحالي بالأحمر وتُشعل التنبيه. الآن الأحمر للتأخر الفعلي
+    // فقط، والاستحقاق القريب يبقى بالكهرماني (حلقة العدّاد).
+    val overdue = dueDays != null && dueDays < 0
 
     if (archived) {
         // المؤرشفة: بطاقة عادية بزر استعادة — لا سحب هنا
@@ -709,7 +723,13 @@ private fun SiteRow(
                                 val raw = offsetX.value + dx
                                 // مقاومة خفيفة بعد 60٪ من عرض البطاقة
                                 val limit = size.width * 0.6f
-                                scope.launch { offsetX.snapTo(raw.coerceIn(-limit, limit)) }
+                                // إصلاح أداء/سلاسة: كان كل حدث لمس يُطلق
+                                // coroutine جديدًا لإسناد الإزاحة، فتتكدس
+                                // المهام ويتلخبط السحب. الإسناد المباشر هنا
+                                // صحيح لأننا داخل نطاق معلّق (suspend) أصلًا:
+                                // `snapTo` تلغي أي انميشن جارٍ وتثبّت القيمة
+                                // فورًا، والإصبع يبقى ملتصقًا بالبطاقة.
+                                offsetX.snapTo(raw.coerceIn(-limit, limit))
                                 change.consume()
                             }
                         }
@@ -790,7 +810,11 @@ private fun SiteCardContent(
     archived: Boolean,
     onRestore: (() -> Unit)?
 ) {
-    val overdue = dueDays != null && dueDays <= 0
+    // إصلاح اتساق: «مستحق اليوم» ليس «متأخرًا». الشريط العلوي وتبويب
+    // الصيانة يعتبران التأخر بسبب سالب فقط، أما البطاقة فكانت تصبغ
+    // اليوم الحالي بالأحمر وتُشعل التنبيه. الآن الأحمر للتأخر الفعلي
+    // فقط، والاستحقاق القريب يبقى بالكهرماني (حلقة العدّاد).
+    val overdue = dueDays != null && dueDays < 0
     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (category != null) ColorDot(category.colorHex)

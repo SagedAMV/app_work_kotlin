@@ -21,7 +21,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,8 +68,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
@@ -90,10 +89,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -190,18 +193,31 @@ private enum class DetailsTab(val label: String) {
     ATTACHMENTS("المرفقات")
 }
 
+/**
+ * حفظ التبويب المختار عبر إعادة إنشاء النشاط (إصلاح UX): كان التبويب
+ * يُحفظ بـ `remember` وحده فيعود المستخدم إلى «بيانات» بعد أي استدارة
+ * أو رجوع من الخلفية — أي فقدان موضعه في شاشة طويلة بستة تبويبات.
+ */
+private val DetailsTabSaver: Saver<DetailsTab, String> = Saver(
+    save = { it.name },
+    restore = { name -> DetailsTab.entries.firstOrNull { it.name == name } ?: DetailsTab.INFO }
+)
+
+/** أرقام عربية-هندية لعرض قيم رقمية داخل نصوص عربية */
+private fun Int.arabicDigits(): String =
+    toString().map { if (it.isDigit()) '\u0660' + (it - '0') else it }.joinToString("")
+
 @HiltViewModel
 class SiteDetailsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     observeSite: ObserveSiteUseCase,
-    detailRepo: SiteDetailRepository,
+    private val detailRepo: SiteDetailRepository,
     logRepo: MaintenanceLogRepository,
     categoryRepo: CategoryRepository,
     materialRepo: MaterialRepository,
     withdrawalRepo: WithdrawalRepository,
     emergencyVisitRepo: EmergencyVisitRepository,
     private val siteRepo: SiteRepository,
-    private val detailRepository: SiteDetailRepository,
     private val attachmentRepo: AttachmentRepository,
     private val saveSite: SaveSiteUseCase,
     private val deleteSite: DeleteSiteUseCase,
@@ -290,8 +306,8 @@ class SiteDetailsViewModel @Inject constructor(
     /** حفظ الحقول الاختيارية الأربعة (المواد) في صف تفاصيل الموقع */
     fun saveMaterials(available: String, needed: String, maintenance: String, withdrawn: String) {
         viewModelScope.launch {
-            val existing = detailRepository.getBySite(siteId)
-            detailRepository.upsert(
+            val existing = detailRepo.getBySite(siteId)
+            detailRepo.upsert(
                 existing?.copy(
                     availableMaterials = available.trim(),
                     neededMaterials = needed.trim(),
@@ -472,7 +488,7 @@ fun SiteDetailsScreen(
     val emergencyVisits by viewModel.emergencyVisits.collectAsStateWithLifecycle()
     val displayAvailableItems by viewModel.displayAvailableItems.collectAsStateWithLifecycle()
 
-    var tab by remember { mutableStateOf(DetailsTab.INFO) }
+    var tab by rememberSaveable(stateSaver = DetailsTabSaver) { mutableStateOf(DetailsTab.INFO) }
     var showEditInfo by remember { mutableStateOf(false) }
     var confirmDeleteSite by remember { mutableStateOf(false) }
     // مرفق معروض ملء الشاشة / مرفق بانتظار تأكيد الحذف (مشترك بين
@@ -588,13 +604,20 @@ fun SiteDetailsScreen(
                 Text("طارئ")
             }
 
-            Row(
-                modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 6.dp)
-                    .horizontalScroll(rememberScrollState()),
+            // إصلاح UX: صف التبويبات كان قائمة أفقية لا تتحرك تلقائيًا، فقد
+            // يبدّل المستخدم إلى تبويب خارج الشاشة (أو يعود إليه عند فتح
+            // الموقع) بلا رؤية الشريحة المحددة. الآن يُمرَّر الشريط تلقائيًا
+            // ليبقى التبويب النشط في المدى المرئي.
+            val tabsScrollState = rememberLazyListState()
+            LaunchedEffect(tab) {
+                tabsScrollState.animateScrollToItem(DetailsTab.entries.indexOf(tab))
+            }
+            LazyRow(
+                state = tabsScrollState,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                DetailsTab.entries.forEach { t ->
+                itemsIndexed(DetailsTab.entries, key = { _, t -> t.name }) { _, t ->
                     FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                 }
             }
@@ -886,7 +909,12 @@ private fun MaterialsTab(
     // «الموجودة» تُحرَّر انطلاقًا من القائمة المعروضة المحسوبة (التي
     // أسقطت المسحوبات المفتوحة في الـ ViewModel). المفاتيح: معرف الصف
     // والقائمة المعروضة — عند إرجاع مادة تتحدث القائمة فيعاد التهيئة.
-    var available by remember(detail?.id, displayAvailable) { mutableStateOf(displayAvailable) }
+    // إصلاح UX: كان المفتاح قائمة العرض نفسها (كائن جديد مع كل إصدار من
+    // الـ Flow) فأي إصدار — ولو بنفس المحتوى — يمحو تعديلات المستخدم قبل
+    // الحفظ. المفتاح الآن مضمون: معرّف صف التفاصيل + بصمة نصية لأسماء
+    // المسحوبات المفتوحة (تُقارن بالمحتوى لا بهوية الكائن).
+    val openSignature = openWithdrawnNames.sorted().joinToString("|")
+    var available by remember(detail?.id, openSignature) { mutableStateOf(displayAvailable) }
     var needed by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.neededMaterials.orEmpty())) }
     var maintenance by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.maintenanceMaterials.orEmpty())) }
     var withdrawn by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.withdrawnMaterials.orEmpty())) }
@@ -1000,20 +1028,29 @@ private fun MaterialChipSection(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items.forEachIndexed { index, item ->
-                    // ظهور نابض عند إضافة العنصر (اختيار 2)
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn(tween(200)) + scaleIn(tween(260)),
-                        label = "material-chip-enter"
-                    ) {
-                        MaterialChip(
-                            item = item,
-                            kind = kind,
-                            onRemove = {
-                                onChange(items.toMutableList().also { it.removeAt(index) })
-                            }
-                        )
+                // إصلاح (كود انميشن ميت): كان `AnimatedVisibility(visible = true)`
+                // ثابتًا على «ظاهر»، فمهما أُضيف عنصر جديد يظهر فورًا بلا أي
+                // حركة رغم أن التعليق كان يعد بنبضة دخول. الآن كل رقاقة
+                // تبدأ مخفية ثم تُشغّل نبضتها مرة واحدة عند تركيبها فعليًا
+                // (حالة انتقال محفوظة لكل عنصر بمفتاح نصّه).
+                items.forEach { item ->
+                    key(item.text) {
+                        val appear = remember {
+                            MutableTransitionState(false).apply { targetState = true }
+                        }
+                        AnimatedVisibility(
+                            visibleState = appear,
+                            enter = fadeIn(tween(200)) + scaleIn(tween(240), initialScale = 0.86f),
+                            label = "material-chip-enter"
+                        ) {
+                            MaterialChip(
+                                item = item,
+                                kind = kind,
+                                onRemove = {
+                                    onChange(items.filterNot { it.text == item.text })
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -1057,36 +1094,39 @@ private fun MaterialChip(
     val containerColor = tint.copy(alpha = if (faded) 0.08f else 0.16f)
     val labelColor = if (faded) tint.copy(alpha = 0.55f) else tint
 
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        AssistChip(
-            // رقاقة حالة جردية — الإزالة من القائمة عبر أيقونة × المجاورة
-            onClick = { },
-            label = { Text(item.text, style = MaterialTheme.typography.bodySmall) },
-            leadingIcon = {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (faded) tint.copy(alpha = 0.4f) else tint)
-                )
-            },
-            colors = AssistChipDefaults.assistChipColors(
-                containerColor = containerColor,
-                labelColor = labelColor,
-                leadingIconContentColor = tint
-            ),
-            border = BorderStroke(1.dp, tint.copy(alpha = if (faded) 0.2f else 0.45f))
-        )
-        IconButton(
-            onClick = onRemove,
-            modifier = Modifier.size(48.dp)
+    // إصلاح UX مهم: كانت الرقاقة `AssistChip(onClick = { })` — زر يلمع عند
+    // الضغط ولا يفعل شيئًا (فخّ إيحاء كاذب، وهو نفس الخطأ الذي تجنّبه
+    // `GalaxyCard`). صارت سطحًا غير قابل للنقر يحمل حالة العنصر بصريًا،
+    // وزرّ الحذف × داخلها: لا إيحاء زائف وتوفير مساحة الرقاقة المضاعفة.
+    Surface(
+        shape = RoundedCornerShape(99.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, tint.copy(alpha = if (faded) 0.2f else 0.45f))
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(start = 10.dp)
         ) {
-            Icon(
-                Icons.Filled.Close,
-                contentDescription = "حذف العنصر",
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.outline
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(if (faded) tint.copy(alpha = 0.4f) else tint)
             )
+            Text(
+                item.text,
+                style = MaterialTheme.typography.bodySmall,
+                color = labelColor,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+            IconButton(onClick = onRemove, modifier = Modifier.size(34.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "حذف «${item.text}» من القائمة",
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.outline
+                )
+            }
         }
     }
 }
@@ -1669,10 +1709,12 @@ private fun MaintenanceTab(
                                         days == 0L -> "اليوم"
                                         else -> "بعد $days يوم"
                                     },
-                                    color = if (days <= 0) {
-                                        MaterialTheme.colorScheme.error
-                                    } else {
-                                        MaterialTheme.colorScheme.secondary
+                                    // اتساق الحالات مع بقية الشاشات: أحمر
+                                    // للتأخر الفعلي، كهرماني لمستحق اليوم
+                                    color = when {
+                                        days < 0 -> MaterialTheme.colorScheme.error
+                                        days == 0L -> MaterialTheme.colorScheme.tertiary
+                                        else -> MaterialTheme.colorScheme.secondary
                                     },
                                     style = MaterialTheme.typography.bodySmall
                                 )
@@ -1761,7 +1803,8 @@ private fun MaintenanceTab(
             title = { Text("اقتراح موعد الصيانة القادم") },
             text = {
                 Text(
-                    "سُجلت الصيانة بنجاح. هل تريد تحديد الموعد القادم مقترحًا بعد ٩٠ يومًا؟\n" +
+                    "سُجلت الصيانة بنجاح. هل تريد تحديد الموعد القادم مقترحًا بعد " +
+                        "${NEXT_DUE_SUGGESTION_DAYS.toInt().arabicDigits()} يومًا؟\n" +
                         "الموعد المقترح: ${suggested.formatDate()}"
                 )
             },

@@ -74,7 +74,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -937,9 +936,12 @@ fun DueCountdownRing(
         animationSpec = tween(700, easing = FastOutSlowInEasing),
         label = "due-ring-fraction"
     )
+    // إصلاح اتساق الحالات: الأحمر للتأخر الفعلي (يوم سالب) فقط،
+    // ومستحق اليوم يدخل في النطاق الكهرماني «قريب» مثل بقية الشاشات
+    // (كان `days <= 0` يجعل مستحق اليوم أحمر كما لو أنه متأخر).
     val ringColor by animateColorAsState(
         targetValue = when {
-            days <= 0 -> Color(0xFFFF5A5A)
+            days < 0 -> Color(0xFFFF5A5A)
             days <= 7 -> Color(0xFFFFC857)
             else -> Color(0xFF38BDF8)
         },

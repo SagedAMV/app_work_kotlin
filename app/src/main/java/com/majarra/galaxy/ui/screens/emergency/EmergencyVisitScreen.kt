@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -511,7 +512,17 @@ private fun UsedMaterialsSection(
                     leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                     singleLine = true
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // إصلاح UX/أداء: كان كتالوج المواد يُبنى كاملًا داخل النموذج
+                // الطويل، فمع كتالوج كبير يصبح الوصول إلى الحقول وحفظ النزول
+                // متعبًا (تمرير طويل جدًا بلا نهاية). الآن القائمة في نافذة
+                // محدودة الارتفاع تُمرَّر وحدها والنموذج يبقى قابلًا للإدارة.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
                     visible.forEach { material ->
                         val isSelected = selected.contains(material.name)
                         Row(

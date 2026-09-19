@@ -105,6 +105,15 @@ class StatsViewModel @Inject constructor(
         load()
     }
 
+    /**
+     * إصلاح UX: كانت الأرقام تُحمَّل مرة واحدة في `init` فقط. وبما أن
+     * ViewModel الشاشة يبقى مرتبطًا بمدخل التنقل بعد الخروج منها، فقد
+     * يرى المستخدم أرقامًا قديمة بعد أن يضيف موقعًا أو يسجّل صيانة ثم
+     * يعود إلى تبويب الإحصائيات. الاستدعاء من الشاشة عند كل ظهور يعيد
+     * الأرقام إلى لحظتها الحالية.
+     */
+    fun refresh() = load()
+
     /** كل الأرقام استعلامات عدّ خفيفة تُنفَّذ مرة واحدة عند الفتح */
     private fun load() {
         viewModelScope.launch {
@@ -154,6 +163,9 @@ class StatsViewModel @Inject constructor(
 @Composable
 fun StatsScreen(viewModel: StatsViewModel = hiltViewModel()) {
     val stats by viewModel.stats.collectAsStateWithLifecycle()
+
+    // تحديث عند كل ظهور للشاشة (لا مرة واحدة عند أول فتح فقط)
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     Column(
         modifier = Modifier
