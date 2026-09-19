@@ -601,7 +601,9 @@ fun GalaxyNetworkScreen(
                             nodeRadiusFor(d)
                         }
                         val hitId = hitNode(down.position, transform, viewModel.state.value, radiusFn)
-                        var dragAmount = 0f
+                        // التمييز بين النقرة والسحب يعتمد على الإزاحة الصافية من
+                        // نقطة اللمس الأولى، لا على المسافة الكلية — يمنع
+                        // تصنيف الهزّ الخفيف كسحب عندما يعود الإصبع قريبًا.
                         var moved = false
                         var pinched = false
                         var lastCentroid = down.position
@@ -658,8 +660,8 @@ fun GalaxyNetworkScreen(
                                     lastSpan = 0f
                                 }
                                 val delta = change.position - change.previousPosition
-                                dragAmount += delta.getDistance()
-                                if (dragAmount > touchSlop) {
+                                val displacement = (change.position - down.position).getDistance()
+                                if (displacement > touchSlop || moved) {
                                     moved = true
                                     hintSeen = true
                                     if (pinched) {

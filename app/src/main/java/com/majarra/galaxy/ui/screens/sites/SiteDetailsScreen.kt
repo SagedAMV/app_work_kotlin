@@ -1079,12 +1079,12 @@ private fun MaterialChip(
         )
         IconButton(
             onClick = onRemove,
-            modifier = Modifier.size(24.dp)
+            modifier = Modifier.size(48.dp)
         ) {
             Icon(
                 Icons.Filled.Close,
                 contentDescription = "حذف العنصر",
-                modifier = Modifier.size(14.dp),
+                modifier = Modifier.size(18.dp),
                 tint = MaterialTheme.colorScheme.outline
             )
         }
@@ -1316,11 +1316,11 @@ private fun WithdrawalRow(
                     modifier = Modifier.weight(1f)
                 )
                 Text(w.status.label, style = MaterialTheme.typography.labelSmall, color = statusColor)
-                IconButton(onClick = { onDelete(w) }, modifier = Modifier.size(28.dp)) {
+                IconButton(onClick = { onDelete(w) }, modifier = Modifier.size(48.dp)) {
                     Icon(
                         Icons.Filled.Delete,
                         contentDescription = "حذف السجل",
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }

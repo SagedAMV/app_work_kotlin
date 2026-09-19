@@ -44,6 +44,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.majarra.galaxy.ui.anim.GalaxyDialogShell
@@ -223,6 +225,7 @@ fun FullscreenImageViewer(
 ) {
     var scale by remember(uri) { mutableStateOf(1f) }
     var offset by remember(uri) { mutableStateOf(Offset.Zero) }
+    var viewport by remember(uri) { mutableStateOf(IntSize.Zero) }
 
     Box(
         modifier = Modifier
@@ -235,6 +238,7 @@ fun FullscreenImageViewer(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxSize()
+                .onSizeChanged { viewport = it }
                 .graphicsLayer(
                     scaleX = scale,
                     scaleY = scale,
@@ -244,10 +248,11 @@ fun FullscreenImageViewer(
                 .pointerInput(uri) {
                     // تكبير/تصغير بإصبعين + تحريك بإصبع واحد
                     detectTransformGestures { _, pan, zoom, _ ->
-                        scale = (scale * zoom).coerceIn(1f, 6f)
-                        offset = if (scale == 1f) Offset.Zero else offset + pan
-                        // عند العودة للحجم الطبيعي نعيد الصورة للمركز
-                        if (scale == 1f) offset = Offset.Zero
+                        val newScale = (scale * zoom).coerceIn(1f, 6f)
+                        val newOffset = if (newScale == 1f) Offset.Zero else offset + pan
+                        scale = newScale
+                        // تقييد الإزاحة حتى لا تخرج الصورة بالكامل عن الشاشة
+                        offset = clampImageOffset(viewport, newOffset, newScale)
                     }
                 }
                 .pointerInput(uri) {
@@ -287,4 +292,21 @@ fun FullscreenImageViewer(
                 .padding(bottom = 16.dp)
         )
     }
+}
+
+/**
+ * تقييد إزاحة الصورة المكبّرة لتبقى جزء منها مرئيًا دائمًا.
+ * عند `scale == 1` تبقى في المركز. عند التكبير، يُسمح بالتحريك حتى
+ * حافة واحدة على الأقل من الصورة تبقى داخل منطقة العرض.
+ */
+private fun clampImageOffset(viewport: IntSize, offset: Offset, scale: Float): Offset {
+    if (viewport.width <= 0 || viewport.height <= 0 || scale <= 1f) return Offset.Zero
+    // افتراض آمن: الصورة تملأ المنفذ عند scale=1 (ContentScale.Fit)،
+    // فالحد الأقصى للإزاحة هو نصف الفائض في كل اتجاه.
+    val maxX = (viewport.width * (scale - 1f)) / 2f
+    val maxY = (viewport.height * (scale - 1f)) / 2f
+    return Offset(
+        x = offset.x.coerceIn(-maxX, maxX),
+        y = offset.y.coerceIn(-maxY, maxY)
+    )
 }

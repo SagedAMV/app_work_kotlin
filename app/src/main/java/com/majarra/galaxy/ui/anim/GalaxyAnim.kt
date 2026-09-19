@@ -703,7 +703,8 @@ fun OdometerNumber(
     color: Color,
     modifier: Modifier = Modifier
 ) {
-    val rowHeight = 38.dp
+    // ارتفاع أكبر قليلاً لمنع قص الأرقام الكبيرة بأنماط عنوان متوسطة
+    val rowHeight = 44.dp
     val cap = 40
     val start = (value - cap).coerceAtLeast(0)
     val offset by animateDpAsState(
@@ -1057,8 +1058,8 @@ fun GalaxyBubbleSlider(
     }
 }
 
-/** حالة `mutableStateOf` لـ Float باسم أوضح */
-private fun mutableFloatState() = mutableStateOf(0f)
+/** حالة `mutableFloatStateOf` لـ Float بأداء أفضل عند تتبع القيم العائمة */
+private fun mutableFloatState() = androidx.compose.runtime.mutableFloatStateOf(0f)
 
 /* ═══════════════ 40) مفتاح الوضع الليلي بشمس وقمر ═══════════════ */
 
