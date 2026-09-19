@@ -119,6 +119,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -707,6 +708,9 @@ private fun SiteRow(
                     // (بدل `detectDragGestures` التي كانت تلتقط كل اتجاه
                     // وتستهلك الحدث فيسرق النزول في القائمة.)
                     val touchSlop = viewConfiguration.touchSlop
+                    // مهمة إسناد واحدة حية دائمًا (إصلاح البناء 2.9.1):
+                    // تُلعَن قبل كل حدث لمس حتى لا تتكدس مهام الإسناد.
+                    var snapJob: Job? = null
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var accX = 0f
@@ -741,13 +745,17 @@ private fun SiteRow(
                                 val raw = offsetX.value + dx
                                 // مقاومة خفيفة بعد 60٪ من عرض البطاقة
                                 val limit = size.width * 0.6f
-                                // إصلاح أداء/سلاسة: كان كل حدث لمس يُطلق
-                                // coroutine جديدًا لإسناد الإزاحة، فتتكدس
-                                // المهام ويتلخبط السحب. الإسناد المباشر هنا
-                                // صحيح لأننا داخل نطاق معلّق (suspend) أصلًا:
-                                // `snapTo` تلغي أي انميشن جارٍ وتثبّت القيمة
-                                // فورًا، والإصبع يبقى ملتصقًا بالبطاقة.
-                                offsetX.snapTo(raw.coerceIn(-limit, limit))
+                                // إصلاح أداء/سلاسة + إصلاح بناء (2.9.1):
+                                // نطاق `pointerInput` معلّق مقيّد
+                                // (@RestrictsSuspension) فلا يصح استدعاء
+                                // `snapTo` المعلّقة على `Animatable` مباشرة
+                                // داخله — خطأ ترجمة يقطع البناء. الحل:
+                                // إطلاق الإسناد على نطاق التركيب مع إلغاء
+                                // المهمة السابقة قبل كل حدث لمس، فتبقى مهمة
+                                // واحدة حية دائمًا (بلا تكدس) ويلتصق
+                                // الإصبع بالبطاقة كما في الإسناد المباشر.
+                                snapJob?.cancel()
+                                snapJob = scope.launch { offsetX.snapTo(raw.coerceIn(-limit, limit)) }
                                 change.consume()
                             }
                         }

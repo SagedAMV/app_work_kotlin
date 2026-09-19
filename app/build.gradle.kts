@@ -20,13 +20,17 @@ android {
         applicationId = "com.majarra.galaxy"
         minSdk = 30          // حسب التعليمات: Android 11+
         targetSdk = 34
+        // 2.9.1: جلسة التحقق العميق من أخطاء البناء — إصلاح خطأ الترجمة
+        // في سحب بطاقات المواقع (استدعاء `snapTo` المعلّقة مباشرة داخل
+        // نطاق `pointerInput` المقيّد @RestrictsSuspension)، وإضافة نمط
+        // البناء «المصغّر» (نسخة مضغوطة قابلة للتثبيت) حسب تعليمات الجلسة.
         // 2.9.0: جلسة إصلاح أخطاء الواجهة (UI/UX) والاتساق — أكمل أدوار
         // الألوان في Material 3 (كانت الحوارات والسنابار على لوحات
         // افتراضية)، توحيد دلالة «متأخر/مستحق اليوم»، رأس قائمة متوازن،
         // تمرير تبويبات مفعّل، أرقام إحصائيات حيّة، رسائل سنابار بدل
         // حوارات، وسلاسة سحب البطاقات.
-        versionCode = 13
-        versionName = "2.9.0"
+        versionCode = 14
+        versionName = "2.9.1"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -38,6 +42,18 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+
+        // النسخة المصغّرة (جلسة التحقق من البناء 2.9.1): نسخة مضغوكة
+        // قابلة للتثبيت مباشرة — نفس تصغير وتقليص الموارد في release
+        // (R8 + تقليص الموارد) لكنها موقعة بمفتاح التصحيح، فينتج ملف
+        // واحد صغير الحجم جاهز للتجربة الشخصية دون إعداد مفاتيح توقيع.
+        create("mini") {
+            initWith(getByName("release"))
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            versionNameSuffix = "-mini"
         }
     }
 
