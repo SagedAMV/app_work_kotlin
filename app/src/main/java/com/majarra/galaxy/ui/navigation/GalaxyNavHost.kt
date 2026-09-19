@@ -1,7 +1,7 @@
 package com.majarra.galaxy.ui.navigation
 
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -331,11 +331,14 @@ private fun GalaxyBottomBar(navController: NavHostController, currentRoute: Stri
                 .fillMaxWidth()
                 .onPlaced { barLeftPx.value = it.positionInRoot().x }
         ) {
-            // الحبة المنزلاقة المتوهجة — تحت المحتوى (ترتيب الأشقاء)
+            // الحبة المنزلاقة المتوهجة — تحت المحتوى (ترتيب الأشقاء).
+            // المرتكز TopEnd: في اتجاه التطبيق العربي (القسري) هو الزاوية
+            // العليا اليسرى فعليًا، فتصبح إزاحة `indicatorLeft` المحسوبة
+            // بالبكسل من الحافة اليسرى صحيحة فيزيائيًا.
             if (item != null) {
                 Box(
                     Modifier
-                        .align(Alignment.TopLeft)
+                        .align(Alignment.TopEnd)
                         .absoluteOffset(x = indicatorLeft, y = 6.dp)
                         .width(pillWidth)
                         .height(32.dp)

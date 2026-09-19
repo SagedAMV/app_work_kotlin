@@ -1,7 +1,7 @@
 package com.majarra.galaxy.ui.screens.emergency
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateColorAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -389,9 +389,11 @@ private fun OutcomeSegmented(
                 .onPlaced { rowLeftPx.value = it.positionInRoot().x }
         ) {
             if (measured != null) {
+                // المرتكز TopEnd = الزاوية العليا اليسرى فعليًا في اتجاه
+                // التطبيق العربي القسري — تصح معه الإزاحة من الحافة اليسرى
                 Box(
                     Modifier
-                        .align(Alignment.TopLeft)
+                        .align(Alignment.TopEnd)
                         .absoluteOffset(x = pillLeft, y = 3.dp)
                         .width(pillWidth)
                         .height(38.dp)

@@ -12,6 +12,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -489,7 +490,11 @@ private fun DueSitesBanner(
                 dueSites.take(4).forEach { due ->
                     val days = due.dueDate.daysFromNow()
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        // النقر يفتح الموقع مباشرة (السلوك الموثق في تعليق
+                        // الشريط — كان المعطل غير موصولًا قبل 2.6)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenSite(due.siteId) },
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {

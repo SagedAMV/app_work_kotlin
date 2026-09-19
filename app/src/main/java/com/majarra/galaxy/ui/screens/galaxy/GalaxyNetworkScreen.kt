@@ -35,7 +35,7 @@ import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.LinkOff
-import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -1229,7 +1229,7 @@ fun GalaxyNetworkScreen(
 
                 // الخيار الأول: اختصار مباشر لصفحة تفاصيل الموقع
                 GalaxySheetItem(
-                    icon = Icons.Filled.OpenInNew,
+                    icon = Icons.AutoMirrored.Filled.OpenInNew,
                     text = "الانتقال للموقع",
                     onClick = {
                         menuSiteId = null
