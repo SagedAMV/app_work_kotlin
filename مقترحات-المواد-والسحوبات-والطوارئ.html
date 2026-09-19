@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مقترحات المواد والسحوبات والطوارئ — تطبيق مجرة</title>
+<style>
+:root{
+  --bg:#070b16; --panel:#0d1424; --panel2:#111b33; --line:#1e2b4d;
+  --txt:#e8eefc; --dim:#93a3c7; --acc:#7dd3fc; --gold:#ffc857;
+  --good:#34d399; --bad:#f87171; --violet:#a78bfa;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:radial-gradient(1200px 600px at 80% -10%, #14204a 0%, transparent 60%),
+             radial-gradient(900px 500px at 10% 20%, #0e1e3d 0%, transparent 55%),
+             var(--bg);
+  color:var(--txt);
+  font-family:"Segoe UI", Tahoma, "Noto Kufi Arabic", "Noto Sans Arabic", Arial, sans-serif;
+  line-height:1.7; padding-bottom:110px;
+}
+.wrap{max-width:880px; margin:0 auto; padding:20px 16px}
+header.hero{text-align:center; padding:34px 12px 10px}
+header.hero h1{font-size:1.9rem; letter-spacing:.5px}
+header.hero h1 .g{color:var(--acc)}
+header.hero p{color:var(--dim); max-width:660px; margin:10px auto 0; font-size:.95rem}
+.badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:14px}
+.badge{font-size:.75rem; border:1px solid var(--line); background:var(--panel); color:var(--dim); padding:4px 12px; border-radius:999px}
+.badge b{color:var(--gold)}
+
+.bar{
+  position:sticky; top:10px; z-index:50; display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  background:rgba(13,20,36,.92); backdrop-filter:blur(8px); border:1px solid var(--line);
+  border-radius:14px; padding:10px 14px; margin-top:18px;
+}
+.bar #count{flex:1; font-size:.85rem; color:var(--dim); min-width:180px}
+.btn{border:1px solid var(--line); background:var(--panel2); color:var(--txt); padding:8px 16px; border-radius:10px; cursor:pointer; font-size:.85rem; font-family:inherit}
+.btn:hover{border-color:#35507f}
+.btn.primary{background:linear-gradient(135deg, var(--acc), #38bdf8); color:#04121f; font-weight:700; border:none}
+.btn.ghost{background:transparent}
+
+section.block{
+  background:linear-gradient(180deg, var(--panel) 0%, #0b1120 100%);
+  border:1px solid var(--line); border-radius:18px; padding:20px 18px 22px; margin-top:26px;
+}
+.sec-head{display:flex; align-items:flex-start; gap:12px}
+.sec-num{
+  flex:0 0 auto; width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:1.15rem; color:#04121f; background:linear-gradient(135deg, var(--acc), #38bdf8);
+  box-shadow:0 0 18px rgba(125,211,252,.35);
+}
+.sec-head h2{font-size:1.15rem}
+.sec-head p{color:var(--dim); font-size:.85rem}
+.diagnosis{
+  margin:14px 0 4px; border:1px dashed #3b4d7d; background:#0c1730; border-radius:12px; padding:12px 14px; font-size:.85rem;
+}
+.diagnosis b{color:var(--gold)}
+.diagnosis code{color:var(--acc); font-family:Consolas, monospace; font-size:.78rem; background:#0a1122; padding:1px 6px; border-radius:6px}
+.opts-hint{color:var(--dim); font-size:.8rem; margin:12px 2px 8px}
+
+.opt{
+  border:1px solid var(--line); background:var(--panel2); border-radius:14px;
+  padding:14px; margin-top:12px; cursor:pointer; position:relative;
+  transition:border-color .2s, box-shadow .2s, transform .15s;
+}
+.opt:hover{border-color:#35507f; transform:translateY(-1px)}
+.opt.selected{
+  border-color:var(--acc);
+  box-shadow:0 0 0 1px var(--acc), 0 0 22px rgba(125,211,252,.22);
+}
+.opt .check{
+  position:absolute; top:12px; left:12px; width:24px; height:24px; border-radius:50%;
+  border:2px solid #35507f; display:flex; align-items:center; justify-content:center;
+  font-size:13px; color:transparent; transition:all .2s;
+}
+.opt.selected .check{background:var(--acc); border-color:var(--acc); color:#04121f; font-weight:900}
+.opt-top{display:flex; align-items:center; gap:10px; padding-left:34px}
+.opt-num{
+  flex:0 0 auto; min-width:30px; height:30px; padding:0 8px; border-radius:9px; display:flex; align-items:center; justify-content:center;
+  background:#0a1122; border:1px solid var(--line); color:var(--acc); font-weight:800; font-size:.9rem;
+}
+.opt h3{font-size:.98rem}
+.desc{color:var(--dim); font-size:.85rem; margin-top:8px}
+.fix{
+  margin-top:10px; font-size:.8rem; color:#bfe3ff; background:#0a1526; border:1px solid #1c3350;
+  border-radius:10px; padding:8px 12px;
+}
+.fix b{color:var(--gold)}
+
+/* ═══ الفحص العميق ═══ */
+.audit-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:10px; margin-top:14px}
+.audit-card{background:#0b1424; border:1px solid var(--line); border-radius:12px; padding:12px 14px; font-size:.8rem; color:var(--dim)}
+.audit-card h4{font-size:.85rem; color:var(--txt); margin-bottom:6px}
+.audit-card code{color:var(--acc); font-family:Consolas, monospace; font-size:.72rem}
+.audit-card .st-ok{color:var(--good)} .audit-card .st-gap{color:var(--bad)} .audit-card .st-warn{color:var(--gold)}
+
+/* ═══ المعاينات (هاتف مصغّر بأسلوب Compose) ═══ */
+.demo{margin-top:12px}
+.ph{
+  background:#050a14; border:1px solid #24335c; border-radius:14px; padding:12px;
+  position:relative; overflow:hidden; font-size:.78rem;
+}
+.ph::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background:radial-gradient(300px 120px at 85% -20%, rgba(125,211,252,.10), transparent 70%);
+}
+.ph-t{color:var(--dim); font-size:.7rem; margin-bottom:8px; display:flex; align-items:center; gap:6px}
+.ph-t .dot{width:8px; height:8px; border-radius:50%; background:var(--acc)}
+.mrow{
+  display:flex; align-items:center; gap:8px; padding:7px 10px; margin-top:6px;
+  background:#101a30; border:1px solid #1e2b4d; border-radius:10px; position:relative;
+}
+.mrow .name{flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.cbox{
+  width:16px; height:16px; border:2px solid #7dd3fc; border-radius:5px; flex:none;
+  display:grid; place-items:center; font-size:10px; color:#7dd3fc; background:#0a1122;
+}
+.ico{width:18px; height:18px; border-radius:6px; flex:none; display:grid; place-items:center; font-size:10px}
+.chip{
+  display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:999px;
+  font-size:.7rem; border:1px solid; margin:3px 0 0 4px; white-space:nowrap;
+}
+.mcard{
+  background:#0f1830; border:1px solid #223257; border-radius:12px; padding:9px 12px; margin-top:6px;
+  display:flex; align-items:center; gap:8px; box-shadow:0 4px 14px rgba(0,0,0,.35);
+}
+.stitle{color:var(--acc); font-size:.72rem; margin-top:10px; display:flex; align-items:center; gap:6px}
+.count{
+  min-width:20px; height:20px; border-radius:7px; background:#0a1122; border:1px solid var(--line);
+  display:inline-grid; place-items:center; color:var(--gold); font-weight:800; font-size:.72rem; padding:0 5px;
+}
+.snack{
+  position:absolute; bottom:8px; left:10px; right:10px; background:#1b2a4a; border:1px solid #33507f;
+  border-radius:10px; padding:7px 12px; font-size:.72rem; display:flex; justify-content:space-between; align-items:center;
+}
+.snack b{color:var(--acc)}
+.tabbar{display:flex; gap:5px; flex-wrap:wrap; margin-bottom:6px}
+.tab{padding:3px 10px; border-radius:999px; border:1px solid #223257; color:var(--dim); font-size:.68rem}
+.tab.on{background:rgba(125,211,252,.15); border-color:var(--acc); color:var(--acc)}
+.tab.new{border-color:var(--bad); color:var(--bad)}
+.cols{display:flex; gap:8px}
+.cols>div{flex:1; min-width:0}
+.mini-btn{
+  display:inline-flex; align-items:center; gap:5px; padding:4px 12px; border-radius:999px;
+  font-size:.7rem; font-weight:700;
+}
+.emg{background:rgba(248,113,113,.15); border:1px solid var(--bad); color:#ffb4b4}
+.ok{background:rgba(52,211,153,.15); border:1px solid var(--good); color:#a7f3d0}
+.tone{background:rgba(125,211,252,.15); border:1px solid var(--acc); color:var(--acc)}
+.vio{background:rgba(167,139,250,.15); border:1px solid var(--violet); color:#ddd1ff}
+.pos{position:absolute; font-size:.62rem; border-radius:999px; padding:1px 7px}
+.strike{position:relative}
+.strike::after{content:""; position:absolute; right:0; top:55%; height:1.5px; background:var(--good)}
+.bar-chart{display:flex; align-items:flex-end; gap:6px; height:52px; padding-top:6px}
+.bar-chart i{flex:1; border-radius:4px 4px 0 0; transform-origin:bottom}
+
+/* ─── حركات المحاكاة ─── */
+@keyframes k-pop{0%{transform:scale(0)}70%{transform:scale(1.25)}100%{transform:scale(1)}}
+@keyframes k-box-out{0%,35%{opacity:1; transform:scale(1)}50%,100%{opacity:0; transform:scale(.2)}}
+@keyframes k-ico-in{0%,45%{opacity:0; transform:scale(.2)}65%{transform:scale(1.3)}75%,100%{opacity:1; transform:scale(1)}}
+@keyframes k-row-out{0%,40%{opacity:1; transform:none}60%,85%{opacity:0; transform:translateX(34px) scale(.85)}100%{opacity:1; transform:none}}
+@keyframes k-row-in{0%,45%{opacity:0; transform:translateX(-34px) scale(.85)}65%,100%{opacity:1; transform:none}}
+@keyframes k-strike{0%,25%{width:0}55%,85%{width:100%}100%{width:100%}}
+@keyframes k-pulse{0%,100%{box-shadow:0 0 0 0 rgba(52,211,153,.55)}50%{box-shadow:0 0 0 7px rgba(52,211,153,0)}}
+@keyframes k-pulse-r{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.55)}50%{box-shadow:0 0 0 7px rgba(248,113,113,0)}}
+@keyframes k-glow{0%,100%{box-shadow:0 0 0 0 rgba(125,211,252,0)}50%{box-shadow:0 0 16px 3px rgba(125,211,252,.5)}}
+@keyframes k-dim{0%,35%{opacity:1}55%,85%{opacity:.32}100%{opacity:1}}
+@keyframes k-badge{0%{transform:scale(0)}60%{transform:scale(1.35)}100%{transform:scale(1)}}
+@keyframes k-snack{0%,8%{transform:translateY(150%)}22%,72%{transform:translateY(0)}88%,100%{transform:translateY(150%)}}
+@keyframes k-drop{0%{max-height:0; opacity:0}30%,75%{max-height:110px; opacity:1}100%{max-height:0; opacity:0}}
+@keyframes k-bar{0%{transform:scaleY(0)}60%,100%{transform:scaleY(1)}}
+@keyframes k-draw{0%,20%{stroke-dashoffset:26}60%,100%{stroke-dashoffset:0}}
+@keyframes k-check-in{0%,55%{opacity:0; transform:scale(.3)}75%{opacity:1; transform:scale(1.2)}85%,100%{opacity:1; transform:scale(1)}}
+@keyframes k-shimmer{0%{background-position:150% 0}100%{background-position:-50% 0}}
+@keyframes k-cycle{0%,30%{background:#34d399}36%,63%{background:#ffc857}69%,96%{background:#a78bfa}100%{background:#34d399}}
+@keyframes k-fly-x{0%,15%{transform:translateX(0); opacity:1}45%{transform:translateX(-84px); opacity:1}55%,100%{transform:translateX(-84px); opacity:0}}
+@keyframes k-morph{0%,40%{color:var(--dim)}50%{transform:scale(1.4)}60%,100%{color:var(--gold)}}
+
+.foot{text-align:center; color:#5a6b8f; font-size:.75rem; margin-top:34px}
+#toast{
+  position:fixed; bottom:18px; left:50%; transform:translateX(-50%) translateY(80px);
+  background:#12213d; border:1px solid var(--acc); color:var(--txt); padding:10px 22px;
+  border-radius:999px; font-size:.85rem; opacity:0; transition:all .35s; z-index:99; max-width:92vw; text-align:center;
+}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+a.anchor{color:var(--acc); text-decoration:none; font-size:.8rem}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>🌌 مقترحات <span class="g">جلسة المواد والسحوبات والطوارئ</span></h1>
+  <p>
+    جلسة تشخيص عميقة لكود تطبيق «مجرة» (Kotlin + Jetpack Compose) — ثلاث مشكلات أساسية في واجهة تفاصيل الموقع،
+    مع <b>10 خيارات حل قابلة للنقر لكل مشكلة</b>، لكل خيار محاكاة متحركة مستوحاة 100٪ من واجهة التطبيق،
+    وقسم إضافات من الفحص العميق للكود. اختر ثم صدّر ملف <b>اختيارات.md</b> وارفعه للمستودع.
+  </p>
+  <div class="badges">
+    <span class="badge">المستودع <b>SagedAmV/app_work_kotlin</b></span>
+    <span class="badge">الأساس <b>الإصدار 2.7.0</b></span>
+    <span class="badge">3 مشكلات × 10 خيارات <b>+ 10 إضافات</b></span>
+    <span class="badge">المعاينات <b>بأسلوب Material 3</b></span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div class="bar">
+    <div id="count">لم تختر شيئًا بعد</div>
+    <button class="btn ghost" id="resetBtn">تفريغ الاختيارات</button>
+    <button class="btn primary" id="exportBtn">⬇ تصدير اختياراتي (اختيارات.md)</button>
+  </div>
+
+  <!-- ═══════════ ملخص الفحص العميق للكود ═══════════ -->
+  <section class="block">
+    <div class="sec-head">
+      <div class="sec-num">🔍</div>
+      <div>
+        <h2>ملخص الفحص العميق للكود (قبل الاقتراح)</h2>
+        <p>قراءة دالة-دالة للملفات المرتبطة بالمشكلات الثلاث — هذا أساس كل مقترح أدناه</p>
+      </div>
+    </div>
+    <div class="audit-grid">
+      <div class="audit-card">
+        <h4>بيانات الموقع <span class="st-ok">سليم</span></h4>
+        <code>Entities.kt → SiteDetail</code><br>
+        صف واحد لكل موقع بأربعة حقول نصية: <b>availableMaterials</b> (الموجود) / <b>neededMaterials</b> (الاحتياج) /
+        <b>maintenanceMaterials</b> (تحتاج صيانة) / <b>withdrawnMaterials</b> (المسحوبة). التخزين نصي بصيغة
+        <code>[ ] / [x]</code> عبر <code>MaterialLines</code>.
+      </div>
+      <div class="audit-card">
+        <h4>المشكلة ١ <span class="st-gap">عرض المواد كمهام</span></h4>
+        <code>SiteDetailsScreen.kt → MaterialSelectionList</code><br>
+        كل مادة في الأقسام الأربعة تُرسم بمربع <code>DrawnCheck</code> قابل للتحديد — مربع علامة الصح يعطي
+        «منطق مهام» لبيانات هي في الأصل <b>جرد مواد</b>. التحديد لا يغيّر أي حالة تشغيلية في الموجود/الاحتياج/الصيانة.
+      </div>
+      <div class="audit-card">
+        <h4>المشكلة ٢ <span class="st-gap">السحوبات لا تحرك المواد</span></h4>
+        <code>WithdrawItemUseCase / ReturnWithdrawnItemUseCase</code><br>
+        السحب يضيف الاسم إلى <code>withdrawnMaterials</code> عبر <code>addUnchecked</code> لكنه <b>لا يمس</b>
+        <code>availableMaterials</code> — فتبقى المادة «موجودة» في القائمة رغم سحبها. والإرجاع يوسم ✔ فقط عبر
+        <code>markChecked</code> ولا يُرجع المادة لقائمة الموجود، والسطر المرسوم ✔ يتراكم للأبد.
+      </div>
+      <div class="audit-card">
+        <h4>المشكلة ٣ <span class="st-gap">سجل الطوارئ مدفون</span></h4>
+        <code>Daos.kt → EmergencyVisitDao</code><br>
+        الدالة الوحيدة في الـ DAO هي <code>insert</code> (التعليق نفسه يقول «إدخال فقط»)! لا استعلام قراءة، لا
+        <code>Flow</code>، لا شاشة عرض — سجلات <code>emergency_visits</code> تتراكم في القاعدة بلا أي وسيلة للاطلاع عليها.
+      </div>
+      <div class="audit-card">
+        <h4>فجوات إضافية مكتشفة <span class="st-warn">تفاصيل في القسم ٤</span></h4>
+        <code>EmergencyVisitUseCases.kt + WithdrawDialog</code><br>
+        • المواد المستخدمة في الطوارئ لا تُخصم من جرد الموقع.<br>
+        • حوار السحب يقبل اسمًا نصيًا حرًا رغم وجود الكتالوج الموحد.<br>
+        • تبويب المواد يحرر نسخة محلية <code>remember(detail?.id)</code> قد تطمس تغييرات السحب المتزامنة عند الحفظ.
+      </div>
+      <div class="audit-card">
+        <h4>دوال سليمة ومُستخدمة <span class="st-ok">لا كود ميت</span></h4>
+        <code>MaterialLines + كل الـ DAOs</code><br>
+        فحص الاستعمال يؤكد: <code>parse/serialize/renameItem/addUnchecked/markChecked</code> كلها مستخدمة،
+        وكل استعلامات الـ DAOs لها مستهلك عدا قراءة الطوارئ (غير الموجودة أصلًا). لا دوال ميتة حالية —
+        المقترحات تحافظ على هذا المبدأ.
+      </div>
+      <div class="audit-card">
+        <h4>أين تظهر البيانات كمهام؟ <span class="st-warn">جرد كامل</span></h4>
+        <code>DrawnCheck في 4 مواضع</code><br>
+        ① الأقسام الأربعة في تبويب المواد (غير منطقي — جوهر المشكلة ١). ② حوار اختيار المواد
+        <code>MaterialPickerDialog</code> (مقبول كأداة تحديد). ③ قسم المواد المستخدمة في شاشة الطوارئ (مقبول).
+        ④ علامة ✔ الإرجاع في «مواد تم سحبها» (لها معنى، وتلغى تلقائيًا بحل المشكلة ٢).
+      </div>
+    </div>
+  </section>
+
+  <div id="root"></div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   بيانات الأقسام: 3 مشكلات (اختيار واحد لكل مشكلة) + إضافات (متعدد)
+   ═══════════════════════════════════════════════════════════════ */
+const SECTIONS = [
+{
+  id:"p1", num:"١", kind:"radio",
+  title:"المشكلة ١ — بيانات المواد تظهر كمهام بمربعات علامة الصح",
+  sub:"تبويب المواد في شاشة تفاصيل الموقع (المواد الموجودة حاليًا / احتياج الموقع)",
+  diagnosis:`في <code>SiteDetailsScreen.kt</code> يرسم <code>MaterialSelectionList</code> كل مادة داخل الأقسام الأربعة
+  بمربع <code>DrawnCheck</code> (علامة صح مرسومة بأنميشن). المربع يوحي أن المادة <b>مهمة تُنجز</b> بينما هي
+  <b>بيانات جرد</b>: تحديد «مايك 1» في «المواد الموجودة» لا يفعل شيئًا سوى تخزين <code>[x]</code> نصيًا عبر
+  <code>MaterialLines.serialize</code>. المربع منطقي فقط في «مواد تم سحبها» (✔ = اكتمال دورة الإرجاع) —
+  وحل المشكلة ٢ يجعل حتى هذا المعنى غير ضروري. المطلوب: تعامل المواد <b>كمواد</b> لا كمهام.`,
+  options:[
+   {n:1, demo:"d_icon_rows", title:"جرد نقي: أيقونة بدل المربع (الحل الجراحي المباشر)",
+    desc:"إزالة DrawnCheck نهائيًا من أقسام «الموجودة/الاحتياج/تحتاج صيانة» واستبداله بأيقونة مادة بلون القسم (دائرة صغيرة بلون دلالي). التحديد يُلغى من جذره — تبقى أزرار الإضافة والحذف فقط. قسم «المسحوبة» يتحول لشارة سحب بدل ✔.",
+    fix:"طريقة التنفيذ: إضافة معامل <code>showCheck=false</code> إلى <code>MaterialSelectionList</code> واستبدال <code>DrawnCheck</code> بـ <code>ColorDot</code> دلالي، وحفظ العناصر بلا بادئة [ ]. تعديل واحد في دالة الرسم + تحديث <code>serialize</code> ليحفظ النصوص دون علامات."},
+   {n:2, demo:"d_chips", title:"رقاقات حالة دلالية (Assist Chips بأسلوب M3)",
+    desc:"كل مادة تصبح رقاقة (Chip) ممتلئة بلون دلالي حسب قسمها: أخضر للموجود، كهرماني للاحتياج، بنفسجي لتحتاج صيانة، أحمر للمسحوب. الرقاقة تعني «عنصر جرد» بصريًا ولا يمكن الخلط بينها وبين المهام، مع أنميشن ظهور نابض عند الإضافة.",
+    fix:"طريقة التنفيذ: استبدال صف <code>Row+DrawnCheck</code> بـ <code>AssistChip</code> داخل <code>GalaxyCard</code> بلون <code>chipColors</code> مشتق من <code>SectionKind</code> جديد يُمرر لكل قسم، مع <code>AnimatedVisibility</code> لكل رقاقة."},
+   {n:3, demo:"d_counter", title:"عدّادات حية + صفوف نصية بسيطة",
+    desc:"رأس كل قسم يعرض عدد مواده بمروف أرقام متحرك (GalaxyNumberMorph الموجود في المكتبة فعلًا)، والمواد صفوف نصية نظيفة بأيقونة نقطة — بلا أي مربع. العدد يعطي إحساس الجرد فورًا: «الموجودة: 5 / الاحتياج: 2».",
+    fix:"طريقة التنفيذ: إضافة <code>GalaxyNumberMorph(value = items.size)</code> بجانب <code>SectionTitle</code> في <code>MaterialsTab</code> وإزالة <code>DrawnCheck</code> من الصفوف — يعيد استخدام مكوّن موجود بلا كود أنميشن جديد."},
+   {n:4, demo:"d_card_swipe", title:"بطاقة مادة بسحب جانبي للحذف (نمط بطاقة الموقع 2.0)",
+    desc:"كل مادة بطاقة صغيرة مرتفعة باسمها ونوع لونها، والحذف بسحب البطاقة يسارًا تنكشف خلفها حمرة الحذف — نفس لغة سحب بطاقات المواقع الموجودة في التطبيق، فيتوحد الإحساس وتختفي المربعات كليًا.",
+    fix:"طريقة التنفيذ: مكوّن <code>MaterialCard</code> جديد بـ <code>detectDragGestures</code> على المحور الأفقي مع قفل المحور (نفس إصلاح الجولة الثالثة في SitesScreen) وخلفية <code>Box</code> حمراء منكشفة."},
+   {n:5, demo:"d_action_check", title:"إبقاء الصح لكن بفعل حقيقي: تحديد = نقل بين القوائم",
+    desc:"يبقى المربع فقط في «الاحتياج» و«تحتاج صيانة» ويكتسب معنى تشغيليًا: تأشير مادة في الاحتياج يعني «تم تأمينها» فتنتقل تلقائيًا لقسم الموجود بأنميشن انتقال، وتأشير مادة في تحتاج صيانة يعني «أُصلحت» فتعود للموجود. المربع هنا أداة عمل لا زينة.",
+    fix:"طريقة التنفيذ: في <code>MaterialsTab</code> عند <code>onToggle(true)</code> يُحذف العنصر من قائمته ويُضاف إلى <code>available</code> مع <code>AnimatedContent</code> — تعديل محلي في الواجهة فقط بلا تغيير تخزين."},
+   {n:6, demo:"d_strike", title:"شطب متحرك بدل المربع (للاحتياج والصيانة)",
+    desc:"بدل مربع الصح: الضغط على مادة في «الاحتياج» أو «تحتاج صيانة» يشطبها بخط أخضر يُرسم عبر النص (كأنها لُبّيت)، والضغط مجددًا يعيدها. بلا مربعات إطلاقًا والمعنى واضح: مشطوب = منجز.",
+    fix:"طريقة التنفيذ: <code>textDecoration = LineThrough</code> مع <code>animateColorAsState</code> على النص في <code>MaterialSelectionList</code> وربط النقر بالصف كاملًا بدل المربع — يخزن بنفس صيغة [x] الحالية فتبقى البيانات متوافقة."},
+   {n:7, demo:"d_picker_grid", title:"تحويل حوار الاختيار نفسه إلى شبكة رقاقات",
+    desc:"الواجهة التي تضيف منها المواد (MaterialPickerDialog) تستبدل صفوف المربعات بشبكة رقاقات بحثية: الرقاقة المفعلة تظهر بعلامة صح داخلها (نمط FilterChip القياسي في M3). العرض في تبويب المواد يصبح أيقونات فقط — فيختفي شكل المهام من كل الواجهة.",
+    fix:"طريقة التنفيذ: استبدال <code>LazyColumn</code> في <code>MaterialPickerDialog</code> بـ <code>LazyVerticalGrid(GridCells.Adaptive(140.dp))</code> من <code>FilterChip(selected)</code>، وإزالة <code>DrawnCheck</code> من <code>MaterialSelectionList</code>."},
+   {n:8, demo:"d_status_dot", title:"نقطة حالة نابضة قابلة للتدوير",
+    desc:"بجانب كل مادة نقطة حالة صغيرة تنبض: أخضر = موجودة في الموقع، كهرماني = ناقصة، أحمر = مسحوبة. الضغط على النقطة يدوّر حالتها بأنميشن مروف لوني. الجرد يصبح حالةً مرئية لا مهمةً مؤشرة.",
+    fix:"طريقة التنفيذ: مكوّن <code>StatusDot</code> جديد بـ <code>animateColorAsState</code> ونبض <code>infiniteRepeatable</code> عند تغيير الحالة، وتخزين الحالة ببادئة موسعة في <code>MaterialLines</code> (متوافق للخلف مع الأسطر القديمة)."},
+   {n:9, demo:"d_collapse", title:"أقسام قابلة للطي مع رأس عدّاد (تخفيف الزحام)",
+    desc:"شكل المربع يذوب داخل تصميم أكبر: كل قسم من الأربعة يصبح قابلًا للطي/الفتح بأنميشن انسيابي، ورأسه يعرض الاسم والعدد وشارة لونية. افتراضيًا مفتوح قسمان فقط — شاشة المواد تصبح جردًا مرتبًا لا قائمة مهام طويلة.",
+    fix:"طريقة التنفيذ: <code>AnimatedVisibility(expandVertically+fadeIn)</code> لكل قسم في <code>MaterialsTab</code> مع حالة <code>expanded</code> لكل قسم، وإزالة المربعات من الصفوف المطوية."},
+   {n:10, demo:"d_mode_switch", title:"«وضع الجرد» من الإعدادات (قرارك محفوظ)",
+    desc:"إضافة مفتاح في شاشة الإعدادات: وضع الجرد (أيقونات وألوان، بلا مربعات — الافتراضي) مقابل وضع المهام (الشكل الحالي لمن يفضله). التطبيق يتذكر اختيارك في <code>app_settings</code> وينطبق على كل المواقع.",
+    fix:"طريقة التنفيذ: مفتاح <code>materials_view_mode</code> عبر <code>SettingsRepository</code> الموجود، وتفرع في <code>MaterialSelectionList</code> بين <code>DrawnCheck</code> و<code>ColorDot</code> — الخياران 1 و10 معًا في يدك."}
+  ]
+},
+{
+  id:"p2", num:"٢", kind:"radio",
+  title:"المشكلة ٢ — المادة المسحوبة تبقى في صف المواد ولا تعود عند الإرجاع",
+  sub:"تبويبا المواد والمسحوبات في شاشة تفاصيل الموقع",
+  diagnosis:`<code>WithdrawItemUseCase</code> يسجل السحب في جدول <code>withdrawals</code> ثم يضيف الاسم إلى
+  <code>withdrawnMaterials</code> عبر <code>MaterialLines.addUnchecked</code> — لكنه <b>لا يلمس</b>
+  <code>availableMaterials</code>، فتبقى المادة المسحوبة ظاهرة في «المواد الموجودة حاليًا» وكأنها في الموقع!
+  وعند الإرجاع <code>ReturnWithdrawnItemUseCase</code> يوسم السطر ✔ عبر <code>markChecked</code> فقط: المادة
+  <b>لا تعود</b> لقائمة الموجود، والسطر الموسوم يبقى للأبد. المنطقي: السحب يُخفي المادة من الموجود، والإرجاع يُظهرها.`,
+  options:[
+   {n:11, demo:"d_fly", title:"النقل التلقائي الكامل داخل حالتي الاستخدام (الموصى به)",
+    desc:"السحب يحذف المادة فورًا من «المواد الموجودة حاليًا» إن وُجدت ويضيفها لقائمة السحب، والإرجاع يحذفها من قائمة السحب ويعيدها للموجود. المنطق كله في طبقة حالات الاستخدام — الواجهة تتحدث تلقائيًا عبر الـ Flow، مع اختبارين وحدويين جديدين.",
+    fix:"طريقة التنفيذ: إضافة <code>MaterialLines.removeItem</code> و<code>ensureItem</code>، ثم تعديل <code>WithdrawItemUseCase</code> (خصم من available+إضافة للـ withdrawn) و<code>ReturnWithdrawnItemUseCase</code> (عكس العملية بدل markChecked) + اختبارات في <code>MaterialLinesTest</code>."},
+   {n:12, demo:"d_derived", title:"العرض المحسوب: القائمة تُشتق بلا تغيير البيانات",
+    desc:"البيانات تبقى كما هي، لكن تبويب المواد يعرض «الموجودة ناقص المسحوبات المفتوحة» — تُحسب القائمة المعروضة من تدفق <code>withdrawals</code> الموجود في الـ ViewModel فعلًا. عند الإرجاع تعود المادة للظهور تلقائيًا. صفر ترحيل بيانات وصفر مخاطرة.",
+    fix:"طريقة التنفيذ: في <code>SiteDetailsViewModel</code> دمج <code>detail</code> و<code>withdrawals</code> في <code>combine</code> ينتج <code>displayAvailable</code>، و<code>MaterialsTab</code> يعرضها — لا تعديل على حالات الاستخدام إطلاقًا."},
+   {n:13, demo:"d_fly_snack", title:"النقل التلقائي + تأكيد بصري وتراجع",
+    desc:"نفس الحل 11 لكن بتجربة كاملة: المادة تختفي من قسم الموجود بأنميشن انزلاق، وسنابار يظهر «سُحبت مايك 1 — تراجع» لخمس ثوانٍ؛ ضغط تراجع يعيد كل شيء. الإرجاع يعيدها بأنميشن دخول + نبضة نجاح.",
+    fix:"طريقة التنفيذ: حل 11 + <code>AnimatedVisibility(shrinkVertically)</code> لكل عنصر في <code>MaterialSelectionList</code> + سنابار بمهلة (نمط <code>GalaxySnackbarHost</code> الموجود) يحمل فعل تراجع يستدعي عملية عكس."},
+   {n:14, demo:"d_merge", title:"النقل الذكي بقواعد الدمج (يعالج حتى البيانات القديمة)",
+    desc:"حل 11 مع قواعد صارمة: الإرجاع لا يضيف مكررات، والسحب لا يفشل إن لم تكن المادة في الموجود، والأسطر الموسومة ✔ قديمًا تُنظف مرة واحدة عند أول فتح (ترحيل صامت عند القراءة). يحل المشكلة الحالية ويرتب الفوضى المتراكمة.",
+    fix:"طريقة التنفيذ: حل 11 + <code>MaterialLines.cleanupReturned</code> تُستدعى في <code>ObserveSiteUseCase</code> مرة واحدة (علم في <code>app_settings</code>)، وقواعد <code>ensureItem</code> تمنع التكرار بمقارنة غير حساسة لحالة الأحرف."},
+   {n:15, demo:"d_ledger", title:"إعادة هيكلة: جدول جرد حقيقي بدل القوائم النصية",
+    desc:"الحل الجذري: جدول جديد <code>site_inventory(siteId, materialName, state)</code> بحالات (موجودة/مطلوبة/تحتاج صيانة/مسحوبة)، والقوائم الأربع تصبح استعلامات. السحب والإرجاع تغيير حالة صف واحد — اتساق مضمون من القاعدة نفسها.",
+    fix:"طريقة التنفيذ: كيان جديد + ترحيل 11→12 في <code>GalaxyMigrations</code> يرحّل النصوص القائمة، و<code>InventoryRepository</code>، وإعادة كتابة <code>MaterialsTab</code> على الاستعلامات. أكبر الخيارات جهدًا وأمتنها مستقبلًا."},
+   {n:16, demo:"d_dim_badge", title:"التعتيم والشارة بدل الإخفاء (لا حذف نهائيًا)",
+    desc:"المادة المسحوبة تبقى في قسم الموجود لكن معتمة 40٪ مع شارة حمراء «مسحوبة منذ 3 أيام»، وفلتر أعلى القسم «أخفِ المسحوبة» (مفعّل افتراضيًا). لا بيانات تتحرك إطلاقًا — كل شيء عرض فقط، والإرجاع يزيل التعتيم فورًا.",
+    fix:"طريقة التنفيذ: <code>MaterialSelectionList</code> يستقبل قائمة المسحوبات المفتوحة، الصف المطابق يأخذ <code>alpha(0.4f)</code> + شارة، وزر <code>FilterChip</code> يقلب الإخفاء — الذاكرة الوحيدة الجديدة حالة عرض محلية."},
+   {n:17, demo:"d_return_only", title:"الإرجاع فقط: عودة المادة للموجود عند الإرجاع",
+    desc:"نصف الحل بأقل تدخل: عند ضغط «إرجاع للموقع» تعود المادة تلقائيًا لقسم «الموجودة» وتُحذف من «مواد تم سحبها» (بدل ✔). السحب لا يغيّر الموجود — يناسبك إن كنت تضيف المواد يدويًا بحذر وتريد فقط أن يعود ما سُحب.",
+    fix:"طريقة التنفيذ: تعديل <code>ReturnWithdrawnItemUseCase</code> فقط: <code>ensureItem(available)</code> + <code>removeItem(withdrawn)</code> بدل <code>markChecked</code> — سطران في حالة استخدام واحدة."},
+   {n:18, demo:"d_confirm", title:"النقل بموافقة: حوار تأكيد عند السحب",
+    desc:"عند سحب مادة موجودة في قسم «الموجودة» يظهر حوار: «مايك 1 موجودة في قائمة الموجود — ستُحذف منها أثناء السحب. تأكيد؟» فتتم العملية بوعي كامل. إن لم تكن في القائمة يُسحب مباشرة بلا حوار.",
+    fix:"طريقة التنفيذ: <code>WithdrawDialog</code> يستقبل <code>availableNames</code> وعند التطابق يعرض <code>ConfirmDialog</code> مصغرًا قبل استدعاء <code>onWithdraw</code>، مع تنفيذ حل 11 فعليًا بعد الموافقة."},
+   {n:19, demo:"d_trail", title:"النقل التلقائي + أثر مادي في سجل السحب",
+    desc:"حل 11 زائد توثيق: كل حركة تُسجل في حقل ملاحظات سجل السحب («حُذفت من المواد الموجودة عند السحب» / «أُعيدت للمواد الموجودة عند الإرجاع» بتوقيتها)، فتظهر في تبويب المسحوبات كأثر كامل — لا تختفي المعلومة أبدًا.",
+    fix:"طريقة التنفيذ: حل 11 + إلحاق سطر مؤرّخ بـ <code>Withdrawal.notes</code> داخل حالتي الاستخدام، وعرضه في <code>WithdrawalRow</code> بنص مصغر — السجل يصبح قصة كاملة للمادة."},
+   {n:20, demo:"d_sync_btn", title:"زر «مزامنة الآن» بدل الأتمتة (تحكم يدوي كامل)",
+    desc:"لا أتمتة إطلاقًا: يبقى السلوك الحالي كما هو، ويُضاف زر في تبويب المواد «مزامنة القوائم مع السحوبات» — عند ضغطه يقارن القائمتين ويخصم المسحوب ويعيد المرجع دفعة واحدة ويعرض ملخص التغييرات. أنت من يقرر متى يحدث النقل.",
+    fix:"طريقة التنفيذ: <code>SyncWithdrawalsUseCase</code> جديدة تعقد مقارنة <code>available</code> مع السحوبات المفتوحة والمرجعة وتطبق الفروق، وزر <code>OutlinedButton</code> في <code>MaterialsTab</code> يعرض نتيجة العملية في حوار ملخص."}
+  ]
+},
+{
+  id:"p3", num:"٣", kind:"radio",
+  title:"المشكلة ٣ — زر الطارئ يحفظ السجلات لكن لا توجد أي شاشة لعرضها",
+  sub:"شاشة النزول الطارئ وسجل الزيارات في كل موقع",
+  diagnosis:`<code>EmergencyVisitDao</code> يحتوي دالة واحدة فقط: <code>insert</code> — التعليق في الكود يقول حرفيًا
+  «إدخال فقط». <code>EmergencyVisitRepository</code> بالمثل <code>insert</code> فقط. هذا يعني أن كل نزول طارئ
+  يُحفظ في جدول <code>emergency_visits</code> ثم <b>لا يمكن قراءته من أي مكان في التطبيق</b>: لا تبويب، لا شاشة،
+  لا إحصائية. بياناتك سليمة في القاعدة لكنها مدفونة. (فحص يدوي: لا يوجد أي <code>@Query</code> على الجدول في كامل الكود.)`,
+  options:[
+   {n:21, demo:"d_tab", title:"تبويب «الطوارئ» داخل تفاصيل الموقع (الموصى به)",
+    desc:"تبويب سادس يضاف لصف التبويبات (بيانات/المواد/المسحوبات/الطوارئ/الصيانة/المرفقات) يعرض سجل نزولات هذا الموقع بترتيب الأحدث أولًا: بطاقة لكل زيارة بسببها وشريحة نتيجة ملونة وتاريخها، وتوسعة تُظهر التفاصيل والمواد المستخدمة والتحليلات.",
+    fix:"طريقة التنفيذ: <code>observeBySite(siteId): Flow&lt;List&lt;EmergencyVisit&gt;&gt;</code> في الـ DAO + تمريرها في الـ Repository + قيمة <code>EMERGENCY(\"الطوارئ\")</code> في <code>DetailsTab</code> ومكوّن <code>EmergencyTab</code> ببطاقات قابلة للتوسيع."},
+   {n:22, demo:"d_global", title:"شاشة «سجل الطوارئ» الشاملة من الرئيسية",
+    desc:"شاشة جديدة تجمع نزولات كل المواقع في خط زمني واحد مجمّعة حسب الموقع، مع بحث بالاسم والسبب وفلترة بالنتيجة (لا مشكلة/محلولة/غير محلولة). نافذة واحدة تطل على كل تاريخك الطارئ.",
+    fix:"طريقة التنفيذ: <code>observeAll()</code> في الـ DAO + شاشة جديدة <code>EmergencyLogScreen</code> + عنصر تنقل في <code>GalaxyNavHost</code> — مع <code>FilterChip</code> للنتائج الثلاث وحقل بحث."},
+   {n:23, demo:"d_both", title:"الحزمة الكاملة: تبويب لكل موقع + شاشة الشاملة",
+    desc:"دمج الحلين 21 و22: تبويب الطارئ داخل كل موقع للتفاصيل السريعة، وشاشة السجل الشاملة من الشاشة الرئيسية للمراجعة والبحث العام. أتم تغطية ممكنة للسجل بنفس طبقة البيانات الواحدة.",
+    fix:"طريقة التنفيذ: <code>observeBySite</code> + <code>observeAll</code> في الـ DAO، تبويب <code>EmergencyTab</code> وشاشة <code>EmergencyLogScreen</code> + مسار تنقل جديد — العمل على طبقة البيانات مشترك فالتكلفة الإضافية واجهة فقط."},
+   {n:24, demo:"d_last_card", title:"بطاقة «آخر نزول» في تبويب البيانات",
+    desc:"أخف حل: داخل تبويب «بيانات» تظهر بطاقة تعرض آخر زيارة طارئة (السبب + النتيجة + التاريخ) بألوان النتيجة، وزر «كل السجلات» يفتح حوارًا بقائمة كل الزيارات. يصلك بالسجل دون تبويب جديد.",
+    fix:"طريقة التنفيذ: <code>observeLatest(siteId)</code> (LIMIT 1) في الـ DAO + بطاقة في <code>InfoTab</code> + <code>AlertDialog</code> بقائمة <code>LazyColumn</code> للسجلات الكاملة."},
+   {n:25, demo:"d_merged_line", title:"الخط الزمني الموحد داخل تبويب الصيانة",
+    desc:"تبويب الصيانة يعرض أصلًا سجل الصيانة كخط زمني — تُدمج فيه زيارات الطوارئ: خط واحد مرتب زمنيًا حيث كل سجل صيانة أيقونة مفك وكل زيارة طارئة أيقونة تحذير بلون نتيجتها. سجل واحد شامل لكل ما حدث للموقع.",
+    fix:"طريقة التنفيذ: <code>combine(logs, visits)</code> في الـ ViewModel يدمج القائمتين بترتيب التاريخ في كيان <code>TimelineEntry</code> مغلق، و<code>MaintenanceTab</code> يرسم النوعين بأيقونتين — بلا تبويب جديد."},
+   {n:26, demo:"d_queue", title:"لوحة «مشكلات لم تُحل» في الرئيسية",
+    desc:"أهم ما في السجل هو ما لم يُحل: بطاقة نابضة في الشاشة الرئيسية تجمع كل الزيارات ذات النتيجة «غير محلولة» من كل المواقع — قائمة عمل حية تضغطها فتفتح موقعها. مع وصول كامل للسجل عبر تبويب الطوارئ في كل موقع.",
+    fix:"طريقة التنفيذ: <code>observeUnresolved()</code> في الـ DAO + بطاقة في <code>SitesScreen</code> بنبض <code>infiniteRepeatable</code> (نمط مكتبة <code>GalaxyAnim</code>) + حل 21 للتصفح الكامل."},
+   {n:27, demo:"d_edit", title:"سجل قابل للتحرير والحذف",
+    desc:"تبويب سجل كامل (كحل 21) مع قدرة غابت عن كل السجلات: تعديل الزيارة لاحقًا — مثل تحويل «غير محلولة» إلى «تم الحل» بعد زيارة ثانية، وحذف سجل أُنشئ بالخطأ (بتأكيد). السجل يعيش معك بدل أن يتجمد.",
+    fix:"طريقة التنفيذ: <code>@Update</code> و<code>@Delete</code> في الـ DAO + <code>UpdateEmergencyVisitUseCase</code> بالمدقّق الحالي نفسه + زرّا تحرير/حذف في بطاقة الزيارة وحوار النتيجة المقسّم الموجود مسبقًا."},
+   {n:28, demo:"d_stats", title:"السجل + إحصائيات الطوارئ",
+    desc:"تبويب سجل في كل موقع + قسم جديد في شاشة الإحصائيات: عدد النزولات هذا الشهر، أعمدة شهرية نابضة (نمط أعمدة الصيانة الموجودة)، وتوزيع النتائج الثلاث بألوانها الدلالية. تاريخك الطارئ يُقاس.",
+    fix:"طريقة التنفيذ: <code>countByOutcome()</code> و<code>observeByMonth()</code> في الـ DAO + <code>EmergencyStatsSection</code> في <code>StatsScreen</code> تعيد استخدام نمط <code>PulsingBars</code> الحالي + حل 21."},
+   {n:29, demo:"d_export", title:"السجل + تصدير ومشاركة",
+    desc:"تبويب السجل (كحل 21) مع زر «مشاركة السجل»: ينسق زيارات الموقع نصًا مرتبًا (التاريخ/السبب/النتيجة/التفاصيل) ويشاركه عبر أي تطبيق — لتقارير العمل أو إرساله لزميل. التطبيق يبقى أوفلاين 100٪ (مشاركة محلية عبر Intent).",
+    fix:"طريقة التنفيذ: حل 21 + <code>FormatVisitsUseCase</code> تبني نصًا عربيًا مرتبًا + <code>Intent.ACTION_SEND</code> بلا أي إذن إنترنت (متوافق مع سياسة الأوفلاين في المنفست)."},
+   {n:30, demo:"d_badge_btn", title:"زر الطارئ يعرض عدد الزيارات ويفتح السجل أولًا",
+    desc:"زر «طارئ» نفسه يتطور: شارة صغيرة فوقه تعرض عدد نزولات الموقع، وضغطه يفتح شاشة سجل زيارات الموقع وفي أسفلها زر بارز «تسجيل نزول جديد». نفس الزر الحالي صار بوابة السجل الكامل — بلا تبويبات ولا شاشات إضافية.",
+    fix:"طريقة التنفيذ: <code>observeCount(siteId)</code> في الـ DAO + تحويل وجهة زر الطارئ إلى <code>EmergencyLogScreen(siteId)</code> جديدة (سجل موقع واحد + FAB للتسجيل) — أصغر تغيير يفتح كل السجل."}
+  ]
+},
+{
+  id:"p4", num:"٤", kind:"check",
+  title:"إضافات وتعديلات من الفحص العميق للكود",
+  sub:"فجوات ومنطق ناقص اكتُشف أثناء قراءة الدوال — فعّل ما تشاء (اختيار متعدد)",
+  diagnosis:`أثناء قراءة الكود دالةً دالة ظهرت فجوات حقيقية غير المشكلات الثلاث: مواد الطوارئ المستخدمة لا تُخصم من الجرد،
+  أسطر ✔ تتراكم للأبد في <code>withdrawnMaterials</code>، حوار السحب يكتب نصًا حرًا رغم وجود الكتالوج الموحد،
+  وتبويب المواد قد يطمس تغييرات السحب المتزامنة. كل خيار أدناه محدد بمكانه في الكود بدقة.`,
+  options:[
+   {n:31, demo:"d_deduct", title:"خصم المواد المستخدمة في الطوارئ من جرد الموقع",
+    desc:"عند حفظ نزول طارئ بنتيجة «تم الحل» مع مواد مستخدمة، تُخصم تلك المواد تلقائيًا من «المواد الموجودة حاليًا» للموقع (وتُضاف إن كانت قطعًا جديدة). الجرد يبقى صادقًا — نفس فلسفة السحب والإرجاع.",
+    fix:"التنفيذ: في <code>SaveEmergencyVisitUseCase</code> بعد الإدخال استدعاء <code>SiteDetailRepository</code> وخصم كل اسم في <code>usedMaterials</code> عبر <code>MaterialLines.removeItem</code> — مترابط مع حل المشكلة ٢."},
+   {n:32, demo:"d_cleanup", title:"تنظيف أسطر ✔ المتراكمة في «مواد تم سحبها»",
+    desc:"حاليًا كل إرجاع يترك سطرًا موسومًا ✔ يبقى للأبد حتى تمتلئ القائمة. التعديل: المواد المرجعة تُحذف من القائمة تلقائيًا بعد الإرجاع (السجل الكامل محفوظ في تبويب المسحوبات أصلًا) — القائمة تعكس المسحوب الآن فقط.",
+    fix:"التنفيذ: استبدال <code>markChecked</code> بـ <code>removeItem</code> في <code>ReturnWithdrawnItemUseCase</code> — يأتي تلقائيًا مع اختيار الحل 11 أو 14 أو 17 للمشكلة ٢."},
+   {n:33, demo:"d_catalog_pick", title:"اسم المادة المسحوبة من الكتالوج الموحد",
+    desc:"حوار «سحب مادة جديدة» يقبل كتابة نصية حرة بينما كل التطبيق تحوّل للاختيار من الكتالوج. التعديل: حقل الاسم يصبح اختيارًا من المواد الموحدة مع بحث، وبقاء خيار «اسم حر» لمن يسحب شيئًا غير موجود في الكتالوج.",
+    fix:"التنفيذ: <code>WithdrawDialog</code> يستقبل الكتالوج (موجود في الـ ViewModel) ويستبدل <code>OutlinedTextField</code> بزر يفتح <code>MaterialPickerDialog</code> بنمط الاختيار الفردي + حقل حر احتياطي."},
+   {n:34, demo:"d_guard", title:"حماية تحرير المواد من الطمس عند التزامن",
+    desc:"تبويب المواد يحرر نسخة محلية (<code>remember(detail?.id)</code>) ثم يحفظها دفعة واحدة — لو حدث سحب/إرجاع أثناء تحريرك ثم ضغطت حفظ ستُطمس. التعديل: عند وصول تغيير خارجي أثناء التحرير يظهر تنبيه «تغيّرت البيانات — دمج التغييرات» بدل الطمس الصامت.",
+    fix:"التنفيذ: في <code>MaterialsTab</code> مراقبة <code>detail</code> بـ <code>LaunchedEffect</code> ومقارنة البصمة؛ عند الاختلاف أثناء حالة «متسخ» يظهر <code>AlertDialog</code> بخيارَي دمج أو تجاهل قبل الحفظ."},
+   {n:35, demo:"d_site_badge", title:"آخر نزول طارئ على بطاقة الموقع في الرئيسية",
+    desc:"بطاقة الموقع في القائمة الرئيسية تعرض سطرًا مصغرًا: «آخر نزول طارئ: قبل 3 أيام» بنقطة بلون النتيجة، وحمراء نابضة إن كانت آخر نتيجة «غير محلولة». تعرف حالة الموقع قبل أن تفتحه.",
+    fix:"التنفيذ: <code>observeLatestBySite()</code> في الـ DAO + دمجها في <code>SitesScreen</code> داخل بطاقة الموقع 2.0 بسطر إضافي ونقطة <code>StatusDot</code>."},
+   {n:36, demo:"d_quick_w", title:"سحب سريع: ضغطة مطولة على مادة موجودة",
+    desc:"في قسم «المواد الموجودة حاليًا» الضغط المطول على أي مادة يفتح حوار السحب مباشرة باسمها المملوء مسبقًا — من الجرد إلى سجل السحب بحركة واحدة بدل التنقل بين التبويبات وكتابة الاسم.",
+    fix:"التنفيذ: <code>combinedClickable(onLongClick)</code> على صف المادة في <code>MaterialSelectionList</code> يستدعي <code>WithdrawDialog</code> بـ <code>initialName</code> — يتطلب ربط التبويبين بحالة مشتركة في <code>SiteDetailsScreen</code>."},
+   {n:37, demo:"d_remind", title:"تذكير المواد المتأخرة في الصيانة",
+    desc:"مواد بقيت «قيد الصيانة» أكثر من عدد أيام قابل للضبط (افتراضي 14) يظهر عنها تنبيه عند فتح التطبيق — بنفس آلية تذكير موعد الصيانة الموجود في <code>GalaxyNotifications</code>. لا مادة تُنسى في الورشة.",
+    fix:"التنفيذ: <code>StaleWithdrawalReminderUseCase</code> تفحص <code>countStale(threshold)</code> (استعلام جديد على <code>withdrawals</code>) وتُخطر عبر مسار التنبيهات الحالي عند الإقلاع + إعداد أيام في <code>SettingsScreen</code>."},
+   {n:38, demo:"d_wsearch", title:"بحث وفلترة في تبويب المسحوبات",
+    desc:"مع تراكم السجلات: حقل بحث بالاسم في تبويب المسحوبات + شرائح فلترة بالحالة (مسحوبة/قيد الصيانة/مُرجعة) — تجد سجل أي مادة في ثانية وسط عشرات الدورات.",
+    fix:"التنفيذ: حالة <code>query</code> و<code>statusFilter</code> محلية في <code>WithdrawalsTab</code> مع <code>derivedStateOf</code> لتصفية القائمة المعروضة — بلا أي تغيير في طبقة البيانات."},
+   {n:39, demo:"d_reopen", title:"إعادة فتح الزيارة: من «غير محلولة» إلى «تم الحل»",
+    desc:"مشكلة بقيت غير محلولة ثم حُلّت في زيارة لاحقة؟ زر «تم الحل الآن» على بطاقة الزيارة القديمة يحدّث نتيجتها ويضيف ملاحظة المتابعة بخطوة واحدة — السجل يوثق القصة كاملة. (مضمن تلقائيًا مع اختيار 27 للمشكلة ٣.)",
+    fix:"التنفيذ: <code>@Update</code> في <code>EmergencyVisitDao</code> + <code>ResolvePreviousVisitUseCase</code> تُستدعى من شاشة التسجيل عند اختيار «تم حل المشكلة» مع تفعيل مربع «يعالج زيارة سابقة»."},
+   {n:40, demo:"d_xsearch", title:"الباحث الشامل: «أين توجد هذه المادة؟»",
+    desc:"شاشة بحث واحدة تسأل فيها عن أي مادة من الكتالوج فتعرض كل المواقع التي ذُكرت فيها وحالتها في كل موقع: موجودة/مطلوبة/تحتاج صيانة/مسحوبة. عند نقل المعدات بين المواقع هذا كنز.",
+    fix:"التنفيذ: شاشة خفيفة جديدة تستدعي <code>SiteDetailRepository.getAll()</code> الموجود + <code>SiteRepository.getAll()</code> وتفحص الحقول الأربعة بـ <code>MaterialLines.parse</code> لكل موقع — قراءة فقط بلا مخطط جديد."}
+  ]
+}
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   المعاينات المتحركة — كل دالة تعيد هاتفًا مصغرًا بأسلوب Compose
+   ═══════════════════════════════════════════════════════════════ */
+const row = (name, inner, extra="") =>
+  `<div class="mrow ${extra}">${inner}<span class="name">${name}</span></div>`;
+const CB = `<span class="cbox">✓</span>`;
+const dot = c => `<span class="ico" style="background:${c}22;border:1px solid ${c}"></span>`;
+
+const DEMOS = {
+
+/* ── المشكلة ١ ── */
+d_icon_rows: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>المواد الموجودة حاليًا — قبل/بعد</div>
+  ${row("مايك 1", CB)}
+  ${row("لوح شمسي 100 واط", `<span class="ico" style="animation:k-box-out 4s infinite">${""}</span><span class="ico" style="background:#34d39922;border:1px solid #34d399;animation:k-ico-in 4s infinite">●</span>`)}
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:8px">المربع يختفي وتحل محله نقطة جرد خضراء ✨</div></div>`,
+
+d_chips: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>المواد كرقاقات دلالية</div>
+  <span class="chip" style="border-color:#34d399;color:#a7f3d0;background:#34d39915;animation:k-pop 3s infinite">● مايك 1</span>
+  <span class="chip" style="border-color:#34d399;color:#a7f3d0;background:#34d39915;animation:k-pop 3s .3s infinite">● بطارية 200 أمبير</span>
+  <div class="stitle">الاحتياج</div>
+  <span class="chip" style="border-color:#ffc857;color:#ffe3a3;background:#ffc85715;animation:k-pop 3s .6s infinite">◌ جهاز راوتر</span>
+  <div class="stitle">تحتاج صيانة</div>
+  <span class="chip" style="border-color:#a78bfa;color:#ddd1ff;background:#a78bfa15;animation:k-pop 3s .9s infinite">🔧 لوح شمسي</span></div>`,
+
+d_counter: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>عدّادات حية + صفوف نصية</div>
+  <div class="stitle">المواد الموجودة حاليًا <span class="count" style="animation:k-morph 3s infinite">5</span></div>
+  ${row("مايك 1", dot("#34d399"))}
+  ${row("بطارية 200 أمبير", dot("#34d399"))}
+  <div class="stitle">احتياج الموقع <span class="count" style="animation:k-morph 3s 1.5s infinite">2</span></div>
+  ${row("جهاز راوتر", dot("#ffc857"))}</div>`,
+
+d_card_swipe: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>بطاقات مواد — اسحب للحذف</div>
+  <div style="position:relative;background:#7f1d1d55;border-radius:12px;margin-top:6px">
+    <div style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#f87171;font-size:.7rem">🗑 حذف</div>
+    <div class="mcard" style="animation:k-row-out 3.5s infinite">${dot("#34d399")}<span class="name">مايك 1</span></div>
+  </div>
+  <div class="mcard">${dot("#ffc857")}<span class="name">لوح شمسي 100 واط</span></div></div>`,
+
+d_action_check: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>الاحتياج: تأشير = تم التأمين ← تنتقل للموجود</div>
+  <div class="stitle">احتياج الموقع</div>
+  <div style="animation:k-row-out 4s infinite">${row("راوتر 4G", CB)}</div>
+  <div class="stitle">الموجودة حاليًا</div>
+  <div style="animation:k-row-in 4s infinite">${row("راوتر 4G", dot("#34d399"))}</div>
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:8px">علامة الصح فعل حقيقي: نقل بين القوائم ↗</div></div>`,
+
+d_strike: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>شطب متحرك بدل المربع</div>
+  <div class="mrow"><span class="name strike" style="color:#a7f3d0">جهاز راوتر <span style="position:absolute;right:10px;top:55%;height:1.5px;background:#34d399;animation:k-strike 3s infinite"></span></span><span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem;animation:k-check-in 3s infinite">تم ✓</span></div>
+  <div class="mrow"><span class="name">بطارية إضافية</span></div>
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:8px">اضغط = يُشطب أخضر (لُبّي الاحتياج)، اضغط مجددًا = يعود</div></div>`,
+
+d_picker_grid: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>حوار الاختيار: شبكة رقاقات بدل صفوف المربعات</div>
+  <div style="background:#0a1122;border:1px solid #1e2b4d;border-radius:10px;padding:8px;font-size:.66rem;color:#5a6b8f;margin-bottom:6px">🔍 ابحث عن مادة…</div>
+  <span class="chip" style="border-color:#7dd3fc;color:#7dd3fc;background:#7dd3fc20;animation:k-pop 3s infinite">✓ مايك 1</span>
+  <span class="chip" style="border-color:#223257;color:#93a3c7;animation:k-pop 3s .2s infinite">بطارية</span>
+  <span class="chip" style="border-color:#223257;color:#93a3c7;animation:k-pop 3s .4s infinite">لوح شمسي</span>
+  <span class="chip" style="border-color:#7dd3fc;color:#7dd3fc;background:#7dd3fc20;animation:k-pop 3s .6s infinite">✓ راوتر</span></div>`,
+
+d_status_dot: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>نقطة حالة نابضة — اضغط للتدوير</div>
+  <div class="mrow"><span class="ico" style="background:#34d399;animation:k-pulse 2s infinite"></span><span class="name">مايك 1</span><span style="font-size:.62rem;color:#34d399">موجودة</span></div>
+  <div class="mrow"><span class="ico" style="animation:k-cycle 4s infinite"></span><span class="name">بطارية 200</span><span style="font-size:.62rem;color:#93a3c7">تدور الحالة…</span></div></div>`,
+
+d_collapse: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>أقسام قابلة للطي</div>
+  <div class="stitle" style="justify-content:space-between">المواد الموجودة <span class="count">3</span></div>
+  <div style="overflow:hidden;animation:k-drop 5s infinite">
+    ${row("مايك 1", dot("#34d399"))}
+    ${row("بطارية 200 أمبير", dot("#34d399"))}
+  </div>
+  <div class="stitle" style="justify-content:space-between;color:#5a6b8f">الاحتياج ▸ مطوي <span class="count">2</span></div></div>`,
+
+d_mode_switch: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>الإعدادات ← وضع عرض المواد</div>
+  <div class="mrow"><span class="name">وضع الجرد (بلا مربعات)</span><span style="width:34px;height:18px;border-radius:999px;background:#7dd3fc;position:relative;flex:none"><span style="position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:50%;background:#04121f;animation:k-fly-x2 3s infinite alternate"></span></span></div>
+  <div class="mrow" style="opacity:.55"><span class="name">وضع المهام (الشكل الحالي)</span><span style="width:34px;height:18px;border-radius:999px;background:#1e2b4d;flex:none"></span></div>
+  <style>@keyframes k-fly-x2{from{transform:translateX(0)}to{transform:translateX(16px)}}</style></div>`,
+
+/* ── المشكلة ٢ ── */
+d_fly: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>السحب يُخفي المادة من الموجود — والإرجاع يعيدها</div>
+  <div class="cols">
+    <div><div class="stitle">الموجودة حاليًا</div>
+      <div style="animation:k-row-out 5s infinite">${row("مايك 1", dot("#34d399"))}</div>
+      ${row("بطارية 200", dot("#34d399"))}
+    </div>
+    <div><div class="stitle" style="color:#f87171">مواد تم سحبها</div>
+      <div style="animation:k-row-in 5s infinite">${row("مايك 1", `<span class="ico" style="background:#f8717122;border:1px solid #f87171">↗</span>`)}</div>
+    </div>
+  </div>
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:8px">تختفي هنا ↙ وتظهر هناك — والعكس عند الإرجاع</div></div>`,
+
+d_derived: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>العرض المحسوب — البيانات لا تتغير</div>
+  <div style="font-size:.66rem;color:#5a6b8f">المخزن: [مايك 1، بطارية] − المسحوب الآن: [مايك 1] =</div>
+  <div class="stitle">الموجودة حاليًا (المعروض)</div>
+  ${row("بطارية 200", dot("#34d399"))}
+  <div class="mrow" style="border-style:dashed;opacity:.45"><span class="name">مايك 1</span><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem;animation:k-pulse-r 2s infinite">↗ مسحوبة الآن</span></div>
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:6px">عند الإرجاع تعود للظهور تلقائيًا ✨</div></div>`,
+
+d_fly_snack: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>نقل + سنابار «تراجع»</div>
+  <div class="stitle">الموجودة حاليًا</div>
+  <div style="animation:k-row-out 4.5s infinite">${row("مايك 1", dot("#34d399"))}</div>
+  ${row("بطارية 200", dot("#34d399"))}
+  <div class="snack" style="animation:k-snack 4.5s infinite"><span>سُحبت «مايك 1» من الموجود</span><b>تراجع ↶</b></div></div>`,
+
+d_merge: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>قواعد الدمج الذكي + تنظيف القديم</div>
+  <div class="mrow" style="animation:k-dim 4s infinite"><span class="name" style="text-decoration:line-through">✔ مايك 1</span><span style="font-size:.6rem;color:#ffc857">سطر قديم ← يُنظف</span></div>
+  <div style="animation:k-row-out 4s infinite 2s" class="mrow"><span class="name">✔ بطارية 200</span></div>
+  <div class="stitle">بعد التنظيف</div>
+  ${row("راوتر 4G", dot("#34d399"))}
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:6px">لا مكررات · لا أخطاء عند الغياب · ترحيل صامت مرة واحدة</div></div>`,
+
+d_ledger: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>جدول جرد حقيقي: مادة واحدة وحالة تتغير</div>
+  <div class="mrow"><span class="name" style="font-family:Consolas,monospace;font-size:.68rem">site_inventory</span></div>
+  <div class="mrow" style="font-size:.68rem"><span class="name">مايك 1</span><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem;animation:k-morph 4s infinite">مسحوبة</span></div>
+  <div style="text-align:center;color:#7dd3fc;animation:k-pulse 2s infinite;font-size:.8rem">⟳ الإرجاع = تغيير حالة الصف فقط</div>
+  <div class="mrow" style="font-size:.68rem"><span class="name">مايك 1</span><span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem">موجودة</span></div></div>`,
+
+d_dim_badge: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>تعتيم + شارة بدل الإخفاء</div>
+  ${row("بطارية 200", dot("#34d399"))}
+  <div class="mrow" style="animation:k-dim 4s infinite"><span class="name">مايك 1</span><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem">↗ مسحوبة منذ 3 أيام</span></div>
+  <span class="chip" style="border-color:#7dd3fc;color:#7dd3fc;background:#7dd3fc15;animation:k-pop 3s infinite">🙈 أخفِ المسحوبة ✓</span></div>`,
+
+d_return_only: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>عند الإرجاع فقط: تعود للموجود</div>
+  <div class="mrow"><span class="mini-btn tone" style="animation:k-pulse 2s infinite">↩ إرجاع للموقع</span></div>
+  <div class="stitle">الموجودة حاليًا</div>
+  <div style="animation:k-row-in 3.5s infinite 1s">${row("مايك 1", dot("#34d399"))}</div>
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:6px">بلا ✔ وبلا «مواد تم سحبها» متراكمة</div></div>`,
+
+d_confirm: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>حوار تأكيد قبل النقل</div>
+  <div style="background:#0f1830;border:1px solid #33507f;border-radius:12px;padding:10px;animation:k-pop 4s infinite">
+    <div style="font-size:.74rem;color:#ffc857">⚠ المادة موجودة في «الموجودة»</div>
+    <div style="font-size:.68rem;color:#93a3c7;margin-top:4px">ستُحذف «مايك 1» من المواد الموجودة أثناء السحب. تأكيد؟</div>
+    <div style="display:flex;gap:6px;margin-top:8px;justify-content:flex-start">
+      <span class="mini-btn emg">سحب وحذف</span><span class="mini-btn" style="border:1px solid #223257;color:#93a3c7">إلغاء</span>
+    </div>
+  </div></div>`,
+
+d_trail: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>أثر مادي في سجل السحب</div>
+  <div class="mcard" style="display:block">
+    <div style="display:flex;justify-content:space-between"><b style="font-size:.75rem">مايك 1</b><span class="chip" style="border-color:#a78bfa;color:#ddd1ff;font-size:.6rem">قيد الصيانة</span></div>
+    <div style="font-size:.62rem;color:#5a6b8f;margin-top:5px">📌 حُذفت من «الموجودة» عند السحب — 12:03</div>
+    <div style="font-size:.62rem;color:#7dd3fc;animation:k-check-in 4s infinite">📌 أُعيدت إلى «الموجودة» عند الإرجاع — الآن</div>
+  </div></div>`,
+
+d_sync_btn: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>مزامنة يدوية بضغطة</div>
+  <div class="mrow" style="justify-content:center"><span class="mini-btn tone" style="animation:k-glow 2.5s infinite">⟳ مزامنة القوائم مع السحوبات</span></div>
+  <div style="animation:k-row-in 4s infinite" class="mcard" style="display:block;font-size:.7rem">
+    <div style="font-size:.68rem;color:#a7f3d0">✓ حُذفت «مايك 1» من الموجود (مسحوبة)</div>
+    <div style="font-size:.68rem;color:#a7f3d0">✓ أُعيدت «بطارية 200» للموجود (مُرجعة)</div>
+  </div></div>`,
+
+/* ── المشكلة ٣ ── */
+d_tab: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>تبويب «الطوارئ» داخل الموقع</div>
+  <div class="tabbar"><span class="tab">بيانات</span><span class="tab">المواد</span><span class="tab">المسحوبات</span><span class="tab on new" style="animation:k-glow 2.5s infinite">الطوارئ</span><span class="tab">الصيانة</span></div>
+  <div class="mcard" style="display:block;animation:k-pop 3s infinite">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.74rem">انقطاع التيار</b><span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem">تم الحل</span></div>
+    <div style="font-size:.64rem;color:#93a3c7;margin-top:4px">19 أيلول · المواد: بطارية 200 أمبير</div>
+  </div>
+  <div class="mcard" style="display:block;opacity:.75">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.74rem">فحص دوري</b><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem;animation:k-pulse-r 2s infinite">لم تُحل</span></div>
+  </div></div>`,
+
+d_global: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>شاشة السجل الشاملة</div>
+  <div style="background:#0a1122;border:1px solid #1e2b4d;border-radius:10px;padding:6px 10px;font-size:.66rem;color:#5a6b8f">🔍 ابحث في كل النزولات…</div>
+  <div style="margin-top:6px"><span class="chip" style="border-color:#7dd3fc;color:#7dd3fc;font-size:.6rem">الكل</span><span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem">محلولة</span><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem;animation:k-pop 3s infinite">غير محلولة</span></div>
+  <div style="font-size:.68rem;color:#7dd3fc;margin-top:8px">📍 موقع البرج الشمالي</div>
+  ${row("انقطاع تيار — تم الحل", dot("#34d399"))}
+  <div style="font-size:.68rem;color:#7dd3fc;margin-top:6px">📍 موقع التلة</div>
+  ${row("عطل مايك — لم تُحل", dot("#f87171"))}</div>`,
+
+d_both: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>التبويب لكل موقع + الشاملة للجميع</div>
+  <div class="cols">
+    <div><div class="tabbar"><span class="tab on new" style="animation:k-glow 2.5s infinite">الطوارئ</span></div>
+      <div class="mrow" style="font-size:.66rem">زيارات هذا الموقع فقط</div></div>
+    <div style="border-right:1px dashed #223257;padding-right:8px"><div class="tabbar"><span class="tab on" style="border-color:#ffc857;color:#ffc857;animation:k-glow 2.5s .5s infinite">📖 السجل الشامل</span></div>
+      <div class="mrow" style="font-size:.66rem">كل المواقع + بحث + فلترة</div></div>
+  </div></div>`,
+
+d_last_card: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>بطاقة «آخر نزول» في تبويب بيانات</div>
+  <div class="mcard" style="display:block;border-color:#7f4a4a;animation:k-pop 3.5s infinite">
+    <div style="display:flex;justify-content:space-between"><span style="font-size:.72rem">⚠ آخر نزول طارئ</span><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem">لم تُحل</span></div>
+    <div style="font-size:.66rem;color:#93a3c7;margin-top:4px">«عطل في المايك الرئيسي» — قبل 3 أيام</div>
+    <div style="font-size:.64rem;color:#7dd3fc;margin-top:6px;animation:k-pulse 2s infinite;display:inline-block">عرض كل السجلات ◂</div>
+  </div></div>`,
+
+d_merged_line: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>خط زمني موحد في تبويب الصيانة</div>
+  <div class="mrow">${dot("#7dd3fc")}<span class="name">صيانة دورية — استبدال كيبل</span></div>
+  <div class="mrow" style="border-color:#7f4a4a;animation:k-pop 3s infinite">${dot("#f87171")}<span class="name">نزول طارئ: انقطاع تيار</span></div>
+  <div class="mrow">${dot("#a78bfa")}<span class="name">صيانة مايك بعد السحب</span></div>
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:6px">🔧 صيانة · ⚠ طارئ — كل ما حدث للموقع بخط واحد</div></div>`,
+
+d_queue: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>لوحة «مشكلات لم تُحل» في الرئيسية</div>
+  <div class="mcard" style="display:block;border-color:#f87171;animation:k-pulse-r 2.5s infinite">
+    <div style="font-size:.72rem;color:#fca5a5">🚨 مشكلات تنتظر الحل: 2</div>
+    <div style="font-size:.66rem;color:#93a3c7;margin-top:5px">📍 التلة — عطل مايك (قبل 3 أيام)</div>
+    <div style="font-size:.66rem;color:#93a3c7;margin-top:3px">📍 البرج — تسرب ماء للخزانة (اليوم)</div>
+  </div>
+  <div class="mrow" style="opacity:.6"><span class="name">موقع الوادي</span></div></div>`,
+
+d_edit: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>تحرير الزيارة: غير محلولة ← تم الحل</div>
+  <div class="mcard" style="display:block">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <b style="font-size:.74rem">عطل المايك</b>
+      <span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem;animation:k-box-out 4s infinite">لم تُحل</span>
+      <span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem;animation:k-ico-in 4s infinite">تم الحل ✓</span>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:8px">
+      <span class="mini-btn tone" style="animation:k-glow 2.5s infinite">✎ تحرير</span>
+      <span class="mini-btn" style="border:1px solid #7f1d1d;color:#fca5a5">🗑 حذف</span>
+    </div>
+  </div></div>`,
+
+d_stats: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>إحصائيات الطوارئ</div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <div style="text-align:center"><div style="font-size:1.3rem;font-weight:800;color:#f87171;animation:k-pop 3s infinite">7</div><div style="font-size:.6rem;color:#5a6b8f">نزولًا هذا الشهر</div></div>
+    <div class="bar-chart" style="flex:1">
+      <i style="height:30%;background:#7dd3fc;animation:k-bar 2.5s infinite"></i>
+      <i style="height:55%;background:#7dd3fc;animation:k-bar 2.5s .2s infinite"></i>
+      <i style="height:80%;background:#f87171;animation:k-bar 2.5s .4s infinite"></i>
+      <i style="height:100%;background:#f87171;animation:k-bar 2.5s .6s infinite"></i>
+    </div>
+  </div>
+  <div style="margin-top:8px"><span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem">محلولة 4</span><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem">غير محلولة 2</span><span class="chip" style="border-color:#a78bfa;color:#ddd1ff;font-size:.6rem">لا مشكلة 1</span></div></div>`,
+
+d_export: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>مشاركة السجل نصًا</div>
+  <div style="background:#0a1122;border:1px dashed #33507f;border-radius:10px;padding:8px;font-size:.62rem;color:#93a3c7;line-height:1.9">
+    📍 موقع البرج — سجل الطوارئ:<br>
+    • 19/9 — انقطاع تيار — <span style="color:#a7f3d0">تم الحل</span><br>
+    • 14/9 — فحص دوري — <span style="color:#ddd1ff">لا توجد مشكلة</span>
+  </div>
+  <div style="margin-top:8px;text-align:center"><span class="mini-btn tone" style="animation:k-glow 2.5s infinite">📤 مشاركة عبر أي تطبيق</span></div></div>`,
+
+d_badge_btn: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>زر الطارئ: شارة عدد + سجل أولًا</div>
+  <div style="display:flex;justify-content:center;position:relative;margin:12px 0">
+    <span class="mini-btn emg" style="padding:8px 26px;font-size:.78rem">⚠ طارئ</span>
+    <span class="pos" style="top:-4px;left:22%;background:#f87171;color:#04121f;font-weight:800;animation:k-badge 3s infinite">3</span>
+  </div>
+  <div style="text-align:center;color:#5a6b8f;font-size:.64rem">↓ يفتح سجل الموقع</div>
+  <div class="mrow" style="font-size:.66rem;animation:k-row-in 3s infinite">⚠ انقطاع تيار — تم الحل</div>
+  <div class="mrow" style="font-size:.66rem;animation:k-row-in 3s .4s infinite">⚠ فحص — لا مشكلة</div></div>`,
+
+/* ── الإضافات ── */
+d_deduct: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>مواد الطوارئ تُخصم من الجرد</div>
+  <div class="mrow"><span class="mini-btn emg" style="font-size:.62rem">حفظ نزول: استخدمت «بطارية 200»</span></div>
+  <div class="stitle">الموجودة حاليًا</div>
+  <div style="animation:k-row-out 4s infinite">${row("بطارية 200 أمبير", dot("#34d399"))}</div>
+  ${row("مايك 1", dot("#34d399"))}
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:6px">صُرفت للموقع ← اختفت من الجرد تلقائيًا</div></div>`,
+
+d_cleanup: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>تنظيف ✔ المتراكمة</div>
+  <div class="mrow" style="opacity:.5;animation:k-row-out 3.5s infinite"><span class="cbox">✓</span><span class="name">مايك 1</span></div>
+  <div class="mrow" style="opacity:.5;animation:k-row-out 3.5s .5s infinite"><span class="cbox">✓</span><span class="name">بطارية 200</span></div>
+  <div class="stitle">مواد تم سحبها (الآن فقط)</div>
+  ${row("لوح شمسي", `<span class="ico" style="background:#f8717122;border:1px solid #f87171">↗</span>`)}
+  <div style="color:#5a6b8f;font-size:.66rem;margin-top:6px">القائمة = المسحوب الآن · التاريخ في تبويب المسحوبات</div></div>`,
+
+d_catalog_pick: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>سحب مادة: اختيار من الكتالوج</div>
+  <div class="mrow"><span class="name" style="color:#7dd3fc">▾ اختر من المواد الموحدة: <b>مايك 1</b></span></div>
+  <span class="chip" style="border-color:#7dd3fc;color:#7dd3fc;background:#7dd3fc20;animation:k-pop 3s infinite">✓ مايك 1</span>
+  <span class="chip" style="border-color:#223257;color:#93a3c7">بطارية</span>
+  <span class="chip" style="border-color:#223257;color:#93a3c7">لوح شمسي</span>
+  <div class="mrow" style="opacity:.55;margin-top:8px"><span class="name">… أو اكتب اسمًا حرًا</span></div></div>`,
+
+d_guard: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>حماية التزامن أثناء التحرير</div>
+  <div style="background:#0f1830;border:1px solid #ffc857;border-radius:12px;padding:10px;animation:k-pop 4s infinite">
+    <div style="font-size:.72rem;color:#ffc857">⚠ تغيّرت البيانات أثناء تحريرك</div>
+    <div style="font-size:.66rem;color:#93a3c7;margin-top:4px">وصل سحب جديد («بطارية 200») — كيف تريد المتابعة؟</div>
+    <div style="display:flex;gap:6px;margin-top:8px"><span class="mini-btn tone">دمج التغييرات</span><span class="mini-btn" style="border:1px solid #223257;color:#93a3c7">تجاهل</span></div>
+  </div></div>`,
+
+d_site_badge: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>بطاقة الموقع في الرئيسية</div>
+  <div class="mcard" style="display:block">
+    <div style="display:flex;justify-content:space-between"><b style="font-size:.78rem">📍 موقع البرج الشمالي</b><span class="ico" style="background:#f87171;animation:k-pulse-r 2s infinite"></span></div>
+    <div style="font-size:.64rem;color:#fca5a5;margin-top:4px">آخر نزول طارئ: قبل 3 أيام — لم تُحل بعد</div>
+  </div>
+  <div class="mcard" style="display:block;opacity:.75">
+    <div style="display:flex;justify-content:space-between"><b style="font-size:.78rem">📍 موقع الوادي</b><span class="ico" style="background:#34d399"></span></div>
+    <div style="font-size:.64rem;color:#93a3c7;margin-top:4px">آخر نزول: اليوم — لا توجد مشكلة</div>
+  </div></div>`,
+
+d_quick_w: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>ضغط مطول ← سحب مباشر</div>
+  <div class="stitle">الموجودة حاليًا</div>
+  <div class="mrow" style="animation:k-glow 2.5s infinite"><span class="name">مايك 1 ← اضغط مطولًا 🖐</span></div>
+  <div style="animation:k-row-in 3.5s infinite 1s" class="mcard" style="display:block">
+    <div style="font-size:.7rem">↗ سحب مادة من الموقع</div>
+    <div class="mrow" style="margin-top:6px"><span class="name" style="color:#7dd3fc">مايك 1</span><span style="font-size:.58rem;color:#34d399">✓ مملوء تلقائيًا</span></div>
+  </div></div>`,
+
+d_remind: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>تذكير المواد المتأخرة في الصيانة</div>
+  <div class="mcard" style="display:block;border-color:#ffc857;animation:k-pop 3.5s infinite">
+    <div style="font-size:.72rem;color:#ffe3a3">🔔 مواد طالت صيانتها</div>
+    <div style="font-size:.66rem;color:#93a3c7;margin-top:4px">«مايك 1» قيد الصيانة منذ <b style="color:#ffc857">17 يومًا</b> (الحد: 14)</div>
+  </div>
+  <div style="margin-top:8px;font-size:.64rem;color:#5a6b8f">⚙ الحد قابل للضبط من الإعدادات (مثل تذكير موعد الصيانة)</div></div>`,
+
+d_wsearch: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>بحث وفلترة في المسحوبات</div>
+  <div style="background:#0a1122;border:1px solid #1e2b4d;border-radius:10px;padding:6px 10px;font-size:.66rem;color:#7dd3fc">🔍 مايك…</div>
+  <div style="margin-top:6px"><span class="chip" style="border-color:#7dd3fc;color:#7dd3fc;font-size:.6rem;animation:k-pop 3s infinite">الكل</span><span class="chip" style="border-color:#ffc857;color:#ffe3a3;font-size:.6rem">قيد الصيانة</span><span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem">مُرجعة</span></div>
+  ${row("مايك 1 — قيد الصيانة", dot("#ffc857"))}
+  ${row("مايك 2 — مسحوبة", dot("#f87171"))}</div>`,
+
+d_reopen: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>إعادة فتح زيارة قديمة</div>
+  <div class="mcard" style="display:block">
+    <div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.72rem">عطل المايك — 14/9</b><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem">لم تُحل</span></div>
+    <div style="margin-top:8px"><span class="mini-btn ok" style="animation:k-glow 2.5s infinite">✓ تم الحل الآن</span></div>
+    <div style="font-size:.62rem;color:#a7f3d0;margin-top:6px;animation:k-check-in 3.5s infinite">أُغلقت الزيارة بملاحظة المتابعة ✨</div>
+  </div></div>`,
+
+d_xsearch: ()=>`<div class="ph"><div class="ph-t"><span class="dot"></span>الباحث الشامل: أين توجد المادة؟</div>
+  <div style="background:#0a1122;border:1px solid #1e2b4d;border-radius:10px;padding:6px 10px;font-size:.66rem;color:#7dd3fc">🔍 بطارية 200 أمبير</div>
+  <div class="mrow" style="font-size:.68rem"><span class="name">📍 البرج الشمالي</span><span class="chip" style="border-color:#34d399;color:#a7f3d0;font-size:.6rem">موجودة</span></div>
+  <div class="mrow" style="font-size:.68rem"><span class="name">📍 التلة</span><span class="chip" style="border-color:#ffc857;color:#ffe3a3;font-size:.6rem">احتياج</span></div>
+  <div class="mrow" style="font-size:.68rem"><span class="name">📍 الوادي</span><span class="chip" style="border-color:#f87171;color:#fca5a5;font-size:.6rem">مسحوبة</span></div></div>`
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   حالة الاختيار + التخزين المحلي
+   ═══════════════════════════════════════════════════════════════ */
+const KEY = "galaxy_proposals_v4";
+let sel = load();
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && typeof s==="object") return Object.assign({p1:null,p2:null,p3:null,p4:[]}, s); }catch(e){}
+  return {p1:null, p2:null, p3:null, p4:[]};
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(sel)); }catch(e){} }
+
+function toggle(sid, n){
+  const sec = SECTIONS.find(s=>s.id===sid);
+  if(sec.kind==="radio"){ sel[sid] = (sel[sid]===n) ? null : n; }
+  else{
+    const i = sel.p4.indexOf(n);
+    if(i>=0) sel.p4.splice(i,1); else sel.p4.push(n);
+  }
+  save(); refreshUI();
+}
+
+function refreshUI(){
+  document.querySelectorAll(".opt").forEach(el=>{
+    const sid = el.dataset.section, n = Number(el.dataset.n);
+    const sec = SECTIONS.find(s=>s.id===sid);
+    const on = sec.kind==="radio" ? sel[sid]===n : sel.p4.includes(n);
+    el.classList.toggle("selected", on);
+  });
+  const c1 = ["p1","p2","p3"].filter(k=>sel[k]!=null).length;
+  const c2 = sel.p4.length;
+  document.getElementById("count").innerHTML =
+    (c1===0 && c2===0) ? "لم تختر شيئًا بعد"
+    : `اخترت <b>${c1}</b> من 3 حلول للمشكلات` + (c2? ` و <b>${c2}</b> من الإضافات`:"");
+}
+
+function optById(sid, n){ return SECTIONS.find(s=>s.id===sid).options.find(o=>o.n===n); }
+
+/* ══════════════ بناء الصفحة ══════════════ */
+function render(){
+  const root = document.getElementById("root");
+  root.innerHTML = SECTIONS.map(sec=>`
+    <section class="block" id="${sec.id}">
+      <div class="sec-head">
+        <div class="sec-num">${sec.num}</div>
+        <div><h2>${sec.title}</h2><p>${sec.sub}</p></div>
+      </div>
+      <div class="diagnosis">${sec.diagnosis}</div>
+      <div class="opts-hint">${sec.kind==="radio"?"انقر خيارًا واحدًا للحل":"فعّل ما تشاء — اختيار متعدد"} • لكل خيار محاكاة متحركة 👇</div>
+      ${sec.options.map(o=>`
+        <div class="opt" data-section="${sec.id}" data-n="${o.n}" role="button" tabindex="0">
+          <div class="check">✓</div>
+          <div class="opt-top">
+            <div class="opt-num">${o.n}</div>
+            <h3>${o.title}</h3>
+          </div>
+          <div class="desc">${o.desc}</div>
+          ${DEMOS[o.demo] ? `<div class="demo">${DEMOS[o.demo]()}</div>` : ""}
+          <div class="fix">${o.fix}</div>
+        </div>`).join("")}
+    </section>`).join("") +
+    `<footer class="foot">صفحة مقترحات جلسة «المواد والسحوبات والطوارئ» — تطبيق مجرة (Kotlin) • المستودع: SagedAmV/app_work_kotlin • اختر ثم صدّر اختياراتك وارفعها باسم «اختيارات.md»</footer>`;
+
+  root.querySelectorAll(".opt").forEach(el=>{
+    el.addEventListener("click", ()=>toggle(el.dataset.section, Number(el.dataset.n)));
+    el.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggle(el.dataset.section, Number(el.dataset.n)); }});
+  });
+  refreshUI();
+}
+
+/* ══════════════ التصدير إلى اختيارات.md ══════════════ */
+function plainText(html){ const d=document.createElement("div"); d.innerHTML=html; return d.textContent.trim(); }
+
+function buildMarkdown(){
+  const now = new Date();
+  const dateStr = now.toLocaleString("ar-IQ", {dateStyle:"full", timeStyle:"short"});
+  let md = `# 📋 اختياراتي — جلسة المواد والسحوبات والطوارئ\n\n`;
+  md += `> صُدِّرت هذه الاختيارات من صفحة «مقترحات المواد والسحوبات والطوارئ».\n`;
+  md += `> **التاريخ:** ${dateStr}\n`;
+  md += `> **المستودع:** https://github.com/SagedAmV/app_work_kotlin\n\n`;
+  md += `**تعليمات للجلسة التالية:** اقرأ هذا الملف ونفّذ الخيارات المحددة أدناه كلٌ في مكانه المبيّن في كود التطبيق، `;
+  md += `ثم افحص الأكواد بحثًا عن أخطاء أو دوال ميتة، وارفع التعديلات إلى نفس المستودع وتأكد من رفعها.\n`;
+  md += `ولا تلمس ملف «تعليمات.md» بالحذف تحت أي ظرف.\n`;
+  md += `ملاحظة ترابط: الخيارات (11 أو 14 أو 17) تتضمن تلقائيًا الإضافتين (31، 32) إن فُعّلتا أو لا — نفّذ بلا تكرار.\n\n---\n\n`;
+
+  const titles = {
+    p1:"المشكلة ١ — بيانات المواد تظهر كمهام بمربعات علامة الصح",
+    p2:"المشكلة ٢ — المادة المسحوبة تبقى في صف المواد ولا تعود عند الإرجاع",
+    p3:"المشكلة ٣ — زر الطارئ يحفظ السجلات لكن لا توجد شاشة لعرضها"
+  };
+  ["p1","p2","p3"].forEach(id=>{
+    md += `## ${titles[id]}\n\n`;
+    if(sel[id]==null){ md += `- لم يُختر حل بعد — أعد فتح صفحة المقترحات واختر.\n`; }
+    else{
+      const o = optById(id, sel[id]);
+      md += `- **الخيار المختار:** رقم (${o.n}) — «${plainText(o.title)}»\n`;
+      md += `- **وصف الحل:** ${plainText(o.desc)}\n`;
+      md += `- **طريقة التنفيذ:** ${plainText(o.fix)}\n`;
+    }
+    md += `\n`;
+  });
+
+  md += `## إضافات وتعديلات أخرى (ما فُعِّل)\n\n`;
+  if(sel.p4.length===0){ md += `- لم تُفعَّل أي إضافة.\n`; }
+  else sel.p4.slice().sort((a,b)=>a-b).forEach(n=>{
+    const o = optById("p4", n);
+    md += `- [x] **(${o.n}) ${plainText(o.title)}** — ${plainText(o.desc)}\n  - التنفيذ: ${plainText(o.fix)}\n`;
+  });
+
+  md += `\n---\n\n**ملخص الاختيار:** `;
+  md += `مشكلة ١: ${sel.p1==null?"بدون اختيار":"الخيار "+sel.p1} • `;
+  md += `مشكلة ٢: ${sel.p2==null?"بدون اختيار":"الخيار "+sel.p2} • `;
+  md += `مشكلة ٣: ${sel.p3==null?"بدون اختيار":"الخيار "+sel.p3} • `;
+  md += `الإضافات: ${sel.p4.length? sel.p4.slice().sort((a,b)=>a-b).join("، ") : "لا شيء"}\n`;
+  return md;
+}
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 3400);
+}
+
+function exportChoices(){
+  const md = buildMarkdown();
+  const blob = new Blob([md], {type:"text/markdown;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "اختيارات.md";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  fetch("/api/choices", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({markdown: md, source:"materials-withdrawals-emergency-page"})})
+    .then(r=>r.ok? toast("✓ نُزّل ملف اختيارات.md وحُفظت نسخة في قاعدة البيانات") : toast("✓ نُزّل ملف اختيارات.md — ارفعه إلى المستودع"))
+    .catch(()=>toast("✓ نُزّل ملف اختيارات.md — ارفعه إلى المستودع باسم «اختيارات.md»"));
+}
+
+document.getElementById("exportBtn").addEventListener("click", exportChoices);
+document.getElementById("resetBtn").addEventListener("click", ()=>{
+  sel = {p1:null, p2:null, p3:null, p4:[]}; save(); refreshUI(); toast("تم تفريغ جميع الاختيارات");
+});
+
+render();
+</script>
+</body>
+</html>
