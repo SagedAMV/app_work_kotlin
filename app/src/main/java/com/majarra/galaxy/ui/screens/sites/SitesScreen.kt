@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Search
@@ -94,6 +95,7 @@ import com.majarra.galaxy.domain.usecase.DeleteSiteUseCase
 import com.majarra.galaxy.domain.usecase.DueSite
 import com.majarra.galaxy.domain.usecase.ObserveSitesUseCase
 import com.majarra.galaxy.domain.usecase.SaveSiteUseCase
+import com.majarra.galaxy.domain.usecase.SiteInputValidator
 import com.majarra.galaxy.ui.anim.BreathingDueBadge
 import com.majarra.galaxy.ui.anim.DueCountdownRing
 import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
@@ -314,14 +316,30 @@ fun SitesScreen(
                 onOpenSite = onOpenSite
             )
 
+            val searchEnabled = currentFilter is ListFilter.Active
             OutlinedTextField(
                 value = query,
                 onValueChange = viewModel::setQuery,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("ابحث بالاسم…") },
+                placeholder = {
+                    Text(
+                        when {
+                            showArchived -> "البحث غير متاح داخل المؤرشفة"
+                            currentFilter is ListFilter.ByCategory -> "البحث متاح في تبويب «الكل» فقط"
+                            else -> "ابحث بالاسم…"
+                        }
+                    )
+                },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchEnabled && query.isNotBlank()) {
+                        IconButton(onClick = { viewModel.setQuery("") }) {
+                            Icon(Icons.Filled.Close, contentDescription = "مسح البحث")
+                        }
+                    }
+                },
                 singleLine = true,
-                enabled = !showArchived // البحث على النشطة فقط حسب الاسئله.md
+                enabled = searchEnabled
             )
 
             // شرائح الفلترة: الكل + التصنيفات + المؤرشفة
@@ -885,6 +903,11 @@ private fun AddSiteDialog(
     var showCategoryMenu by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    val cleanName = remember(name) { name.trim().replace(Regex("\\s+"), " ") }
+    val cleanNotes = remember(notes) { notes.trim().replace(Regex("\\s+"), " ") }
+    val nameTooLong = cleanName.length > SiteInputValidator.MAX_NAME
+    val notesTooLong = cleanNotes.length > SiteInputValidator.MAX_NOTES
+
     val selectedCategory = categories.firstOrNull { it.id == categoryId }
 
     GalaxyRevealDialog(onDismissRequest = onDismiss) { requestClose ->
@@ -909,15 +932,26 @@ private fun AddSiteDialog(
                     },
                     label = { Text("اسم الموقع") },
                     singleLine = true,
-                    isError = error != null,
-                    supportingText = error?.let { { Text(it) } }
+                    isError = error != null || nameTooLong,
+                    supportingText = {
+                        when {
+                            error != null -> Text(error!!)
+                            nameTooLong -> Text("الحد الأقصى ${SiteInputValidator.MAX_NAME} حرفًا")
+                            else -> Text("${cleanName.length}/${SiteInputValidator.MAX_NAME}")
+                        }
+                    }
                 )
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
                     label = { Text("ملاحظات (اختياري)") },
                     minLines = 2,
-                    maxLines = 4
+                    maxLines = 4,
+                    isError = notesTooLong,
+                    supportingText = {
+                        if (notesTooLong) Text("الحد الأقصى ${SiteInputValidator.MAX_NOTES} حرفًا")
+                        else Text("${cleanNotes.length}/${SiteInputValidator.MAX_NOTES}")
+                    }
                 )
                 // اختيار التصنيف (اختياري) — القائمة تظهر فوق الزر
                 OutlinedButton(onClick = { showCategoryMenu = true }, modifier = Modifier.fillMaxWidth()) {
@@ -962,7 +996,7 @@ private fun AddSiteDialog(
                     TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
                     GlowButton(
                         onClick = { onSave(name, notes, categoryId) { message -> error = message } },
-                        enabled = name.isNotBlank()
+                        enabled = cleanName.isNotBlank() && !nameTooLong && !notesTooLong
                     ) { Text("حفظ") }
                 }
             }

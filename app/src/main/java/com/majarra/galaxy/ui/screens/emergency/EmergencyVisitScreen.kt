@@ -72,6 +72,7 @@ import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.domain.model.VisitOutcome
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import com.majarra.galaxy.domain.usecase.EmergencyVisitValidator
 import com.majarra.galaxy.domain.usecase.SaveEmergencyVisitUseCase
 import com.majarra.galaxy.ui.anim.DrawnCheck
 import com.majarra.galaxy.ui.anim.GalaxyNumberMorph
@@ -159,7 +160,9 @@ fun EmergencyVisitScreen(
     var outcome by rememberSaveable { mutableStateOf<VisitOutcome?>(null) }
     var outcomeError by remember { mutableStateOf<String?>(null) }
     var problemDescription by rememberSaveable { mutableStateOf("") }
+    var problemError by remember { mutableStateOf<String?>(null) }
     var analysis by rememberSaveable { mutableStateOf("") }
+    var analysisError by remember { mutableStateOf<String?>(null) }
     // المواد المستخدمة: قائمة أسماء تختار من الكتالوج الموحد (اختيارية)
     val materialsSaver = listSaver<List<String>, String>(
         save = { it.toList() },
@@ -168,6 +171,17 @@ fun EmergencyVisitScreen(
     var usedMaterials by rememberSaveable(stateSaver = materialsSaver) {
         mutableStateOf(emptyList<String>())
     }
+
+    val cleanReason = remember(reason) { reason.trim().replace(Regex("\\s+"), " ") }
+    val cleanProblem = remember(problemDescription) { problemDescription.trim().replace(Regex("\\s+"), " ") }
+    val cleanAnalysis = remember(analysis) { analysis.trim().replace(Regex("\\s+"), " ") }
+    val requiresProblem = outcome == VisitOutcome.RESOLVED || outcome == VisitOutcome.UNRESOLVED
+    val canSave = cleanReason.isNotEmpty() &&
+        cleanReason.length <= EmergencyVisitValidator.MAX_REASON &&
+        outcome != null &&
+        (!requiresProblem || cleanProblem.isNotEmpty()) &&
+        cleanProblem.length <= EmergencyVisitValidator.MAX_PROBLEM &&
+        cleanAnalysis.length <= EmergencyVisitValidator.MAX_ANALYSIS
 
     Scaffold(
         snackbarHost = { GalaxySnackbarHost(snackbarHostState) },
@@ -186,19 +200,34 @@ fun EmergencyVisitScreen(
             Surface(tonalElevation = 3.dp) {
                 GlowButton(
                     onClick = {
-                        val cleanReason = reason.trim()
                         // نسخة محلية: الخصائص المفوّضة (by) لا تدعم الإسناد
                         // الذكي، فننسخ القيمة قبل الفروع.
                         val selectedOutcome = outcome
                         when {
-                            cleanReason.isEmpty() -> reasonError = "سبب النزول مطلوب"
-                            selectedOutcome == null -> outcomeError = "اختر نتيجة النزول أولًا"
+                            cleanReason.isEmpty() -> {
+                                reasonError = "سبب النزول مطلوب"
+                            }
+                            cleanReason.length > EmergencyVisitValidator.MAX_REASON -> {
+                                reasonError = "سبب النزول طويل جدًا (الحد ${EmergencyVisitValidator.MAX_REASON} حرفًا)"
+                            }
+                            selectedOutcome == null -> {
+                                outcomeError = "اختر نتيجة النزول أولًا"
+                            }
+                            (selectedOutcome == VisitOutcome.RESOLVED || selectedOutcome == VisitOutcome.UNRESOLVED) && cleanProblem.isEmpty() -> {
+                                problemError = "وصف المشكلة مطلوب لهذه النتيجة"
+                            }
+                            cleanProblem.length > EmergencyVisitValidator.MAX_PROBLEM -> {
+                                problemError = "وصف المشكلة طويل جدًا (الحد ${EmergencyVisitValidator.MAX_PROBLEM} حرفًا)"
+                            }
+                            cleanAnalysis.length > EmergencyVisitValidator.MAX_ANALYSIS -> {
+                                analysisError = "التحليل طويل جدًا (الحد ${EmergencyVisitValidator.MAX_ANALYSIS} حرفًا)"
+                            }
                             else -> viewModel.save(
                                 reason = cleanReason,
                                 outcome = selectedOutcome,
-                                problemDescription = problemDescription,
+                                problemDescription = cleanProblem,
                                 usedMaterials = usedMaterials,
-                                analysis = analysis,
+                                analysis = cleanAnalysis,
                                 onSaved = {
                                     scope.launch {
                                         snackbarHostState.showSnackbar("تم حفظ النزول الطارئ")
@@ -211,6 +240,7 @@ fun EmergencyVisitScreen(
                             )
                         }
                     },
+                    enabled = canSave,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 10.dp)
@@ -256,8 +286,15 @@ fun EmergencyVisitScreen(
                         placeholder = { Text("مثال: فحص البلاغ، صيانة طارئة، استكشاف…") },
                         minLines = 2,
                         maxLines = 4,
-                        isError = reasonError != null,
-                        supportingText = reasonError?.let { { Text(it) } }
+                        isError = reasonError != null || cleanReason.length > EmergencyVisitValidator.MAX_REASON,
+                        supportingText = {
+                            when {
+                                reasonError != null -> Text(reasonError!!)
+                                cleanReason.length > EmergencyVisitValidator.MAX_REASON ->
+                                    Text("الحد الأقصى ${EmergencyVisitValidator.MAX_REASON} حرفًا")
+                                else -> Text("${cleanReason.length}/${EmergencyVisitValidator.MAX_REASON}")
+                            }
+                        }
                     )
 
                     // نتيجة النزول بزر مقسّم بحبة منزلق (اختيار 38 من
@@ -268,6 +305,10 @@ fun EmergencyVisitScreen(
                         onSelect = {
                             outcome = it
                             outcomeError = null
+                            if (it == VisitOutcome.NO_PROBLEM) {
+                                problemError = null
+                                analysisError = null
+                            }
                         }
                     )
                     outcomeError?.let {
@@ -290,12 +331,24 @@ fun EmergencyVisitScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = problemDescription,
-                        onValueChange = { problemDescription = it },
+                        onValueChange = {
+                            problemDescription = it
+                            problemError = null
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("وصف المشكلة والحل") },
                         placeholder = { Text("اكتب المشكلة وكيف حُلّت…") },
                         minLines = 3,
-                        maxLines = 6
+                        maxLines = 6,
+                        isError = problemError != null || cleanProblem.length > EmergencyVisitValidator.MAX_PROBLEM,
+                        supportingText = {
+                            when {
+                                problemError != null -> Text(problemError!!)
+                                cleanProblem.length > EmergencyVisitValidator.MAX_PROBLEM ->
+                                    Text("الحد الأقصى ${EmergencyVisitValidator.MAX_PROBLEM} حرفًا")
+                                else -> Text("${cleanProblem.length}/${EmergencyVisitValidator.MAX_PROBLEM}")
+                            }
+                        }
                     )
                     UsedMaterialsSection(
                         catalog = catalog,
@@ -315,21 +368,45 @@ fun EmergencyVisitScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = problemDescription,
-                        onValueChange = { problemDescription = it },
+                        onValueChange = {
+                            problemDescription = it
+                            problemError = null
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("وصف المشكلة التي لم تُحل") },
                         placeholder = { Text("اكتب المشكلة التي لم تُحل…") },
                         minLines = 3,
-                        maxLines = 6
+                        maxLines = 6,
+                        isError = problemError != null || cleanProblem.length > EmergencyVisitValidator.MAX_PROBLEM,
+                        supportingText = {
+                            when {
+                                problemError != null -> Text(problemError!!)
+                                cleanProblem.length > EmergencyVisitValidator.MAX_PROBLEM ->
+                                    Text("الحد الأقصى ${EmergencyVisitValidator.MAX_PROBLEM} حرفًا")
+                                else -> Text("${cleanProblem.length}/${EmergencyVisitValidator.MAX_PROBLEM}")
+                            }
+                        }
                     )
                     OutlinedTextField(
                         value = analysis,
-                        onValueChange = { analysis = it },
+                        onValueChange = {
+                            analysis = it
+                            analysisError = null
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("تحليلات المشكلة والحلول المتوقعة (اختياري)") },
                         placeholder = { Text("ما التحليل؟ وما الحلول المتوقعة؟") },
                         minLines = 2,
-                        maxLines = 5
+                        maxLines = 5,
+                        isError = analysisError != null || cleanAnalysis.length > EmergencyVisitValidator.MAX_ANALYSIS,
+                        supportingText = {
+                            when {
+                                analysisError != null -> Text(analysisError!!)
+                                cleanAnalysis.length > EmergencyVisitValidator.MAX_ANALYSIS ->
+                                    Text("الحد الأقصى ${EmergencyVisitValidator.MAX_ANALYSIS} حرفًا")
+                                else -> Text("${cleanAnalysis.length}/${EmergencyVisitValidator.MAX_ANALYSIS}")
+                            }
+                        }
                     )
                 }
             }

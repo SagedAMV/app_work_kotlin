@@ -374,6 +374,7 @@ private fun SetPinDialog(
 ) {
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val pinValid = pin.length in 4..8
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -394,21 +395,28 @@ private fun SetPinDialog(
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                     visualTransformation = PasswordVisualTransformation(),
-                    isError = error != null,
-                    supportingText = error?.let { { Text(it) } }
+                    isError = error != null || (pin.isNotEmpty() && !pinValid),
+                    supportingText = {
+                        when {
+                            error != null -> Text(error!!)
+                            pin.isEmpty() -> Text("أدخل من ٤ إلى ٨ أرقام")
+                            !pinValid -> Text("الطول الحالي ${pin.length}/٤ على الأقل")
+                            else -> Text("طول صالح: ${pin.length}/٨")
+                        }
+                    }
                 )
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    if (pin.length in 4..8) {
+                    if (pinValid) {
                         onSave(pin)
                     } else {
                         error = "الرمز يجب أن يكون بين ٤ و٨ أرقام"
                     }
                 },
-                enabled = pin.isNotEmpty()
+                enabled = pinValid
             ) { Text("حفظ وتفعيل") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("إلغاء") } }

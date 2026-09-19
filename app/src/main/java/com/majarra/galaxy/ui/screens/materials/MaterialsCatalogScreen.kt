@@ -51,6 +51,7 @@ import androidx.lifecycle.viewModelScope
 import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.usecase.DeleteMaterialUseCase
+import com.majarra.galaxy.domain.usecase.MAX_MATERIAL_NAME
 import com.majarra.galaxy.domain.usecase.RenameMaterialUseCase
 import com.majarra.galaxy.domain.usecase.SaveMaterialUseCase
 import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
@@ -291,6 +292,8 @@ private fun MaterialEditDialog(
 ) {
     var name by remember { mutableStateOf(initialName) }
     var error by remember { mutableStateOf<String?>(null) }
+    val normalizedName = remember(name) { name.trim().replace(Regex("\\s+"), " ") }
+    val isTooLong = normalizedName.length > MAX_MATERIAL_NAME
 
     // كشف دائري عند الفتح (اختيار 32 من الجولة الثالثة)
     GalaxyRevealDialog(onDismissRequest = onDismiss) { requestClose ->
@@ -314,8 +317,14 @@ private fun MaterialEditDialog(
                     },
                     label = { Text("اسم المادة") },
                     singleLine = true,
-                    isError = error != null,
-                    supportingText = error?.let { { Text(it) } }
+                    isError = error != null || isTooLong,
+                    supportingText = {
+                        when {
+                            error != null -> Text(error!!)
+                            isTooLong -> Text("الحد الأقصى $MAX_MATERIAL_NAME حرفًا")
+                            else -> Text("${normalizedName.length}/$MAX_MATERIAL_NAME")
+                        }
+                    }
                 )
                 if (note != null) {
                     Text(
@@ -332,7 +341,7 @@ private fun MaterialEditDialog(
                     TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
                     Button(
                         onClick = { onSave(name) { message -> error = message } },
-                        enabled = name.isNotBlank()
+                        enabled = normalizedName.isNotBlank() && !isTooLong
                     ) { Text("حفظ") }
                 }
             }
