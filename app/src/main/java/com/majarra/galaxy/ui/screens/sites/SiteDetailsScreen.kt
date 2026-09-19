@@ -6,13 +6,18 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -20,6 +25,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -48,15 +54,20 @@ import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.AddTask
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.Unarchive
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
@@ -72,6 +83,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -103,6 +115,7 @@ import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import com.majarra.galaxy.data.local.Attachment
 import com.majarra.galaxy.data.local.Category
+import com.majarra.galaxy.data.local.EmergencyVisit
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.data.local.Site
@@ -110,9 +123,11 @@ import com.majarra.galaxy.data.local.SiteDetail
 import com.majarra.galaxy.data.local.Withdrawal
 import com.majarra.galaxy.domain.model.AttachmentType
 import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.VisitOutcome
 import com.majarra.galaxy.domain.model.WithdrawalStatus
 import com.majarra.galaxy.domain.repository.AttachmentRepository
 import com.majarra.galaxy.domain.repository.CategoryRepository
+import com.majarra.galaxy.domain.repository.EmergencyVisitRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
@@ -155,15 +170,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** تبويبات شاشة التفاصيل — النسخة 2.2: أُضيف تبويب المسحوبات */
+/**
+ * تبويبات شاشة التفاصيل — النسخة 2.2: أُضيف تبويب المسحوبات.
+ * النسخة 2.8 (اختيار 21 من جلسة المواد والسحوبات والطوارئ): أُضيف
+ * تبويب الطوارئ لعرض سجل النزولات الذي كان يُحفظ بلا أي شاشة قراءة.
+ */
 private enum class DetailsTab(val label: String) {
     INFO("بيانات"),
     MATERIALS("المواد"),
     WITHDRAWALS("المسحوبات"),
+    EMERGENCY("الطوارئ"),
     MAINTENANCE("الصيانة"),
     ATTACHMENTS("المرفقات")
 }
@@ -177,6 +198,7 @@ class SiteDetailsViewModel @Inject constructor(
     categoryRepo: CategoryRepository,
     materialRepo: MaterialRepository,
     withdrawalRepo: WithdrawalRepository,
+    emergencyVisitRepo: EmergencyVisitRepository,
     private val siteRepo: SiteRepository,
     private val detailRepository: SiteDetailRepository,
     private val attachmentRepo: AttachmentRepository,
@@ -213,6 +235,26 @@ class SiteDetailsViewModel @Inject constructor(
     /** سجل سحب المواد وصيانتها وإرجاعها لهذا الموقع */
     val withdrawals = withdrawalRepo.observeBySite(siteId)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** سجل النزول الطارئ/الاستكشاف لهذا الموقع (اختيار 21) — الأحدث أولًا */
+    val emergencyVisits = emergencyVisitRepo.observeBySite(siteId)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * عناصر «المواد الموجودة حاليًا» كما تُعرض فعليًا (اختيار 12 — العرض
+     * المحسوب): القائمة المخزنة ناقص المواد المسحوبة الآن (غير المُرجعة).
+     * البيانات المخزنة لا تتغير إطلاقًا — الحساب عرض فقط: المادة المسحوبة
+     * تختفي من قسم الموجود، وعند الإرجاع تعود للظهور تلقائيًا.
+     */
+    val displayAvailableItems: StateFlow<List<MaterialItem>> =
+        combine(detail, withdrawals) { detail, withdrawals ->
+            val openNames = withdrawals
+                .filter { it.status != WithdrawalStatus.RETURNED }
+                .map { it.itemName.lowercase() }
+                .toSet()
+            MaterialLines.parse(detail?.availableMaterials.orEmpty())
+                .filterNot { it.text.lowercase() in openNames }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** رسالة قصيرة للواجهة */
     private val _message = MutableStateFlow<String?>(null)
@@ -426,6 +468,8 @@ fun SiteDetailsScreen(
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val materialsCatalog by viewModel.materialsCatalog.collectAsStateWithLifecycle()
     val withdrawals by viewModel.withdrawals.collectAsStateWithLifecycle()
+    val emergencyVisits by viewModel.emergencyVisits.collectAsStateWithLifecycle()
+    val displayAvailableItems by viewModel.displayAvailableItems.collectAsStateWithLifecycle()
 
     var tab by remember { mutableStateOf(DetailsTab.INFO) }
     var showEditInfo by remember { mutableStateOf(false) }
@@ -577,6 +621,11 @@ fun SiteDetailsScreen(
                         DetailsTab.INFO -> InfoTab(s, categories)
                         DetailsTab.MATERIALS -> MaterialsTab(
                             detail = detail,
+                            displayAvailable = displayAvailableItems,
+                            openWithdrawnNames = withdrawals
+                                .filter { it.status != WithdrawalStatus.RETURNED }
+                                .map { it.itemName.lowercase() }
+                                .toSet(),
                             catalog = materialsCatalog,
                             onSave = viewModel::saveMaterials
                         )
@@ -587,6 +636,7 @@ fun SiteDetailsScreen(
                             onReturn = viewModel::returnItem,
                             onDelete = { withdrawalToDelete = it }
                         )
+                        DetailsTab.EMERGENCY -> EmergencyTab(visits = emergencyVisits)
                         DetailsTab.MAINTENANCE -> MaintenanceTab(
                             detail = detail,
                             logs = logs,
@@ -798,9 +848,27 @@ private fun InfoTab(s: Site, categories: List<Category>) {
 /* ═══════════════ تبويب المواد (اختيار من الكتالوج الموحد) ═══════════════ */
 
 /**
- * المواد في النسخة 2.2: لا كتابة نصية في كل موقع — العناصر تُختار
- * من كتالوج المواد الموحد عبر واجهة اختيار (بحث + علامات ✔)،
- * فيلغى الإدخال المكرر وتصبح المواد موحدة ومرتبة وسهلة الاختيار.
+ * أنواع أقسام تبويب المواد — تشتق لون الرقاقة الدلالي (اختيار 2 من
+ * جلسة المواد والسحوبات والطوارئ): أخضر للموجود، كهرماني للاحتياج،
+ * بنفسجي لتحتاج صيانة، أحمر للمسحوب. الرقاقة تقول «عنصر جرد» بصريًا
+ * ولا يمكن الخلط بينها وبين المهام.
+ */
+private enum class MaterialSectionKind(val tint: Color) {
+    AVAILABLE(Color(0xFF34D399)),
+    NEEDED(Color(0xFFFFC857)),
+    MAINTENANCE(Color(0xFFA78BFA)),
+    WITHDRAWN(Color(0xFFF87171))
+}
+
+/**
+ * المواد في النسخة 2.8 (الاختياران 2 و12 من جلسة المواد والسحوبات
+ * والطوارئ):
+ *  - عرض رقاقات حالة دلالية بدل مربعات علامة الصح: المواد بيانات جرد
+ *    لا مهام (المربعات كانت توحي بمنطق مهام وتخزّن تحديدًا بلا أثر).
+ *  - قسم «الموجودة حاليًا» يُعرض محسوبًا: القائمة المخزنة ناقص المواد
+ *    المسحوبة الآن (غير المُرجعة) — التخزين لا يتغير، وعند الإرجاع
+ *    تعود المادة للظهور تلقائيًا. عند الحفظ تُدمج العناصر المطروحة
+ *    مجددًا في النص المخزن حتى لا يطمسها الحفظ (صفر تغيير للبيانات).
  *
  * التخزين ما زال نصيًا في نفس الأعمدة (تنسيق «[ ] / [x]» في
  * MaterialLines) — البيانات القديمة النصية تبقى محفوظة ومقروءة،
@@ -809,11 +877,15 @@ private fun InfoTab(s: Site, categories: List<Category>) {
 @Composable
 private fun MaterialsTab(
     detail: SiteDetail?,
+    displayAvailable: List<MaterialItem>,
+    openWithdrawnNames: Set<String>,
     catalog: List<Material>,
     onSave: (available: String, needed: String, maintenance: String, withdrawn: String) -> Unit
 ) {
-    // كل حقل قائمة عناصر تُحرَّر محليًا وتُحفظ دفعة واحدة
-    var available by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.availableMaterials.orEmpty())) }
+    // «الموجودة» تُحرَّر انطلاقًا من القائمة المعروضة المحسوبة (التي
+    // أسقطت المسحوبات المفتوحة في الـ ViewModel). المفاتيح: معرف الصف
+    // والقائمة المعروضة — عند إرجاع مادة تتحدث القائمة فيعاد التهيئة.
+    var available by remember(detail?.id, displayAvailable) { mutableStateOf(displayAvailable) }
     var needed by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.neededMaterials.orEmpty())) }
     var maintenance by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.maintenanceMaterials.orEmpty())) }
     var withdrawn by remember(detail?.id) { mutableStateOf(MaterialLines.parse(detail?.withdrawnMaterials.orEmpty())) }
@@ -834,33 +906,57 @@ private fun MaterialsTab(
             StaggeredItem(index = 0, trigger = "materials-tab") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SectionTitle("المواد الموجودة حاليًا")
-                    MaterialSelectionList(items = available, catalog = catalog) { available = it }
+                    MaterialChipSection(
+                        items = available,
+                        kind = MaterialSectionKind.AVAILABLE,
+                        catalog = catalog
+                    ) { available = it }
                 }
             }
             StaggeredItem(index = 1, trigger = "materials-tab") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SectionTitle("احتياج الموقع (ما ينقص)")
-                    MaterialSelectionList(items = needed, catalog = catalog) { needed = it }
+                    MaterialChipSection(
+                        items = needed,
+                        kind = MaterialSectionKind.NEEDED,
+                        catalog = catalog
+                    ) { needed = it }
                 }
             }
             StaggeredItem(index = 2, trigger = "materials-tab") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SectionTitle("مواد تحتاج صيانة")
-                    MaterialSelectionList(items = maintenance, catalog = catalog) { maintenance = it }
+                    MaterialChipSection(
+                        items = maintenance,
+                        kind = MaterialSectionKind.MAINTENANCE,
+                        catalog = catalog
+                    ) { maintenance = it }
                 }
             }
             StaggeredItem(index = 3, trigger = "materials-tab") {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     SectionTitle("مواد تم سحبها")
-                    MaterialSelectionList(items = withdrawn, catalog = catalog) { withdrawn = it }
+                    MaterialChipSection(
+                        items = withdrawn,
+                        kind = MaterialSectionKind.WITHDRAWN,
+                        catalog = catalog
+                    ) { withdrawn = it }
                 }
             }
         }
-        // زر الحفظ مع توهج الضغط (مقترح 1)
+        // زر الحفظ مع توهج الضغط (مقترح 1). الحفظ يدمج المواد المطروحة
+        // من العرض (المسحوبة الآن) مع القائمة المحررة حتى يبقى التخزين
+        // كاملًا — العرض محسوب فقط (اختيار 12).
         GlowButton(
             onClick = {
+                val availableNames = available.map { it.text.lowercase() }.toSet()
+                val stillWithdrawn = MaterialLines.parse(detail?.availableMaterials.orEmpty())
+                    .filter {
+                        it.text.lowercase() in openWithdrawnNames &&
+                            it.text.lowercase() !in availableNames
+                    }
                 onSave(
-                    MaterialLines.serialize(available),
+                    MaterialLines.serialize(available + stillWithdrawn),
                     MaterialLines.serialize(needed),
                     MaterialLines.serialize(maintenance),
                     MaterialLines.serialize(withdrawn)
@@ -874,19 +970,22 @@ private fun MaterialsTab(
 }
 
 /**
- * قائمة مواد واحدة: تحديد/إلغاء + حذف فردي + اختيار عناصر جديدة من
- * الكتالوج الموحد بدل الكتابة الحرة (تعديل النسخة 2.2).
+ * قسم مواد واحد برقاقات دلالية (اختيار 2): بلا مربعات علامة صح —
+ * كل مادة رقاقة بلون قسمها تظهر بأنميشن نابض، وأيقونة × صغيرة تحذفها
+ * من القائمة. زر «إضافة» يختار من الكتالوج الموحد كما في النسخة 2.2
+ * (واجهة الاختيار نفسها تبقى بأدوات التحديد لأن التحديد فيها منطقي).
  */
 @Composable
-private fun MaterialSelectionList(
+private fun MaterialChipSection(
     items: List<MaterialItem>,
+    kind: MaterialSectionKind,
     catalog: List<Material>,
     onChange: (List<MaterialItem>) -> Unit
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
     GalaxyCard {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (items.isEmpty()) {
                 Text(
                     "لا عناصر بعد — اختر من المواد الموحدة بالزر أدناه",
@@ -895,37 +994,23 @@ private fun MaterialSelectionList(
                     modifier = Modifier.padding(vertical = 4.dp)
                 )
             }
-            items.forEachIndexed { index, item ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // علامة صح تُرسم خطًا متحركًا (اختيارات 2.3 — مقترح 5)
-                    DrawnCheck(
-                        checked = item.checked,
-                        onToggle = { checked ->
-                            onChange(items.toMutableList().also { it[index] = item.copy(checked = checked) })
-                        }
-                    )
-                    Spacer(Modifier.size(10.dp))
-                    Text(
-                        item.text,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (item.checked) {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    IconButton(onClick = {
-                        onChange(items.toMutableList().also { it.removeAt(index) })
-                    }) {
-                        Icon(
-                            Icons.Filled.Delete,
-                            contentDescription = "حذف العنصر",
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.outline
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                items.forEachIndexed { index, item ->
+                    // ظهور نابض عند إضافة العنصر (اختيار 2)
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(tween(200)) + scaleIn(tween(260)),
+                        label = "material-chip-enter"
+                    ) {
+                        MaterialChip(
+                            item = item,
+                            kind = kind,
+                            onRemove = {
+                                onChange(items.toMutableList().also { it.removeAt(index) })
+                            }
                         )
                     }
                 }
@@ -950,6 +1035,57 @@ private fun MaterialSelectionList(
                 showPicker = false
             }
         )
+    }
+}
+
+/**
+ * رقاقة مادة واحدة (اختيار 2): AssistChip بلون دلالي مشتق من نوع القسم
+ * ونقطة لون في المقدمة، وبجانبها أيقونة × صغيرة للحذف من القائمة.
+ * في قسم «المسحوبة»: العناصر الموسومة ✔ سابقًا (دورة إرجاع مكتملة)
+ * تظهر باهتة حتى لا تضيع معلومة الإرجاع ولا تعود هيئة «مهام».
+ */
+@Composable
+private fun MaterialChip(
+    item: MaterialItem,
+    kind: MaterialSectionKind,
+    onRemove: () -> Unit
+) {
+    val tint = kind.tint
+    val faded = kind == MaterialSectionKind.WITHDRAWN && item.checked
+    val containerColor = tint.copy(alpha = if (faded) 0.08f else 0.16f)
+    val labelColor = if (faded) tint.copy(alpha = 0.55f) else tint
+
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        AssistChip(
+            // رقاقة حالة جردية — الإزالة من القائمة عبر أيقونة × المجاورة
+            onClick = { },
+            label = { Text(item.text, style = MaterialTheme.typography.bodySmall) },
+            leadingIcon = {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(if (faded) tint.copy(alpha = 0.4f) else tint)
+                )
+            },
+            colors = AssistChipDefaults.assistChipColors(
+                containerColor = containerColor,
+                labelColor = labelColor,
+                leadingIconContentColor = tint
+            ),
+            border = BorderStroke(1.dp, tint.copy(alpha = if (faded) 0.2f else 0.45f))
+        )
+        IconButton(
+            onClick = onRemove,
+            modifier = Modifier.size(24.dp)
+        ) {
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = "حذف العنصر",
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.outline
+            )
+        }
     }
 }
 
@@ -1325,6 +1461,145 @@ private fun WithdrawDialog(
         ) {
             DatePicker(state = state)
         }
+    }
+}
+
+/* ═══════════ تبويب الطوارئ (اختيار 21: السجلات لم تعد مدفونة) ═══════════ */
+
+/**
+ * سجل النزول الطارئ/الاستكشاف لهذا الموقع (النسخة 2.8 — اختيار 21 من
+ * جلسة المواد والسحوبات والطوارئ). السجلات كانت تُحفظ في جدول
+ * `emergency_visits` بلا أي وسيلة قراءة (الـ DAO كان إدخالًا فقط)؛
+ * الآن تبويب سادس يعرضها بترتيب الأحدث أولًا: بطاقة لكل زيارة بسببها
+ * وشريحة نتيجة ملونة دلاليًا وتاريخها، وتوسعة تُظهر التفاصيل.
+ */
+@Composable
+private fun EmergencyTab(visits: List<EmergencyVisit>) {
+    if (visits.isEmpty()) {
+        EmptyState(
+            icon = Icons.Filled.WarningAmber,
+            title = "لا نزولات طارئة",
+            subtitle = "اضغط زر «طارئ» أعلى الشاشة لتسجيل أول نزول لهذا الموقع — سيظهر سجله هنا"
+        )
+        return
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            GalaxyCard {
+                Text(
+                    "سجل النزولات الطارئة: ${visits.size}",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(14.dp)
+                )
+            }
+        }
+        // ظهور متتابع للبطاقات عند دخول التبويب (مقترح 9)
+        itemsIndexed(visits, key = { _, v -> v.id }) { index, visit ->
+            StaggeredItem(index = index, trigger = "emergency-tab") {
+                EmergencyVisitCard(visit)
+            }
+        }
+    }
+}
+
+/**
+ * بطاقة زيارة طارئة واحدة: السبب + شريحة النتيجة بلونها الدلالي
+ * (نفس ألوان زر النتيجة المقسّم في شاشة التسجيل) + التاريخ، ومع أي
+ * تفاصيل إضافية زر توسعة يُظهر وصف المشكلة والمواد المستخدمة
+ * والتحليلات حسب النتيجة.
+ */
+@Composable
+private fun EmergencyVisitCard(visit: EmergencyVisit) {
+    var expanded by remember { mutableStateOf(false) }
+    val outcomeColor = when (visit.outcome) {
+        VisitOutcome.NO_PROBLEM -> MaterialTheme.colorScheme.tertiary
+        VisitOutcome.RESOLVED -> MaterialTheme.colorScheme.primary
+        VisitOutcome.UNRESOLVED -> MaterialTheme.colorScheme.error
+    }
+    val hasDetails = visit.problemDescription.isNotBlank() ||
+        visit.usedMaterials.isNotBlank() ||
+        visit.analysis.isNotBlank()
+
+    GalaxyCard {
+        Column(
+            Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    visit.reason,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = outcomeColor.copy(alpha = 0.15f)
+                ) {
+                    Text(
+                        visit.outcome.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = outcomeColor,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+            Text(
+                visit.visitDate.formatDateTime(),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (hasDetails) {
+                TextButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        if (expanded) "إخفاء التفاصيل" else "عرض التفاصيل",
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+                AnimatedVisibility(
+                    visible = expanded,
+                    enter = fadeIn(tween(200)) + expandVertically(animationSpec = tween(220)),
+                    exit = fadeOut(tween(140)) + shrinkVertically(animationSpec = tween(140))
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (visit.problemDescription.isNotBlank()) {
+                            VisitDetailBlock("وصف المشكلة والحل", visit.problemDescription)
+                        }
+                        if (visit.usedMaterials.isNotBlank()) {
+                            VisitDetailBlock("المواد المستخدمة", visit.usedMaterials)
+                        }
+                        if (visit.analysis.isNotBlank()) {
+                            VisitDetailBlock("تحليلات وحلول متوقعة", visit.analysis)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** كتلة تفصيل واحدة داخل بطاقة الزيارة: عنوان ملون + النص */
+@Composable
+private fun VisitDetailBlock(title: String, text: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(text, style = MaterialTheme.typography.bodySmall)
     }
 }
 

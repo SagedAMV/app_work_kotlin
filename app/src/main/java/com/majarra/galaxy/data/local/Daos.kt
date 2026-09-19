@@ -169,11 +169,18 @@ interface MaterialDao {
 }
 
 /**
- * سجل النزول الطارئ/الاستكشاف (النسخة 2.4) — إدخال فقط؛ الحذف يتم
- * متسلسلًا مع حذف موقعه ولا حاجة لتحديث سجل محفوظ كما هو.
+ * سجل النزول الطارئ/الاستكشاف (النسخة 2.4).
+ * النسخة 2.8 (اختيار 21 من جلسة المواد والسحوبات والطوارئ): أُضيفت
+ * المراقبة حسب الموقع حتى يعرض تبويب «الطوارئ» في تفاصيل الموقع
+ * سجل النزولات — السجلات كانت تُحفظ بلا أي وسيلة قراءة. الحذف ما زال
+ * يتم متسلسلًا مع حذف موقعه ولا حاجة لتحديث سجل محفوظ كما هو.
  */
 @Dao
 interface EmergencyVisitDao {
+    /** نزولات موقع واحد بترتيب الأحدث أولًا (تبويب الطوارئ) */
+    @Query("SELECT * FROM emergency_visits WHERE siteId = :siteId ORDER BY visitDate DESC")
+    fun observeBySite(siteId: Long): Flow<List<EmergencyVisit>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(visit: EmergencyVisit): Long
 }

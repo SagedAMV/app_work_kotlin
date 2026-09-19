@@ -124,6 +124,8 @@ class WithdrawalRepositoryImpl @Inject constructor(
 class EmergencyVisitRepositoryImpl @Inject constructor(
     private val dao: EmergencyVisitDao
 ) : EmergencyVisitRepository {
+    override fun observeBySite(siteId: Long): Flow<List<EmergencyVisit>> =
+        dao.observeBySite(siteId)
     override suspend fun insert(visit: EmergencyVisit): Long = dao.insert(visit)
 }
 

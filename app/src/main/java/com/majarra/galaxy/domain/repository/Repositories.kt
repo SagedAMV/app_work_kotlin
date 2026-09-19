@@ -85,8 +85,13 @@ interface WithdrawalRepository {
     suspend fun delete(withdrawal: Withdrawal)
 }
 
-/** سجل النزول الطارئ/الاستكشاف — إدخال سجل جديد لكل نزول */
+/**
+ * سجل النزول الطارئ/الاستكشاف.
+ * النسخة 2.8 (اختيار 21): أُضيفت مراقبة نزولات الموقع لعرضها في
+ * تبويب «الطوارئ» داخل شاشة التفاصيل.
+ */
 interface EmergencyVisitRepository {
+    fun observeBySite(siteId: Long): Flow<List<EmergencyVisit>>
     suspend fun insert(visit: EmergencyVisit): Long
 }
 
