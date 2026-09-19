@@ -20,8 +20,10 @@ android {
         applicationId = "com.majarra.galaxy"
         minSdk = 30          // حسب التعليمات: Android 11+
         targetSdk = 34
-        versionCode = 10
-        versionName = "2.6.0"
+        // 2.7.0: جلسة إصلاح إيماءات اللمس (تمرير المواقع، السحب المعكوس،
+        // قفزة تكبير المجرة) المنفذة من اختيارات الخيار الأول الثلاثية
+        versionCode = 11
+        versionName = "2.7.0"
         vectorDrawables { useSupportLibrary = true }
     }
 
