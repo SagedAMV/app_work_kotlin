@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مجرة — مقترحات التصميم والانميشن (الجولة الثالثة)</title>
+<!--
+  ═══════════════════════════════════════════════════════════════════
+  جلسة مقترحات التصميم والانميشن — الجولة الثالثة (ما بعد الإصدار 2.5.1)
+  30 خيارًا مستوحى 100٪ من Jetpack Compose / Material 3 وهوية «مجرة»:
+  أسود عميق #04060B + سماوي #38BDF8 + أخضر نيون #3DFB7F
+  (نفس ألوان Theme.kt — الوضع الليلي الأساسي).
+
+  طريقة الاستخدام:
+  1) انقر أي بطاقة لتحديد الخيار (أو «تحديد الكل»).
+  2) جرّب كل معاينة حية داخل البطاقة (أزرار/سحب/نقر).
+  3) اضغط «تصدير اختياراتي (MD)» — يُنزَّل ملف `اختيارات.md` مرتبًا
+     بكل الخيارات مع اختياراتك، ارفعه إلى المستودع وستُنفَّذ المختارات
+     في الجلسة التالية بنفس طريقة الجولات السابقة.
+  ═══════════════════════════════════════════════════════════════════
+-->
+<style>
+:root{
+  --bg:#04060B; --surface:#0B1220; --surface2:#111C31; --sky:#38BDF8; --neon:#3DFB7F;
+  --red:#FF5A5A; --amber:#FFC857; --text:#E8EEF7; --muted:#93A4BD; --outline:#1E2A44;
+  --sky-soft:rgba(56,189,248,.14); --neon-soft:rgba(61,251,127,.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:
+    radial-gradient(1100px 500px at 85% -10%, rgba(56,189,248,.08), transparent 60%),
+    radial-gradient(900px 500px at 10% 110%, rgba(61,251,127,.05), transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:'Tajawal','Segoe UI',Tahoma,system-ui,sans-serif;
+  min-height:100vh; padding-bottom:120px;
+}
+/* نجوم خلفية ثابتة خفيفة */
+.stars{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5}
+.stars i{position:absolute;width:2px;height:2px;border-radius:50%;background:#cfe6ff;animation:tw 3.4s ease-in-out infinite}
+@keyframes tw{0%,100%{opacity:.15}50%{opacity:.85}}
+
+.wrap{position:relative;z-index:1;max-width:1240px;margin:0 auto;padding:28px 18px 0}
+header.hero{
+  background:linear-gradient(135deg, rgba(56,189,248,.12), rgba(11,18,32,.6) 55%), var(--surface);
+  border:1px solid var(--outline); border-radius:24px; padding:26px 28px;
+}
+header.hero h1{font-size:clamp(24px,4vw,38px);font-weight:800;line-height:1.3}
+header.hero h1 b{color:var(--sky)}
+header.hero p{color:var(--muted);margin-top:8px;font-size:15px;line-height:1.9}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.tag{font-size:12px;color:var(--muted);border:1px solid var(--outline);border-radius:99px;padding:4px 12px;background:rgba(17,28,49,.5)}
+
+/* شريط الأدوات */
+.toolbar{
+  position:sticky;top:10px;z-index:50;margin-top:18px;
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  background:rgba(11,18,32,.92);backdrop-filter:blur(10px);
+  border:1px solid var(--outline);border-radius:18px;padding:12px 14px;
+}
+.count{font-size:14px;color:var(--muted);margin-inline-end:auto}
+.count b{color:var(--neon);font-size:18px}
+.btn{
+  border:1px solid var(--outline);background:var(--surface2);color:var(--text);
+  border-radius:99px;padding:9px 18px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  transition:transform .15s ease, box-shadow .2s ease, background .2s ease, border-color .2s;
+}
+.btn:hover{border-color:var(--sky)}
+.btn:active{transform:scale(.96)}
+.btn.primary{background:var(--sky);border-color:var(--sky);color:#00243A;box-shadow:0 6px 24px rgba(56,189,248,.35)}
+.btn.primary:hover{box-shadow:0 8px 30px rgba(56,189,248,.5)}
+.btn.ghost{background:transparent}
+.filters{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.fchip{border:1px solid var(--outline);background:var(--surface);color:var(--muted);border-radius:99px;
+  padding:7px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:.2s}
+.fchip.on{background:var(--sky-soft);border-color:var(--sky);color:var(--sky)}
+.fchip small{opacity:.7;font-weight:400}
+
+/* الشبكة والبطاقات */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:18px;margin-top:22px}
+.card{
+  position:relative;background:var(--surface);border:1px solid var(--outline);border-radius:22px;
+  padding:16px;cursor:pointer;overflow:hidden;
+  transition:transform .25s cubic-bezier(.2,.9,.3,1.3), border-color .25s, box-shadow .25s;
+  animation:cardIn .5s cubic-bezier(.2,.8,.3,1) both;
+}
+@keyframes cardIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+.card:hover{transform:translateY(-4px);border-color:#2a3c63}
+.card.selected{border-color:var(--neon);box-shadow:0 0 0 1px rgba(61,251,127,.5), 0 10px 40px rgba(61,251,127,.12)}
+.card.selected::before{
+  content:"";position:absolute;inset:0;pointer-events:none;border-radius:22px;
+  background:radial-gradient(500px 180px at 50% -10%, rgba(61,251,127,.10), transparent 70%);
+}
+.ck{
+  position:absolute;top:12px;inset-inline-start:12px;width:28px;height:28px;border-radius:50%;
+  border:2px solid var(--outline);background:rgba(4,6,11,.6);display:grid;place-items:center;z-index:5;
+  transition:.25s cubic-bezier(.2,.9,.3,1.4);
+}
+.ck svg{width:15px;height:15px;stroke:#00391A;stroke-width:3.4;fill:none;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:24;stroke-dashoffset:24;transition:stroke-dashoffset .3s ease .05s}
+.card.selected .ck{background:var(--neon);border-color:var(--neon);transform:scale(1.08)}
+.card.selected .ck svg{stroke-dashoffset:0}
+.chead{display:flex;align-items:flex-start;gap:10px;padding:2px 40px 10px 0}
+.num{
+  flex:none;width:34px;height:34px;border-radius:12px;display:grid;place-items:center;
+  background:var(--surface2);border:1px solid var(--outline);color:var(--sky);font-weight:800;font-size:15px;
+}
+.card.selected .num{background:var(--neon-soft);border-color:rgba(61,251,127,.4);color:var(--neon)}
+.ct{font-size:16px;font-weight:800;line-height:1.5}
+.chips{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
+.pill{font-size:10.5px;border-radius:99px;padding:2px 9px;border:1px solid var(--outline);color:var(--muted)}
+.pill.cat{color:var(--sky);border-color:rgba(56,189,248,.35);background:var(--sky-soft)}
+.pill.typ-d{color:var(--amber);border-color:rgba(255,200,87,.35);background:rgba(255,200,87,.08)}
+.pill.typ-a{color:var(--neon);border-color:rgba(61,251,127,.35);background:var(--neon-soft)}
+
+.demo{
+  position:relative;background:#060a13;border:1px solid var(--outline);border-radius:16px;
+  min-height:190px;display:grid;place-items:center;overflow:hidden;padding:14px;
+}
+.desc{color:var(--muted);font-size:13px;line-height:1.9;margin-top:12px}
+.impl{margin-top:10px;border:1px dashed var(--outline);border-radius:12px;background:rgba(17,28,49,.4)}
+.impl summary{cursor:pointer;padding:8px 12px;font-size:12px;color:var(--sky);font-weight:700;list-style:none}
+.impl summary::before{content:"⚙ ";}
+.impl .body{padding:0 12px 10px;font-size:12px;line-height:1.9;color:var(--muted)}
+.impl .body b{color:var(--text)}
+
+/* نافذة التصدير */
+.modal{position:fixed;inset:0;z-index:100;display:none;place-items:center;background:rgba(2,4,8,.75);backdrop-filter:blur(4px);padding:18px}
+.modal.open{display:grid}
+.mbox{width:min(760px,100%);max-height:88vh;display:flex;flex-direction:column;background:var(--surface);
+  border:1px solid var(--outline);border-radius:22px;padding:18px;animation:pop .3s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes pop{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+.mbox h3{font-size:18px}
+.mbox .sub{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.8}
+.mbox pre{
+  flex:1;overflow:auto;background:#060a13;border:1px solid var(--outline);border-radius:14px;
+  padding:14px;font-size:12px;line-height:1.9;color:#c8d6ea;margin-top:12px;white-space:pre-wrap;
+  font-family:'Cascadia Code',Consolas,monospace;direction:rtl;text-align:right;
+}
+.mrow{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.toast{
+  position:fixed;bottom:26px;right:50%;transform:translate(50%,80px);z-index:120;
+  background:var(--surface2);border:1px solid var(--neon);color:var(--text);
+  padding:12px 22px;border-radius:99px;font-size:14px;font-weight:700;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);transition:transform .35s cubic-bezier(.2,.9,.3,1.3);pointer-events:none;
+}
+.toast.show{transform:translate(50%,0)}
+.toast b{color:var(--neon)}
+
+/* ═══════════ أنماط المعاينات (لكل مقترح) ═══════════ */
+.phone{width:200px;height:160px;border-radius:18px;border:1px solid var(--outline);background:var(--surface);overflow:hidden;position:relative;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.mini-btn{border:none;background:var(--surface2);color:var(--text);border:1px solid var(--outline);border-radius:99px;padding:5px 12px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:700}
+.mini-btn:hover{border-color:var(--sky)}
+.mini-btn.sky{background:var(--sky);color:#00243A;border-color:var(--sky)}
+.mini-btn.red{background:var(--red);color:#3D0000;border-color:var(--red)}
+.demo .side{position:absolute;bottom:10px;display:flex;gap:8px}
+.demo .side.l{right:12px}.demo .side.r{left:12px}
+
+/* 1 انزلاق اتجاهي */
+.d1 .page{position:absolute;inset:0;padding:12px;display:flex;flex-direction:column;gap:8px;transition:transform .45s cubic-bezier(.25,.9,.3,1),opacity .4s;background:var(--surface)}
+.d1 .bar{height:10px;border-radius:6px;background:var(--surface2)}
+.d1 .p-a .bar:nth-child(1){width:70%;background:linear-gradient(90deg,var(--sky),transparent)}
+.d1 .p-b{background:linear-gradient(160deg,#0B1220,#0e1a30)}
+.d1 .p-b .bar:nth-child(1){width:50%;background:linear-gradient(90deg,var(--neon),transparent)}
+.d1 .p-c .bar:nth-child(1){width:60%;background:linear-gradient(90deg,var(--amber),transparent)}
+.d1 .page.off-next{transform:translateX(-105%);opacity:.4}
+.d1 .page.off-prev{transform:translateX(105%);opacity:.4}
+.d1 .page.hide{transform:translateX(105%);opacity:0;pointer-events:none}
+
+/* 2 شريط تنقل متوهج */
+.d2 .nav{display:flex;gap:6px;background:var(--surface2);border:1px solid var(--outline);border-radius:99px;padding:7px;position:relative;width:230px}
+.d2 .ni{flex:1;display:grid;place-items:center;padding:8px 0;border-radius:99px;cursor:pointer;z-index:2;transition:.25s}
+.d2 .ni svg{width:18px;height:18px;fill:none;stroke:var(--muted);stroke-width:1.8;transition:.25s}
+.d2 .ni.on svg{stroke:#00243A;transform:scale(1.12)}
+.d2 .ind{position:absolute;top:7px;bottom:7px;width:49.5px;border-radius:99px;background:var(--sky);
+  box-shadow:0 0 18px rgba(56,189,248,.8),0 0 34px rgba(56,189,248,.35);transition:transform .4s cubic-bezier(.3,1.4,.4,1);z-index:1}
+
+/* 3 كشف دائري */
+.d3 .fab{position:absolute;bottom:14px;left:14px;width:44px;height:44px;border-radius:16px;background:var(--sky);color:#00243A;
+  display:grid;place-items:center;font-size:22px;font-weight:800;cursor:pointer;box-shadow:0 8px 22px rgba(56,189,248,.4);transition:.2s;z-index:3}
+.d3 .fab:hover{transform:scale(1.06)}
+.d3 .rev{position:absolute;bottom:22px;left:22px;width:30px;height:30px;border-radius:50%;background:linear-gradient(150deg,#0e2438,#0B1220);
+  border:1px solid rgba(56,189,248,.4);transform:scale(0);transition:transform .55s cubic-bezier(.3,.8,.3,1);z-index:2}
+.d3.open .rev{transform:scale(24)}
+.d3 .scr3{position:absolute;inset:0;z-index:4;opacity:0;pointer-events:none;transition:opacity .22s .28s;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;text-align:center}
+.d3.open .scr3{opacity:1;pointer-events:auto}
+.d3 .scr3 b{color:var(--sky);font-size:14px}
+.d3 .scr3 p{font-size:10.5px;color:var(--muted);padding:0 22px;line-height:1.8}
+
+/* 4 رجوع توقّعي */
+.d4.stack{position:relative;width:190px;height:150px}
+.d4 .back-page,.d4 .front-page{position:absolute;inset:0;border-radius:16px;border:1px solid var(--outline);padding:12px;transition:transform .45s cubic-bezier(.3,.9,.3,1),border-radius .45s,filter .45s}
+.d4 .back-page{background:#0a1322;transform:scale(.94);filter:brightness(.55)}
+.d4 .front-page{background:var(--surface);box-shadow:0 14px 30px rgba(0,0,0,.5)}
+.d4.stack.peek .front-page{transform:scale(.9) translateX(-16px);border-radius:26px;filter:brightness(.8)}
+.d4.stack.peek .back-page{transform:scale(1);filter:brightness(1)}
+.d4 .bar{height:9px;border-radius:5px;background:var(--surface2);margin-bottom:8px}
+.d4 .bp1{width:65%;background:linear-gradient(90deg,var(--sky),transparent)}
+.d4 .fp1{width:55%;background:linear-gradient(90deg,var(--neon),transparent)}
+
+/* 5 بحث مورف */
+.d5 .sbar{display:flex;align-items:center;gap:8px;width:120px;background:var(--surface2);border:1px solid var(--outline);
+  border-radius:99px;padding:8px 12px;cursor:pointer;transition:width .45s cubic-bezier(.3,.9,.3,1),border-color .3s,box-shadow .3s;overflow:hidden}
+.d5 .sbar svg{width:16px;height:16px;stroke:var(--muted);fill:none;stroke-width:2;flex:none}
+.d5 .sbar .t{font-size:11px;color:var(--muted);white-space:nowrap}
+.d5 .sbar input{display:none;background:none;border:none;outline:none;color:var(--text);font-family:inherit;font-size:12px;width:100%}
+.d5 .sbar.open{width:240px;border-color:var(--sky);box-shadow:0 0 22px rgba(56,189,248,.25)}
+.d5 .sbar.open .t{display:none}
+.d5 .sbar.open input{display:block}
+.d5 .sbar.open svg{stroke:var(--sky)}
+
+/* 6 مروف الأرقام */
+.d6 .stat{background:var(--surface2);border:1px solid var(--outline);border-radius:16px;padding:14px 22px;text-align:center;min-width:170px}
+.d6 .lbl{font-size:11px;color:var(--muted)}
+.d6 .val{font-size:30px;font-weight:800;color:var(--sky);height:40px;overflow:hidden;position:relative}
+.d6 .val span{position:absolute;inset:0;display:grid;place-items:center;transition:transform .45s cubic-bezier(.3,.9,.3,1),opacity .4}
+.d6 .val span.out{transform:translateY(-100%);opacity:0}
+.d6 .val span.in{transform:translateY(100%);opacity:0;transition:none}
+
+/* 7 دائري مقوس */
+.d7 svg{overflow:visible}
+.d7 circle{fill:none;stroke-width:14;stroke-linecap:round;transform:rotate(-90deg);transform-box:fill-box;transform-origin:center;
+  transition:stroke-dasharray .9s cubic-bezier(.3,.8,.3,1),stroke-dashoffset .9s cubic-bezier(.3,.8,.3,1)}
+.d7 .lg{display:flex;flex-direction:column;gap:5px;margin-top:8px}
+.d7 .lg i{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);font-style:normal;opacity:0;animation:cardIn .4s both}
+.d7 .lg i::before{content:"";width:8px;height:8px;border-radius:3px;background:currentColor}
+.d7 .lg .c1{color:var(--sky)}.d7 .lg .c2{color:var(--neon)}.d7 .lg .c3{color:var(--amber)}
+
+/* 8 أعمدة نابضة */
+.d8 .bars{display:flex;gap:10px;align-items:flex-end;height:120px}
+.d8 .b{width:26px;border-radius:8px 8px 4px 4px;transition:height .7s cubic-bezier(.2,1.6,.35,1);position:relative}
+.d8 .b::after{content:attr(data-v);position:absolute;top:-18px;right:50%;transform:translateX(50%);font-size:10px;color:var(--muted)}
+.d8 .b1{background:linear-gradient(180deg,var(--sky),rgba(56,189,248,.25))}
+.d8 .b2{background:linear-gradient(180deg,var(--neon),rgba(61,251,127,.25))}
+.d8 .b3{background:linear-gradient(180deg,var(--amber),rgba(255,200,87,.25))}
+.d8 .b4{background:linear-gradient(180deg,var(--red),rgba(255,90,90,.25))}
+
+/* 9 خط زمني ممتد */
+.d9 .tl{position:relative;padding-inline-start:20px;display:flex;flex-direction:column;gap:12px;width:210px}
+.d9 .line{position:absolute;top:6px;bottom:6px;inset-inline-start:5px;width:2px;background:linear-gradient(180deg,var(--sky),var(--neon));transform-origin:top;transition:transform .6s cubic-bezier(.3,.9,.3,1)}
+.d9 .ev{position:relative;font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--outline);border-radius:10px;padding:7px 10px;animation:cardIn .45s both}
+.d9 .ev::before{content:"";position:absolute;top:12px;inset-inline-start:-19px;width:10px;height:10px;border-radius:50%;background:var(--sky);box-shadow:0 0 10px rgba(56,189,248,.7)}
+.d9 .ev.new::before{animation:ping2 1s ease-out 2}
+@keyframes ping2{0%{box-shadow:0 0 0 0 rgba(56,189,248,.7)}100%{box-shadow:0 0 0 12px rgba(56,189,248,0)}}
+.d9 .ev b{color:var(--text);display:block;font-size:11.5px}
+
+/* 10 عدّاد الاستحقاق */
+.d10 .wrap2{display:flex;align-items:center;gap:14px}
+.d10 .ring{position:relative;width:84px;height:84px}
+.d10 .ring svg{transform:rotate(-90deg)}
+.d10 .ring circle{fill:none;stroke-width:7;stroke-linecap:round}
+.d10 .bgc{stroke:var(--surface2)}
+.d10 .fgc{transition:stroke-dashoffset .5s ease,stroke .5s ease;filter:drop-shadow(0 0 5px currentColor)}
+.d10 .mid{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:20px}
+.d10 .pill10{background:var(--surface2);border:1px solid var(--outline);border-radius:14px;padding:10px 14px;font-size:11px;color:var(--muted);transition:.4s;line-height:1.7}
+.d10 .pill10 b{display:block;font-size:13px;color:var(--text)}
+.d10.warn .pill10{border-color:rgba(255,200,87,.5)} .d10.late .pill10{border-color:rgba(255,90,90,.6);box-shadow:0 0 18px rgba(255,90,90,.15)}
+
+/* 11 إعادة ترتيب */
+.d11 .list{display:flex;flex-direction:column;gap:8px;width:230px}
+.d11 .row{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--outline);border-radius:12px;padding:9px 12px;font-size:12px;cursor:grab;transition:transform .3s cubic-bezier(.3,1.3,.4,1),box-shadow .2s;user-select:none;touch-action:none}
+.d11 .row.drag{box-shadow:0 12px 28px rgba(0,0,0,.55);border-color:var(--sky);cursor:grabbing;z-index:5;transition:box-shadow .2s}
+.d11 .row .h{color:var(--muted);letter-spacing:-1px}
+.d11 .row .nm{flex:1}
+.d11 .row .tg{font-size:9.5px;color:var(--sky);background:var(--sky-soft);border-radius:99px;padding:2px 8px}
+
+/* 12 زر مقسّم */
+.d12 .seg{display:flex;background:var(--surface2);border:1px solid var(--outline);border-radius:14px;padding:4px;position:relative;width:262px}
+.d12 .sg{flex:1;text-align:center;padding:8px 2px;font-size:10.5px;color:var(--muted);cursor:pointer;z-index:2;border-radius:10px;transition:color .25s;font-weight:700}
+.d12 .sg.on{color:#00391A}
+.d12 .pill12{position:absolute;top:4px;bottom:4px;width:calc(33.333% - 2.7px);border-radius:10px;background:var(--neon);box-shadow:0 0 14px rgba(61,251,127,.5);transition:transform .35s cubic-bezier(.3,1.35,.4,1);z-index:1}
+
+/* 13 منزلق بفقاعة */
+.d13 .sl{width:230px;position:relative;padding-top:34px}
+.d13 input{width:100%;appearance:none;height:6px;border-radius:99px;background:linear-gradient(to left,var(--sky) var(--p,30%),var(--surface2) var(--p,30%));outline:none;cursor:pointer}
+.d13 input::-webkit-slider-thumb{appearance:none;width:20px;height:20px;border-radius:50%;background:var(--sky);border:3px solid #062033;box-shadow:0 0 12px rgba(56,189,248,.8)}
+.d13 .bubble{position:absolute;top:0;background:var(--sky);color:#00243A;font-size:11px;font-weight:800;border-radius:8px;padding:3px 9px;transform:translateX(50%) scale(.6);opacity:0;transition:opacity .2s,transform .25s cubic-bezier(.3,1.5,.5,1)}
+.d13 .bubble.show{opacity:1;transform:translateX(50%) scale(1)}
+.d13 .bubble::after{content:"";position:absolute;bottom:-4px;right:50%;transform:translateX(50%);border:4px solid transparent;border-top-color:var(--sky)}
+.d13 .hint{font-size:10.5px;color:var(--muted);margin-top:10px;text-align:center}
+
+/* 14 مفتاح ليلي نهاري */
+.d14 .sw{width:74px;height:40px;border-radius:99px;background:#132b47;border:1px solid var(--outline);position:relative;cursor:pointer;transition:background .45s,box-shadow .45s;flex:none}
+.d14 .sw.day{background:#bfdcf5;box-shadow:0 0 20px rgba(255,200,87,.35)}
+.d14 .thumb{position:absolute;top:3px;right:3px;width:32px;height:32px;border-radius:50%;background:#0B1220;display:grid;place-items:center;transition:transform .45s cubic-bezier(.3,1.4,.4,1),background .45s;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.d14 .sw.day .thumb{transform:translateX(-34px);background:#FFC857}
+.d14 .thumb svg{width:16px;height:16px;position:absolute;transition:opacity .3s,transform .45s}
+.d14 .moon{fill:#cfe6ff}.d14 .sun{fill:#7a4d00;opacity:0;transform:rotate(-90deg)}
+.d14 .sw.day .moon{opacity:0;transform:rotate(90deg)}
+.d14 .sw.day .sun{opacity:1;transform:none}
+.d14 .scene{display:flex;align-items:center;gap:14px;background:var(--surface2);border:1px solid var(--outline);border-radius:16px;padding:14px 18px;transition:.45s}
+.d14 .scene.day{background:#e8f2fb;border-color:#bfdcf5}
+.d14 .scene .lbl14{font-size:12px;color:var(--muted);transition:.45s}
+.d14 .scene.day .lbl14{color:#33506b}
+.d14 .spark{position:absolute;width:3px;height:3px;border-radius:50%;background:#fff;opacity:0}
+.d14 .sw.day ~ .spark,.d14 .anim-spark{animation:spk .8s ease-out}
+@keyframes spk{0%{opacity:1;transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(var(--dx),var(--dy)) scale(.2)}}
+
+/* 15 صح بجزيئات */
+.d15 .cb{width:38px;height:38px;border-radius:11px;border:2px solid var(--outline);background:var(--surface2);cursor:pointer;display:grid;place-items:center;position:relative;transition:.25s}
+.d15 .cb.on{border-color:var(--neon);background:var(--neon-soft);box-shadow:0 0 18px rgba(61,251,127,.3)}
+.d15 .cb svg{width:20px;height:20px;fill:none;stroke:var(--neon);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.d15 .cb path{stroke-dasharray:26;stroke-dashoffset:26;transition:stroke-dashoffset .35s ease .05s}
+.d15 .cb.on path{stroke-dashoffset:0}
+.d15 .pt{position:absolute;top:50%;right:50%;width:5px;height:5px;border-radius:2px;pointer-events:none;opacity:0}
+.d15 .cb.on .pt{animation:pt .6s cubic-bezier(.2,.8,.4,1) forwards}
+@keyframes pt{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--tx),var(--ty)) rotate(200deg)}}
+
+/* 16 شرائح */
+.d16 .chips16{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:250px}
+.d16 .chip{position:relative;border:1px solid var(--outline);background:var(--surface2);color:var(--muted);border-radius:99px;padding:7px 14px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:inherit;overflow:hidden;transition:color .25s,border-color .25s,transform .3s cubic-bezier(.3,1.6,.5,1)}
+.d16 .chip::before{content:"";position:absolute;inset:0;background:var(--sky-soft);transform:scaleX(0);transform-origin:right;transition:transform .3s cubic-bezier(.3,.9,.3,1);z-index:0}
+.d16 .chip span{position:relative;z-index:1;display:flex;align-items:center;gap:5px}
+.d16 .chip .ck16{width:0;opacity:0;transition:.3s;display:inline-grid;place-items:center}
+.d16 .chip.on{color:var(--sky);border-color:rgba(56,189,248,.5);transform:scale(1.05)}
+.d16 .chip.on::before{transform:scaleX(1)}
+.d16 .chip.on .ck16{width:12px;opacity:1;color:var(--sky)}
+
+/* 17 سحب البطاقة */
+.d17 .slot{position:relative;width:238px;height:64px}
+.d17 .behind{position:absolute;inset:0;border-radius:14px;display:flex;justify-content:space-between;align-items:center;padding:0 18px;font-size:11px;font-weight:800;overflow:hidden}
+.d17 .behind .arc{color:#7a4d00;opacity:0;transition:.2s}.d17 .behind .del{color:#fff;opacity:0;transition:.2s}
+.d17 .behind{background:linear-gradient(90deg,var(--amber) 0 48%,var(--red) 52% 100%)}
+.d17 .swc{position:absolute;inset:0;background:var(--surface2);border:1px solid var(--outline);border-radius:14px;display:flex;align-items:center;gap:10px;padding:0 14px;font-size:12px;cursor:grab;touch-action:none;user-select:none}
+.d17 .swc.snap{transition:transform .4s cubic-bezier(.3,1.4,.4,1)}
+.d17 .swc .dot{width:9px;height:9px;border-radius:50%;background:var(--sky);box-shadow:0 0 8px rgba(56,189,248,.8)}
+
+/* 18 شيمر */
+.d18 .sk{width:230px;display:flex;flex-direction:column;gap:10px}
+.d18 .skb{border-radius:10px;background:linear-gradient(100deg,var(--surface2) 35%,#1b2c4d 50%,var(--surface2) 65%);background-size:250% 100%;animation:shm 1.6s linear infinite}
+@keyframes shm{from{background-position:200% 0}to{background-position:-50% 0}}
+.d18 .h18{height:14px;width:75%}.d18 .h18b{height:10px;width:100%}.d18 .h18c{height:10px;width:55%}
+.d18 .real{width:230px;background:var(--surface2);border:1px solid rgba(56,189,248,.35);border-radius:12px;padding:12px;font-size:12px;display:none;animation:cardIn .4s both}
+.d18 .real b{color:var(--sky)}
+.d18.done .sk{display:none}.d18.done .real{display:block}
+
+/* 19 اهتزاز الخطأ */
+.d19 .f19{width:225px;display:flex;flex-direction:column;gap:9px;align-items:center}
+.d19 input{width:100%;background:var(--surface2);border:1px solid var(--outline);border-radius:11px;padding:9px 12px;color:var(--text);font-family:inherit;font-size:12px;outline:none;transition:border-color .25s,box-shadow .25s}
+.d19 input.err{border-color:var(--red);box-shadow:0 0 16px rgba(255,90,90,.25);animation:shake .4s}
+.d19 input.okk{border-color:var(--neon)}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(3px)}}
+.d19 .msg{font-size:10.5px;height:14px;color:var(--red);opacity:0;transition:.3s}
+.d19 .msg.show{opacity:1}
+.d19 .msg.good{color:var(--neon)}
+
+/* 20 نجوم النجاح */
+.d20 .zone{position:relative;width:100%;height:100%;display:grid;place-items:center}
+.d20 .star{position:absolute;top:50%;right:50%;font-size:14px;opacity:0;pointer-events:none}
+.d20 .zone.go .star{animation:burst .9s cubic-bezier(.2,.8,.4,1) forwards}
+@keyframes burst{0%{opacity:1;transform:translate(0,0) scale(.5) rotate(0)}100%{opacity:0;transform:translate(var(--tx),var(--ty)) scale(1.3) rotate(160deg)}}
+.d20 .ok-badge{width:56px;height:56px;border-radius:50%;background:var(--neon-soft);border:2px solid var(--neon);display:grid;place-items:center;transform:scale(0);transition:transform .4s cubic-bezier(.3,1.6,.4,1);box-shadow:0 0 30px rgba(61,251,127,.35)}
+.d20 .zone.go .ok-badge{transform:scale(1)}
+.d20 .ok-badge svg{width:26px;height:26px;stroke:var(--neon);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+/* 21 تقدم مداري */
+.d21 .orb{position:relative;width:86px;height:86px;display:grid;place-items:center}
+.d21 .track{position:absolute;inset:0;border-radius:50%;border:2px dashed var(--outline)}
+.d21 .pl{position:absolute;inset:-4px;animation:orbit 1.6s linear infinite}
+.d21 .pl i{position:absolute;top:0;right:50%;transform:translateX(50%);width:12px;height:12px;border-radius:50%;background:var(--sky);box-shadow:0 0 14px rgba(56,189,248,.9)}
+@keyframes orbit{to{transform:rotate(-360deg)}}
+.d21 .core{width:34px;height:34px;border-radius:50%;background:var(--surface2);border:1px solid var(--outline);display:grid;place-items:center;font-size:13px;color:var(--muted);transition:.4s}
+.d21.done21 .pl{display:none}
+.d21.done21 .track{border-style:solid;border-color:var(--neon)}
+.d21.done21 .core{background:var(--neon-soft);border-color:var(--neon);color:var(--neon);box-shadow:0 0 20px rgba(61,251,127,.3)}
+
+/* 22 نبض الطوارئ */
+.d22 .eb{position:relative;background:var(--red);color:#3D0000;border:none;font-family:inherit;font-weight:800;font-size:14px;border-radius:99px;padding:13px 30px;cursor:pointer;animation:hb 1.6s ease-in-out infinite}
+.d22 .eb::before,.d22 .eb::after{content:"";position:absolute;inset:-4px;border-radius:99px;border:2px solid rgba(255,90,90,.6);animation:radar 1.6s ease-out infinite}
+.d22 .eb::after{animation-delay:.8s}
+@keyframes radar{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.55);opacity:0}}
+@keyframes hb{0%,100%{transform:scale(1)}12%{transform:scale(1.06)}24%{transform:scale(1)}36%{transform:scale(1.04)}}
+.d22 .eb:hover{filter:brightness(1.1)}
+
+/* 23 بطاقة موقع 2.0 */
+.d23 .sc{width:250px;background:linear-gradient(150deg,rgba(56,189,248,.10),rgba(11,18,32,.4) 45%),var(--surface2);border:1px solid rgba(56,189,248,.35);border-radius:18px;padding:14px;position:relative;overflow:hidden;transition:.4s}
+.d23 .sc::before{content:"";position:absolute;inset-inline-start:0;top:0;bottom:0;width:4px;background:var(--sky);border-radius:0 4px 4px 0;transition:.4s}
+.d23 .sc.late{border-color:rgba(255,90,90,.5);box-shadow:0 0 26px rgba(255,90,90,.14)}
+.d23 .sc.late::before{background:var(--red)}
+.d23 .sc h4{font-size:14px;display:flex;justify-content:space-between;align-items:center}
+.d23 .stt{font-size:9.5px;border-radius:99px;padding:3px 9px;font-weight:800}
+.d23 .sc:not(.late) .stt{background:var(--neon-soft);color:var(--neon)}
+.d23 .sc.late .stt{background:rgba(255,90,90,.14);color:var(--red);animation:brz 2s ease-in-out infinite}
+@keyframes brz{0%,100%{opacity:1}50%{opacity:.55}}
+.d23 .meta{display:flex;gap:12px;margin-top:10px;font-size:10px;color:var(--muted)}
+.d23 .meta b{display:block;color:var(--text);font-size:12px}
+.d23 .cat-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-inline-end:4px}
+
+/* 24 رأس التفاصيل */
+.d24 .hd{width:250px;border-radius:18px;padding:18px 16px 14px;position:relative;overflow:hidden;transition:background .7s ease;border:1px solid var(--outline)}
+.d24 .hd.c-sky{background:linear-gradient(140deg,rgba(56,189,248,.35),rgba(4,6,11,.9) 70%)}
+.d24 .hd.c-neon{background:linear-gradient(140deg,rgba(61,251,127,.3),rgba(4,6,11,.9) 70%)}
+.d24 .hd.c-amber{background:linear-gradient(140deg,rgba(255,200,87,.3),rgba(4,6,11,.9) 70%)}
+.d24 .hd h4{font-size:17px;font-weight:800}
+.d24 .hd p{font-size:10.5px;color:var(--muted);margin-top:4px}
+.d24 .hd .pillz{display:inline-block;margin-top:9px;font-size:9.5px;border-radius:99px;padding:3px 10px;background:rgba(232,238,247,.12);color:var(--text)}
+.d24 .dots{display:flex;gap:7px;margin-top:10px;justify-content:center}
+.d24 .cd{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.2s}
+.d24 .cd:hover{transform:scale(1.15)}
+.d24 .cd.on{border-color:#fff}
+
+/* 25 حالة فارغة */
+.d25 .emp{text-align:center}
+.d25 .pl25{animation:brz2 3.2s ease-in-out infinite}
+@keyframes brz2{0%,100%{transform:scale(1);opacity:.9}50%{transform:scale(1.07);opacity:1}}
+.d25 h5{margin-top:10px;font-size:14px;font-weight:800}
+.d25 p{font-size:10.5px;color:var(--muted);margin-top:3px}
+.d25 .cta{margin-top:10px;background:var(--sky);color:#00243A;border:none;border-radius:99px;padding:8px 20px;font-family:inherit;font-weight:800;font-size:11.5px;cursor:pointer;box-shadow:0 6px 20px rgba(56,189,248,.35);transition:.2s}
+.d25 .cta:hover{transform:translateY(-2px)}
+
+/* 26 إعدادات */
+.d26 .st{width:238px;background:var(--surface2);border:1px solid var(--outline);border-radius:16px;overflow:hidden}
+.d26 .grp{padding:9px 12px 4px;font-size:9.5px;color:var(--sky);font-weight:800;letter-spacing:.5px}
+.d26 .row26{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;transition:background .2s;font-size:12px}
+.d26 .row26:hover{background:rgba(56,189,248,.06)}
+.d26 .ic26{width:30px;height:30px;border-radius:9px;background:var(--sky-soft);display:grid;place-items:center;flex:none;transition:transform .4s cubic-bezier(.3,1.5,.5,1)}
+.d26 .row26:active .ic26{transform:scale(.85) rotate(-10deg)}
+.d26 .ic26 svg{width:15px;height:15px;stroke:var(--sky);fill:none;stroke-width:1.9;stroke-linecap:round}
+.d26 .row26 .tx{flex:1}
+.d26 .row26 .tx small{display:block;font-size:9.5px;color:var(--muted)}
+.d26 .ar{color:var(--muted);font-size:12px;transition:transform .25s}
+.d26 .row26:hover .ar{transform:translateX(-3px);color:var(--sky)}
+
+/* 27 شبكة المواد */
+.d27 .g27{display:grid;grid-template-columns:repeat(3,64px);gap:9px}
+.d27 .tile{position:relative;background:var(--surface2);border:1px solid var(--outline);border-radius:14px;padding:9px 4px;text-align:center;cursor:pointer;transition:.25s;overflow:hidden}
+.d27 .tile .av{width:30px;height:30px;border-radius:10px;margin:0 auto;display:grid;place-items:center;font-weight:800;font-size:13px;color:#04121e}
+.d27 .tile .nm27{font-size:9px;color:var(--muted);margin-top:5px}
+.d27 .tile .cn{font-size:8.5px;color:var(--sky)}
+.d27 .tile:hover{transform:translateY(-3px);border-color:#2a3c63}
+.d27 .tile.sel{border-color:var(--neon);box-shadow:0 0 14px rgba(61,251,127,.2)}
+.d27 .tile .ripple{position:absolute;border-radius:50%;background:rgba(232,238,247,.25);transform:scale(0);animation:rip .5s ease-out forwards;pointer-events:none}
+@keyframes rip{to{transform:scale(3.2);opacity:0}}
+
+/* 28 تايبوغرافي */
+.d28 .typ{text-align:center}
+.d28 .h28{font-size:26px;font-weight:800;background:linear-gradient(90deg,var(--sky),var(--neon),var(--amber),var(--sky));background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:grad 5s linear infinite;font-family:'Aref Ruqaa','Tajawal',serif}
+@keyframes grad{to{background-position:300% 0}}
+.d28 .sub28{font-size:11px;color:var(--muted);margin-top:6px}
+.d28 .lvl{display:flex;flex-direction:column;gap:5px;margin-top:12px;background:var(--surface2);border:1px solid var(--outline);border-radius:12px;padding:10px 14px;text-align:right}
+.d28 .lvl span{display:block}
+.d28 .l1{font-size:15px;font-weight:800;color:var(--text)}
+.d28 .l2{font-size:12px;color:var(--muted)}
+.d28 .l3{font-size:10px;color:#5c6f8d}
+
+/* 29 شريط الصيانة 2 */
+.d29 .strip{width:252px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,200,87,.35);cursor:pointer;background:linear-gradient(90deg,rgba(255,200,87,.16),rgba(255,90,90,.16),rgba(255,200,87,.16));background-size:220% 100%;animation:shm 4s linear infinite}
+.d29 .top29{display:flex;align-items:center;gap:8px;padding:10px 14px;font-size:11.5px;font-weight:800}
+.d29 .top29 .dot29{width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 10px rgba(255,90,90,.9);animation:brz 1.8s infinite}
+.d29 .top29 .op{margin-inline-start:auto;color:var(--muted);transition:transform .35s}
+.d29 .strip.open .op{transform:rotate(180deg)}
+.d29 .more{max-height:0;transition:max-height .45s cubic-bezier(.3,.9,.3,1);overflow:hidden}
+.d29 .strip.open .more{max-height:120px}
+.d29 .mrow29{display:flex;justify-content:space-between;font-size:10.5px;padding:7px 14px;background:rgba(4,6,11,.55);border-top:1px solid var(--outline);color:var(--muted)}
+.d29 .mrow29 b{color:var(--red)}
+
+/* 30 قفل الكوكبات */
+.d30 .lock{display:flex;flex-direction:column;align-items:center;gap:12px}
+.d30 .sky30{position:relative;width:210px;height:84px}
+.d30 .sky30 svg{position:absolute;inset:0}
+.d30 .ln{stroke:rgba(56,189,248,.5);stroke-width:1.4;stroke-dasharray:60;stroke-dashoffset:60;transition:stroke-dashoffset .4s ease}
+.d30 .ln.on{stroke-dashoffset:0}
+.d30 .star30{position:absolute;width:12px;height:12px;border-radius:50%;background:#1d2c49;border:1px solid var(--outline);transition:.3s;transform:translate(-50%,-50%)}
+.d30 .star30.lit{background:var(--sky);border-color:var(--sky);box-shadow:0 0 14px rgba(56,189,248,.9);animation:pop30 .35s cubic-bezier(.3,1.8,.5,1)}
+@keyframes pop30{0%{transform:translate(-50%,-50%) scale(.4)}60%{transform:translate(-50%,-50%) scale(1.5)}100%{transform:translate(-50%,-50%) scale(1)}}
+.d30 .keys{display:grid;grid-template-columns:repeat(5,34px);gap:6px}
+.d30 .k{background:var(--surface2);border:1px solid var(--outline);color:var(--text);border-radius:10px;padding:6px 0;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
+.d30 .k:hover{border-color:var(--sky)}
+.d30 .k:active{transform:scale(.9);background:var(--sky-soft)}
+.d30 .hint30{font-size:10px;color:var(--muted)}
+.d30 .hint30 b{color:var(--neon)}
+
+@media(max-width:560px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="stars" id="stars"></div>
+
+<div class="wrap">
+  <header class="hero">
+    <h1>🌌 مقترحات <b>التصميم والانميشن</b> — الجولة الثالثة</h1>
+    <p>
+      ثلاثون خيارًا جديدًا لتطبيق <b>مجرة</b>، مستوحاة 100٪ من واجهات Jetpack Compose و Material 3
+      ومتوافقة مع الهوية البصرية (الوضع الليلي + السماوي + النيون). الجولة الأولى غطّت انيميشنات
+      «المكتبة الأساسية» (الإصدار 2.3)، والثانية غطّت «واجهة المجرة» (2.5) — وهذه الجولة تغطي بقية
+      التطبيق: التنقل، الإحصائيات، الإعدادات، النزول الطارئ، القفل، والتصاميم العامة.
+    </p>
+    <p><b style="color:var(--text)">طريقة الاستخدام:</b> انقر البطاقة لتحديد الخيار ← جرّب المعاينة الحية داخل كل بطاقة ← ثم «تصدير اختياراتي» لتنزيل <b>اختيارات.md</b> ورفعه إلى المستودع.</p>
+    <div class="tags">
+      <span class="tag">✦ 30 خيارًا قابلًا للنقر</span>
+      <span class="tag">✦ معاينات حيّة داخل كل بطاقة</span>
+      <span class="tag">✦ تصدير اختيارات.md مرتّب</span>
+      <span class="tag">✦ Jetpack Compose / Material 3</span>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <span class="count">المُختار: <b id="cnt">0</b> / 30</span>
+    <button class="btn ghost" id="allBtn">تحديد الكل</button>
+    <button class="btn ghost" id="clrBtn">مسح التحديد</button>
+    <button class="btn primary" id="expBtn">⬇ تصدير اختياراتي (MD)</button>
+  </div>
+
+  <div class="filters" id="filters"></div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<!-- نافذة التصدير -->
+<div class="modal" id="modal">
+  <div class="mbox">
+    <h3>📄 ملف <span style="color:var(--neon)">اختيارات.md</span> جاهز</h3>
+    <div class="sub">انقر «تنزيل الملف» ثم ارفع <b>اختيارات.md</b> إلى جذر المستودع — في الجلسة التالية سيُقرأ الملف وتُنفَّذ الخيارات المختارة فقط.</div>
+    <pre id="mdPrev"></pre>
+    <div class="mrow">
+      <button class="btn primary" id="dlBtn">⬇ تنزيل الملف</button>
+      <button class="btn" id="cpBtn">نسخ النص</button>
+      <button class="btn ghost" id="clBtn">إغلاق</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════ بيانات الخيارات الثلاثين ═══════════ */
+const CATS = {
+  nav:"انتقالات وتنقل", data:"بيانات حية", micro:"تفاعلات دقيقة",
+  fb:"تغذية راجعة وحالة", design:"تصميم وهوية"
+};
+const O = [
+/* ───────── انتقالات وتنقل ───────── */
+{id:1,cat:"nav",type:"انميشن",t:"انتقال انزلاقي اتجاهي بين الشاشات",
+ w:"التنقل العام (قائمة المواقع ← التفاصيل ← الإضافة)",
+ d:"الانتقال للأمام يدفع الشاشة الجديدة من جهة العمق وللخلف يعود بالعكس — بدل التلاشي الحالي، فيحافظ المستخدم على إحساس «المكان» داخل التطبيق.",
+ c:"AnimatedContent داخل مضيف التنقل + دخول/خروج بشرائح أفقية حسب اتجاه التنقل (عمق المكدس).",
+ demo:`<div class="phone d1" id="d1"><div class="page p-a hide"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div><div class="page p-b hide"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div><div class="page p-c"><div class="bar"></div><div class="bar"></div><div class="bar"></div></div></div>
+ <div class="side l"><button class="mini-btn" data-d1="back">→ رجوع</button><button class="mini-btn sky" data-d1="next">تقدم ←</button></div>`},
+{id:2,cat:"nav",type:"انميشن",t:"مؤشر تنقل سفلي منزلق متوهج",
+ w:"شريط التنقل السفلي (إن وُجد) أو تبويبات الشاشة الرئيسية",
+ d:"مؤشر حبة سماوية متوهجة ينزلق بنابض بين العناصر، والأيقونة النشطة تتحول للون داكن فوق المؤشر — إحساس «مجرة» في التنقل.",
+ c:"Custom NavigationBar + Animatable لموضع المؤشر + توهج عبر shadow، الأيقونات بـ animateColorAsState.",
+ demo:`<div class="d2" style="width:100%;display:grid;place-items:center"><div class="nav" id="d2nav"><div class="ind" id="d2ind"></div>
+ <div class="ni on"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg></div>
+ <div class="ni"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="2"/><circle cx="19" cy="8" r="2"/><path d="M7 7l3 3M14.5 10.5L17 9"/></svg></div>
+ <div class="ni"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></div>
+ <div class="ni"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.4 2.6a7 7 0 0 0-2.1 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.4-2.6a7 7 0 0 0 2.1-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2z"/></svg></div>
+ </div></div>`},
+{id:3,cat:"nav",type:"انميشن",t:"فتح شاشات الإضافة بكشف دائري من الزر",
+ w:"إضافة موقع / مادة / تصنيف — أي حوار يفتح من زر عائم",
+ d:"بدل ظهور الحوار فجأة، يتمدد كشف دائري من موضع الزر العائم نفسه حتى يملأ مساحة الإدخال — الربط البصري يوضح «من أين جاء هذا».",
+ c:"Circular reveal عبر clip(CircleShape) مع تكبير من نقطة المصدر (موضع الـ FAB) + tween بنمط M3 emphasis.",
+ demo:`<div class="phone d3" id="d3"><div style="padding:14px"><div style="height:9px;width:60%;border-radius:5px;background:linear-gradient(90deg,var(--sky),transparent);margin-bottom:9px"></div><div style="height:9px;width:90%;border-radius:5px;background:var(--surface2);margin-bottom:9px"></div><div style="height:9px;width:75%;border-radius:5px;background:var(--surface2)"></div></div>
+ <div class="rev"></div>
+ <div class="scr3"><b>✦ موقع جديد</b><p>الاسم، التصنيف، الموقع، والملاحظات…</p><button class="mini-btn" data-d3="close">إلغاء</button></div>
+ <div class="fab" data-d3="open">+</div></div>`},
+{id:4,cat:"nav",type:"انميشن",t:"معاينة الرجوع التكبيرية (Predictive Back)",
+ w:"إيماءة الرجوع في كل الشاشات",
+ d:"عند بدء إيماءة الرجوع تتقلص الشاشة الحالية قليلًا وتكشف الشاشة السابقة خلفها — نمط أندرويد الحديث مع نوابض لطيفة.",
+ c:"BackHandler + PredictiveBackHandler مع قياس التقدم، وتطبيقه بـ graphicsLayer (تكبير + إزاحة + زاوية).",
+ demo:`<div style="display:grid;place-items:center;gap:12px"><div class="stack d4" id="d4stack"><div class="back-page"><div class="bar bp1"></div><div class="bar"></div><div class="bar"></div></div><div class="front-page"><div class="bar fp1"></div><div class="bar"></div><div class="bar"></div></div></div><button class="mini-btn" id="d4btn">اضغط مطولًا لمعاينة الرجوع</button></div>`},
+{id:5,cat:"nav",type:"انميشن",t:"شريط بحث مورف من الشريط العلوي",
+ w:"قائمة المواقع، الكتالوج الموحد، اختيار المواد",
+ d:"نقرة على أيقونة البحث تمدد الشريط العلوي نفسه إلى حقل بحث كامل بدل فتح طبقة جديدة — بحث M3 المدمج (Docked SearchBar).",
+ c:"DockedSearchBar مع توسع الأنيميشن الافتراضي + إخفاء العنوان بـ AnimatedContent وتنظيف التركيز عند الإغلاق.",
+ demo:`<div class="d5" style="display:grid;place-items:center;gap:14px;width:100%"><div style="width:250px;background:var(--surface2);border:1px solid var(--outline);border-radius:12px;padding:10px 12px;font-size:11px;color:var(--muted)">شريط علوي: المواقع (12)</div><div class="sbar" id="d5sbar"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><span class="t">بحث…</span><input type="text" placeholder="ابحث في المواقع…"></div><div style="font-size:10px;color:var(--muted)">انقر الشريط لفتحه</div></div>`},
+
+/* ───────── بيانات حية ───────── */
+{id:6,cat:"data",type:"انميشن",t:"مروف الأرقام عند تغيّر القيم",
+ w:"شاشة الإحصائيات، عدّادات القائمة الرئيسية",
+ d:"كل رقم يتغير (مسحوبات، صيانات، مواقع) ينزلق القديم منه للأعلى ويدخل الجديد من الأسفل — الحياة في البيانات دون عجلة العدّاد الكاملة.",
+ c:"AnimatedContent بـ SlideInVertical + Fade، أو contentTransition numericText() لأرقام الساعات.",
+ demo:`<div class="d6"><div class="stat"><div class="lbl">مواد تم سحبها</div><div class="val" id="d6val"><span>12</span></div><div class="lbl" style="margin-top:4px;color:var(--sky);font-size:10px">تتحدث تلقائيًا…</div></div></div>`},
+{id:7,cat:"data",type:"انميشن + تصميم",t:"مخطط دائري متحرك للتصنيفات",
+ w:"شاشة الإحصائيات",
+ d:"حلقة مقسمة بألوان التصنيفات تُرسم أقواسها بالتتابع عند فتح الشاشة، مع وسيلة إيضاح تظهر متتابعة — لمحة واحدة عن توزيع مواقعك.",
+ c:"Canvas مع drawArc لكل تصنيف + تحريك نسبة النهاية بـ animateFloatAsState متسلسلة (تأخير حسب الفهرس).",
+ demo:`<div class="d7" style="text-align:center"><svg width="110" height="110" viewBox="0 0 110 110" id="d7svg"></svg><div class="lg" id="d7lg" style="align-items:center;flex-direction:row;gap:12px;justify-content:center;margin-top:10px"><i class="c1" style="animation-delay:.6s">كاميرات</i><i class="c2" style="animation-delay:.8s">شبكات</i><i class="c3" style="animation-delay:1s">طاقة</i></div><div class="side l"><button class="mini-btn sky" id="d7btn">إعادة الرسم</button></div></div>`},
+{id:8,cat:"data",type:"انميشن + تصميم",t:"أعمدة إحصائية نابضة",
+ w:"شاشة الإحصائيات — نشاط الصيانة الشهري",
+ d:"أعمدة تنمو بنابض مبالغ قليلًا (overshoot) عند الظهور وعند تحديث البيانات، مع قيمة رقمية فوق كل عمود — قراءة أسرع من الجدول.",
+ c:"أعمدة بارتفاع متحرك عبر animateDpAsState(spring dampingRatio .55) + الأرقام بـ AnimatedContent.",
+ demo:`<div class="d8" style="display:grid;place-items:center;gap:10px;width:100%"><div class="bars" id="d8bars"><div class="b b1" data-v="4" style="height:38%"></div><div class="b b2" data-v="9" style="height:75%"></div><div class="b b3" data-v="6" style="height:52%"></div><div class="b b4" data-v="2" style="height:22%"></div></div><button class="mini-btn sky" id="d8btn">تحديث البيانات</button></div>`},
+{id:9,cat:"data",type:"انميشن",t:"خط زمني يمتد مع السجلات الجديدة",
+ w:"سجل الصيانة داخل تفاصيل الموقع",
+ d:"عند تسجيل صيانة جديدة يمتد خط المحور وينبض السجل الجديد بحلقة سماوية — التاريخ «يُكتب» أمامك بدل أن يُدرج صامتًا.",
+ c:"رسم الخط بـ Canvas مع قصّ المسار (PathMeasure trim) متحرك + نبضة الحلقة بـ keyframes عند الإضافة.",
+ demo:`<div class="d9"><div class="tl" id="d9tl"><div class="line" id="d9line"></div><div class="ev"><b>صيانة وقائية</b>قبل 20 يومًا</div><div class="ev"><b>تبديل بطارية</b>قبل 6 أيام</div></div><div class="side l"><button class="mini-btn sky" id="d9btn">+ إضافة سجل</button></div></div>`},
+{id:10,cat:"data",type:"انميشن + تصميم",t:"حلقة عدّ تنازلي لاستحقاق الصيانة",
+ w:"بطاقات المواقع المتأخرة / القريبة في الشاشة الرئيسية",
+ d:"حلقة تستنزف مع مرور الأيام وتتحول سماوية ← كهرمانية ← حمراء، وفي مركزها عدد الأيام المتبقية — خطورة الموعد تُرى بنظرة.",
+ c:"دائرة Canvas مع تقدم متحرك + ألوان متدرجة بـ animateColorAsState حسب العتبات (30/7/0 يومًا).",
+ demo:`<div class="d10" id="d10"><div class="wrap2"><div class="ring"><svg width="84" height="84" viewBox="0 0 84 84"><circle class="bgc" cx="42" cy="42" r="35"/><circle class="fgc" id="d10fg" cx="42" cy="42" r="35" stroke-dasharray="220" stroke-dashoffset="0"/></svg><div class="mid" id="d10mid">30</div></div><div class="pill10" id="d10pill"><b>موعد الصيانة القادمة</b><span id="d10txt">بعد 30 يومًا</span></div></div></div>`},
+{id:11,cat:"data",type:"انميشن",t:"سحب وإعادة ترتيب المواد",
+ w:"قوائم المواد داخل الموقع (موجودة / احتياج / تحتاج صيانة)",
+ d:"اضغط مطولًا واسحب أي مادة لتغيير ترتيبها، وبقية القائمة تفسح المكان بنابض — ترتيبك الشخصي دون أزرار أسهم.",
+ c:"detectDragGestures مع قياس موضع السحب، وإزاحة العناصر الأخرى بـ Animatable نابضية ثم إعادة ترتيب القائمة.",
+ demo:`<div class="d11"><div class="list" id="d11list"></div><div style="font-size:9.5px;color:var(--muted);text-align:center;margin-top:8px">اسحب أي صف لإعادة الترتيب</div></div>`},
+
+/* ───────── تفاعلات دقيقة ───────── */
+{id:12,cat:"micro",type:"انميشن",t:"زر مقسّم بنتيجة النزول الطارئ",
+ w:"شاشة النزول الطارئ/الاستكشاف — أزرار النتيجة الثلاثة",
+ d:"حبة خضراء تنزلق بنابض خلف الخيار المختار بدل ثلاثة أزرار متساوية — الاختيار واضح فورًا وهذا نمط M3 SegmentedButton نفسه.",
+ c:"SingleChoiceSegmentedButtonRow مخصص + مؤشر منزلق (Animatable) + ظهور علامة الصح داخل الخيار بـ AnimatedVisibility.",
+ demo:`<div class="d12"><div class="seg" id="d12seg"><div class="pill12" id="d12pill"></div><div class="sg on" data-i="0">لا توجد مشكلة</div><div class="sg" data-i="1">تم الحل ✓</div><div class="sg" data-i="2">لم يُحل ✗</div></div></div>`},
+{id:13,cat:"micro",type:"انميشن",t:"منزلق بفقاعة قيمة طافية",
+ w:"إعدادات: «عدد أيام التذكير قبل الصيانة»",
+ d:"أثناء السحب تظهر فقاعة فوق المقبض تعرض الرقم الحالي وتنبض ثم تختفي بعد الإفلات — تحكم دقيق بقيمة واحدة واضحة.",
+ c:"Slider + Popup مربوط بموضع المقبض، والظهور/الاختفاء بـ AnimatedVisibility مع نابض تكبير.",
+ demo:`<div class="d13"><div class="sl"><div class="bubble" id="d13bub">30</div><input type="range" id="d13in" min="5" max="90" value="30"></div><div class="hint">أيام التذكير قبل موعد الصيانة</div></div>`},
+{id:14,cat:"micro",type:"انميشن + تصميم",t:"مفتاح الوضع الليلي بشمس وقمر",
+ w:"الإعدادات — تبديل الوضع النهاري/الليلي",
+ d:"المقبض يحمل قمرًا ينقلب شمسًا أثناء الانزلاق، والمسار يتلون بينهما مع شرارات نجمية صغيرة — تبديل الثيم يصبح لحظة ممتعة.",
+ c:"Switch مع thumbContent متحرك + تلوين المسار بـ animateColorAsState + جزيئات شرر بـ Canvas لحظة التبديل.",
+ demo:`<div class="d14"><div class="scene" id="d14scene"><div class="sw" id="d14sw"><div class="thumb"><svg class="moon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><svg class="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="#7a4d00" stroke-width="2" fill="none"/></svg></div></div><div><div class="lbl14" id="d14lbl">الوضع الليلي — الوضع الأساسي للمجرة</div><div style="font-size:9.5px;color:var(--muted)">انقر المفتاح للتبديل</div></div></div></div>`},
+{id:15,cat:"micro",type:"انميشن",t:"علامة صح برسم يدوي وجزيئات",
+ w:"قوائم المواد (✔ تم)، تحديد العناصر في كل الشاشات",
+ d:"ترقية لعلامة الصح المرسومة الحالية: بعد اكتمال الرسم تتطاير شظايا نجمية صغيرة من الزوايا — تأكيد صغير يبعث الرضا.",
+ c:"امتداد DrawnCheck الحالي + طبقة جزيئات بـ Canvas وkeyframes (6-8 شظايا) تعمل عند اكتمال الرسم فقط.",
+ demo:`<div class="d15" style="display:grid;place-items:center;gap:10px"><div class="cb" id="d15cb"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg><span class="pt" style="--tx:-34px;--ty:-26px;background:var(--sky)"></span><span class="pt" style="--tx:30px;--ty:-30px;background:var(--neon);animation-delay:.05s"></span><span class="pt" style="--tx:-26px;--ty:28px;background:var(--amber);animation-delay:.08s"></span><span class="pt" style="--tx:34px;--ty:22px;background:var(--sky);animation-delay:.03s"></span><span class="pt" style="--tx:0px;--ty:-38px;background:var(--neon);animation-delay:.1s"></span><span class="pt" style="--tx:-40px;--ty:2px;background:var(--red);animation-delay:.06s"></span></div><div style="font-size:10px;color:var(--muted)">انقر للتحديد</div></div>`},
+{id:16,cat:"micro",type:"انميشن",t:"شرائح فلترة بنابض واختيار منزلق",
+ w:"شرائح التصنيفات فوق قائمة المواقع",
+ d:"عند اختيار شريحة يتمدد لون التعبئة من جهة النقر وتظهر علامة صح صغيرة مع نبضة تكبير — الفلترة تحس ملموسة.",
+ c:"FilterChip مخصص + تعبئة متحركة بـ clip/origin من نقطة اللمس + تحجيم نابض (spring) لحظة الاختيار.",
+ demo:`<div class="d16"><div class="chips16" id="d16chips"><button class="chip on"><span><i class="ck16">✓</i>الكل</span></button><button class="chip"><span><i class="ck16">✓</i>📷 كاميرات</span></button><button class="chip"><span><i class="ck16">✓</i>📡 شبكات</span></button><button class="chip"><span><i class="ck16">✓</i>🔋 طاقة شمسية</span></button><button class="chip"><span><i class="ck16">✓</i>🗄️ تخزين</span></button></div></div>`},
+{id:17,cat:"micro",type:"انميشن",t:"إجراءات بالسحب على بطاقات المواقع",
+ w:"قائمة المواقع — سحب البطاقة يمينًا/يسارًا",
+ d:"اسحب بطاقة موقع يسارًا لكشف «أرشفة» ويمينًا لكشف «حذف» — إجراءات سريعة دون فتح قائمة، مع خلفية تنكشف تدريجيًا حسب مسافة السحب.",
+ c:"SwipeToDismissBox / anchoredDraggable مع خلفية تتلون حسب الاتجاه والعتبة، وتنفيذ الإجراء بعد تجاوز العتبة.",
+ demo:`<div class="d17"><div class="slot"><div class="behind"><span class="arc">أرشفة 📦</span><span class="del">🗑 حذف</span></div><div class="swc" id="d17card"><span class="dot"></span>محطة الكاميرات الشمالية</div></div><div style="font-size:9.5px;color:var(--muted);text-align:center;margin-top:10px">اسحب البطاقة يمينًا أو يسارًا</div></div>`},
+
+/* ───────── تغذية راجعة وحالة ───────── */
+{id:18,cat:"fb",type:"انميشن",t:"شيمر سديمي أثناء التحميل",
+ w:"معرض المرفقات، تحميل القوائم الثقيلة",
+ d:"بدل سبينر عام، هياكل عظمية للبطاقات يلمع عليها تدرج «سديمي» منجرف — الانتظار يبقى داخل هوية المجرة.",
+ c:"هياكل بـ Surface + فرشاة خطية متحركة بـ InfiniteTransition تزيح الـ offset بلا نهاية.",
+ demo:`<div class="d18" id="d18"><div class="sk"><div class="skb h18"></div><div class="skb h18b"></div><div class="skb h18b"></div><div class="skb h18c"></div></div><div class="real"><b>محطة الشبكة الجنوبية</b><div style="color:var(--muted);font-size:10.5px;margin-top:5px">تصنيف: شبكات · آخر صيانة قبل 12 يومًا · 4 مرفقات</div></div><div class="side l"><button class="mini-btn" id="d18btn">اكتمال التحميل</button></div></div>`},
+{id:19,cat:"fb",type:"انميشن",t:"اهتزاز تنبيه عند الإدخال الخاطئ",
+ w:"النزول الطارئ (سبب النزول إلزامي)، إدخال اسم الموقع",
+ d:"عند محاولة الحفظ بحقل إلزامي فارغ يهتز الحقل ويتوهج بالأحمر مع رسالة قصيرة — أوضح من سنابار الخطأ العام.",
+ c:"Animatable لإزاحة أفقية بنمط اهتزاز (5 ذبذبات متضائلة) + تلوين الحدود بـ animateColorAsState.",
+ demo:`<div class="d19"><div class="f19"><input type="text" id="d19in" placeholder="سبب النزول (إلزامي)…"><button class="mini-btn sky" id="d19btn">حفظ النزول</button><div class="msg" id="d19msg">سبب النزول مطلوب — لا يمكن الحفظ بدونه</div></div></div>`},
+{id:20,cat:"fb",type:"انميشن",t:"انفجار نجوم عند نجاح العمليات",
+ w:"نجاح النسخة الاحتياطية/الاستعادة، نجاح الإرجاع للموقع",
+ d:"لحظة نجاح عملية مهمة: شارة صح تنبثق وتتطاير حولها نجوم صغيرة بألوان الهوية — مكافأة بصرية قصيرة دون مبالغة.",
+ c:"طبقة Canvas فوق عنصر النجاح تطلق 10-14 نجمة بسرعات وزوايا محسوبة + تكبير نابض للشارة.",
+ demo:`<div class="d20"><div class="zone" id="d20zone"><div class="ok-badge"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></div><span class="star" style="--tx:-70px;--ty:-40px;color:var(--sky)">✦</span><span class="star" style="--tx:64px;--ty:-46px;color:var(--neon);animation-delay:.04s">✦</span><span class="star" style="--tx:-52px;--ty:38px;color:var(--amber);animation-delay:.07s">✦</span><span class="star" style="--tx:76px;--ty:30px;color:var(--sky);animation-delay:.02s">✦</span><span class="star" style="--tx:0px;--ty:-64px;color:var(--neon);animation-delay:.1s">✧</span><span class="star" style="--tx:-84px;--ty:-6px;color:var(--red);animation-delay:.05s">✦</span><span class="star" style="--tx:84px;--ty:-4px;color:var(--amber);animation-delay:.09s">✧</span><span class="star" style="--tx:-20px;--ty:58px;color:var(--sky);animation-delay:.12s">✦</span></div><div class="side l"><button class="mini-btn sky" id="d20btn">نجحت العملية ✦</button></div></div>`},
+{id:21,cat:"fb",type:"انميشن",t:"مؤشر تقدم مداري بدل السبينر",
+ w:"الاستعادة من نسخة احتياطية، أي عملية معالجة",
+ d:"كوكب صغير يدور حول مدار دائري أثناء الانتظار، وعند الاكتمال يتحول المدار لحلقة خضراء مع علامة — حتى الانتظار يدور في فلك المجرة.",
+ c:"دوران بـ InfiniteTransition (rotate) لكوكب على مسار دائري + عند النتيجة: Crossfade لحالة الاكتمال.",
+ demo:`<div class="d21" id="d21wrap" style="display:grid;place-items:center;gap:12px"><div class="orb"><div class="track"></div><div class="pl"><i></i></div><div class="core" id="d21core">⏳</div></div><button class="mini-btn sky" id="d21btn">بدء عملية</button></div>`},
+{id:22,cat:"fb",type:"انميشن",t:"زر الطوارئ بنبض رادار وقلب",
+ w:"زر «طارئ» داخل تفاصيل الموقع",
+ d:"الزر ينبض كنبضة قلب هادئة وتخرج منه حلقتا رادار متعاقبتان — يلفت النظر دون إزعاج، ويشتد وهجه عند الضغط.",
+ c:"حلقات متكررة بـ rememberInfiniteTransition (تكبير + تلاشي بإزاحة زمنية) + نبضة حجم بنمط heartbeat.",
+ demo:`<div class="d22" style="display:grid;place-items:center"><button class="eb">🚨 نزول طارئ</button><div style="font-size:9.5px;color:var(--muted);margin-top:14px">حلقتا رادار متعاقبتان + نبضة قلب</div></div>`},
+
+/* ───────── تصميم وهوية ───────── */
+{id:23,cat:"design",type:"تصميم",t:"بطاقة الموقع 2.0 — زجاج وتوهج حالة",
+ w:"قائمة المواقع الرئيسية",
+ d:"بطاقة بزجاجية خفيفة، شريط جانبي بلون التصنيف، وشارة حالة تتنفس إن كان الموقع متأخرًا — الحالة تُقرأ قبل الاسم.",
+ c:"Surface بتدرج فرشاة + حدود متوهجة حسب الحالة (سماوي/أحمر) + شارة متنفسة (نمط BreathingDueBadge الحالي).",
+ demo:`<div class="d23" style="display:grid;place-items:center;gap:10px"><div class="sc" id="d23card"><h4>محطة الكاميرات الشمالية <span class="stt" id="d23stt">سليم ✓</span></h4><div style="font-size:10px;color:var(--muted);margin-top:3px"><span class="cat-dot" style="background:var(--sky)"></span>كاميرات · أضيف قبل 3 أشهر</div><div class="meta"><span><b>4</b>مسحوبات</span><span><b>12</b>مادة</span><span><b>2</b>روابط</span><span id="d23due"><b>بعد 78</b>يومًا للصيانة</span></div></div><button class="mini-btn" id="d23btn">تبديل: سليم ⇄ متأخر</button></div>`},
+{id:24,cat:"design",type:"تصميم + انميشن",t:"رأس تفاصيل بتدرج يتبع لون التصنيف",
+ w:"أعلى شاشة تفاصيل الموقع",
+ d:"رأس الشاشة يرسم تدرجًا لونيًا ناعمًا مشتقًا من لون تصنيف الموقع، وعند تغيير التصنيف يتحول التدرج بمزج بطيء — كل موقع له سماؤه.",
+ c:"خلفية بـ Brush خطي من مشتقات لون التصنيف + تحريك الألوان بـ animateColorAsState لكل محطة تدرج.",
+ demo:`<div class="d24" style="display:grid;place-items:center"><div class="hd c-sky" id="d24hd"><h4>محطة الكاميرات الشمالية</h4><p>أُنشئت في 2025/06/14 · آخر تعديل قبل يومين</p><span class="pillz">📷 كاميرات</span></div><div class="dots"><div class="cd on" data-c="sky" style="background:var(--sky)"></div><div class="cd" data-c="neon" style="background:var(--neon)"></div><div class="cd" data-c="amber" style="background:var(--amber)"></div></div></div>`},
+{id:25,cat:"design",type:"تصميم + انميشن",t:"حالة فارغة بكوكب يتنفس",
+ w:"قائمة مواقع فارغة، أرشيف فارغ، نتائج بحث فارغة",
+ d:"كوكب صغير بحلقة مدارية يتنفس ببطء فوق نص ترحيبي وزر بداية — حتى الفراغ يبقى داخل عالم المجرة.",
+ c:"رسم متجهي بسيط (كوكب + حلقة) مع تنفس بـ InfiniteTransition (تكبير/توهج) ونجوم خلفية وامضة.",
+ demo:`<div class="d25"><svg class="pl25" width="86" height="86" viewBox="0 0 86 86"><defs><radialGradient id="g25" cx="35%" cy="30%"><stop offset="0%" stop-color="#7dd8ff"/><stop offset="100%" stop-color="#0b3b54"/></radialGradient></defs><ellipse cx="43" cy="47" rx="36" ry="10" fill="none" stroke="rgba(56,189,248,.45)" stroke-width="1.6" stroke-dasharray="3 4"/><circle cx="43" cy="43" r="20" fill="url(#g25)"/><circle cx="36" cy="38" r="3.4" fill="rgba(255,255,255,.25)"/><circle cx="50" cy="47" r="2.2" fill="rgba(255,255,255,.18)"/></svg><h5>مجرّتك فارغة</h5><p>أضف أول موقع لتبدأ الخريطة بالتشكّل</p><button class="cta">+ موقع جديد</button></div>`},
+{id:26,cat:"design",type:"تصميم",t:"إعدادات مقسمة بمجموعات وأيقونات حية",
+ w:"شاشة الإعدادات",
+ d:"بدل قائمة واحدة طويلة: مجموعات (البيانات / المظهر / التنبيهات) بعناوين سماوية، وكل صف بأيقونة تنبض عند لمسه وسهم يتقدم عند المرور عليه.",
+ c:"LazyColumn مع عناوين مجموعات + ListItem مخصص، أيقونات بـ graphicsLayer نابضية عند اللمس.",
+ demo:`<div class="d26"><div class="st"><div class="grp">البيانات</div><div class="row26"><div class="ic26"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg></div><div class="tx">نسخة احتياطية<small>آخر نسخة: قبل 5 أيام</small></div><span class="ar">‹</span></div><div class="row26"><div class="ic26"><svg viewBox="0 0 24 24"><path d="M3 6h18v4H3zM3 14h18v4H3z"/><circle cx="7" cy="8" r="1" fill="var(--sky)"/><circle cx="7" cy="16" r="1" fill="var(--sky)"/></svg></div><div class="tx">استعادة من نسخة<small>استرجاع كل البيانات</small></div><span class="ar">‹</span></div><div class="grp">التنبيهات</div><div class="row26"><div class="ic26"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></div><div class="tx">تذكير الصيانة<small>قبل 30 يومًا من الموعد</small></div><span class="ar">‹</span></div></div></div>`},
+{id:27,cat:"design",type:"تصميم",t:"شبكة كتالوج المواد بحروف ملونة",
+ w:"شاشة المواد الموحدة وواجهة اختيار المواد",
+ d:"المواد في شبكة بطاقات بحرف أولي ملون وعدّاد استخدام — أسرع للعين من قائمة نصية، والاختيار يظهر بحلقة نيون ونبضة موجة.",
+ c:"LazyVerticalGrid + أفاتار بلون مشتق من الاسم + موجة لمس (ripple) وحلقة اختيار مرسومة بـ drawArc.",
+ demo:`<div class="d27"><div class="g27" id="d27grid"></div><div style="font-size:9.5px;color:var(--muted);text-align:center;margin-top:9px">انقر مادة لتحديدها</div></div>`},
+{id:28,cat:"design",type:"تصميم",t:"عناوين بخط «أريف رقعة» بتدرج متحرك",
+ w:"عناوين الشاشات الرئيسية، شاشة البداية",
+ d:"العناوين الكبيرة بخط الرقعة المميز مع تدرج سماوي-نيوني-كهرماني ينساب ببطء داخل الحروف — توقيع بصري فخم بلا ضجيج.",
+ c:"SpanStyle بفرشاة متدرجة على نص العنوان + تحريك محطات الفرشاة بـ InfiniteTransition، مع إبقاء النصوص بخط تجوال.",
+ demo:`<div class="d28"><div class="typ"><div class="h28">مجرّة المواقع</div><div class="sub28">عنوان بخط أريف رقعة وتدرج منساب</div><div class="lvl"><span class="l1">عناوين الشاشات — أريف رقعة</span><span class="l2">النصوص والشروح — خط تجوال الواضح</span><span class="l3">التسميات الدقيقة — تجوال بوزن عادي</span></div></div></div>`},
+{id:29,cat:"design",type:"تصميم + انميشن",t:"شريط الصيانة المستحقة المتدرج القابل للتوسيع",
+ w:"الشريط العلوي في الشاشة الرئيسية",
+ d:"الشريط الحالي يصبح شريطًا بتدرج كهرماني-أحمر منجرف ببطء، ونقرة واحدة تفتحه عن أسطر المواقع المتأخرة بنابض — دون مغادرة الشاشة.",
+ c:"خلفية متدرجة متحركة بـ InfiniteTransition + توسيع بـ AnimatedVisibility (تغير ارتفاع بنابض) وصفوف داخلية.",
+ demo:`<div class="d29" style="display:grid;place-items:center"><div class="strip" id="d29strip"><div class="top29"><span class="dot29"></span>3 مواقع تحتاج صيانة <span class="op">▾</span></div><div class="more"><div class="mrow29"><span>محطة الشبكة الجنوبية</span><b>متأخرة 4 أيام</b></div><div class="mrow29"><span>برج الاتصالات الشرقي</span><b>متأخر يومين</b></div><div class="mrow29"><span>غرفة الخوادم</span><b>بعد 3 أيام</b></div></div></div><div style="font-size:9.5px;color:var(--muted);margin-top:9px">انقر الشريط للتوسيع</div></div>`},
+{id:30,cat:"design",type:"تصميم + انميشن",t:"شاشة قفل بكوكبة تشتعل مع الرمز",
+ w:"شاشة القفل الحالية (خانات الرمز)",
+ d:"بدل نقاط جامدة: سماء مصغرة بأربع نجوم-خانات؛ كل رقم صحيح يشعل نجمته ويمد خطًا نحو التالية حتى تكتمل الكوكبة فتومض — إدخال الرمز يصبح رسم كوكبة.",
+ c:"ترقية PinDots: نجوم على Canvas تُضاء بتكبير نابض + خطوط تصلها تُرسم بـ PathMeasure، ووميض جماعي عند الاكتمال.",
+ demo:`<div class="d30"><div class="sky30" id="d30sky"><svg width="210" height="84" viewBox="0 0 210 84"><line class="ln" id="d30l1" x1="30" y1="52" x2="82" y2="24"/><line class="ln" id="d30l2" x1="82" y1="24" x2="132" y2="56"/><line class="ln" id="d30l3" x1="132" y1="56" x2="182" y2="30"/></svg><i class="star30" style="left:30px;top:52px"></i><i class="star30" style="left:82px;top:24px"></i><i class="star30" style="left:132px;top:56px"></i><i class="star30" style="left:182px;top:30px"></i></div><div class="keys" id="d30keys"></div><div class="hint30" id="d30hint">أدخل 4 أرقام لإشعال الكوكبة <b>✦</b></div></div>`},
+];
+
+/* ═══════════ بناء الواجهة ═══════════ */
+const sel = new Set();
+const grid = document.getElementById("grid");
+O.forEach((o,i)=>{
+  const el=document.createElement("article");
+  el.className="card"; el.dataset.id=o.id; el.style.animationDelay=(i*35)+"ms";
+  el.innerHTML=`<div class="ck"><svg viewBox="0 0 24 24"><path d="M4 12.5l5 5L20 6.5"/></svg></div>
+  <div class="chead"><div class="num">${o.id}</div><div><div class="ct">${o.t}</div>
+  <div class="chips"><span class="pill cat">${CATS[o.cat]}</span><span class="pill ${o.type.includes("تصميم")&&o.type.includes("انميشن")?"typ-a":o.type==="تصميم"?"typ-d":"typ-a"}">${o.type}</span></div></div></div>
+  <div class="demo">${o.demo}</div>
+  <p class="desc">${o.d}</p>
+  <details class="impl"><summary>تنفيذ Compose المقترح</summary><div class="body"><b>أين يُطبَّق:</b> ${o.w}<br><b>التقنية:</b> ${o.c}</div></details>`;
+  el.addEventListener("click",e=>{
+    if(e.target.closest("button:not(.mini-btn),input,a,summary,.chip,.k,.row26,.tile,.sw,.sbar,.fab,.cd,.sg,.ni,.strip,.eb,.cta"))return;
+    toggle(o.id,el);
+  });
+  grid.appendChild(el);
+});
+function toggle(id,el){
+  if(sel.has(id)){sel.delete(id);el.classList.remove("selected");}
+  else{sel.add(id);el.classList.add("selected");}
+  cntUpd();
+}
+function cntUpd(){document.getElementById("cnt").textContent=sel.size;}
+
+/* الفلاتر */
+const fWrap=document.getElementById("filters");
+const fBtns=[];
+[["all","الكل"],...Object.entries(CATS)].forEach(([k,v],i)=>{
+  const n=k==="all"?30:O.filter(o=>o.cat===k).length;
+  const b=document.createElement("button");
+  b.className="fchip"+(i===0?" on":"");
+  b.innerHTML=`${v} <small>(${n})</small>`;
+  b.onclick=()=>{fBtns.forEach(x=>x.classList.remove("on"));b.classList.add("on");
+    document.querySelectorAll(".card").forEach(c=>{
+      const o=O.find(x=>x.id==c.dataset.id);
+      c.style.display=(k==="all"||o.cat===k)?"":"none";
+    });};
+  fBtns.push(b);fWrap.appendChild(b);
+});
+
+document.getElementById("allBtn").onclick=()=>{O.forEach(o=>sel.add(o.id));document.querySelectorAll(".card").forEach(c=>c.classList.add("selected"));cntUpd();};
+document.getElementById("clrBtn").onclick=()=>{sel.clear();document.querySelectorAll(".card").forEach(c=>c.classList.remove("selected"));cntUpd();};
+
+/* ═══════════ تصدير MD ═══════════ */
+const modal=document.getElementById("modal");
+let mdText="";
+function buildMD(){
+  const chosen=O.filter(o=>sel.has(o.id));
+  const d=new Date();
+  const ds=d.toLocaleDateString("ar-IQ",{year:"numeric",month:"long",day:"numeric"});
+  let s=`# 🌌 اختيارات جلسة المقترحات — الجولة الثالثة (التصميم والانميشن)\n\n`;
+  s+=`> **تاريخ التصدير:** ${ds}\n> **المصدر:** \`مقترحات_التصميم_والانميشن.html\`\n> **عدد المختار:** **${chosen.length} من 30**\n\n`;
+  s+=`---\n\n## 📋 تعليمات للمنفِّذ (الجلسة التالية)\n\n`;
+  s+=`1. نفّذ **الخيارات المختارة أدناه فقط**، وكل خيار كتلة مستقلة يسهل تعطيلها أو حذفها.\n`;
+  s+=`2. الانميشنات الجديدة تُضاف إلى مكتبة \`GalaxyAnim.kt\` بترقيم متسلسل بعد آخر مقترح، والتصاميم إلى مكوّنات \`ui/components\` أو الشاشة المستهدفة مباشرة.\n`;
+  s+=`3. التزم الهوية: الوضع الليلي أساسي (خلفية \`#04060B\`)، السماوي \`#38BDF8\`، النيون \`#3DFB7F\`، العناوين بخط أريف رقعة والنصوص بتجوال.\n`;
+  s+=`4. كل انميشن بنوابض Compose (spring/tween) ومدد قصيرة (150–500 مللي ثانية) بلا مبالغة.\n`;
+  s+=`5. بعد التنفيذ: فحص يدوي للأكواد (دوال ميتة، استيرادات غير مستعملة) وتحديث تعليق رأس \`GalaxyAnim.kt\` بقائمة الاختيارات المنفذة.\n\n`;
+  if(!chosen.length){ s+=`---\n\n## الخيارات المختارة\n\n(لم يُختر أي خيار)\n`; return s; }
+  s+=`---\n\n## ✅ الخيارات المختارة (${chosen.length})\n\n`;
+  chosen.forEach((o,i)=>{
+    s+=`### ${i+1}) ${o.t} — (خيار ${o.id})\n\n`;
+    s+=`- **النوع:** ${o.type}\n- **الفئة:** ${CATS[o.cat]}\n- **الشاشة المستهدفة:** ${o.w}\n`;
+    s+=`- **الوصف:** ${o.d}\n- **التنفيذ المقترح (Compose):** ${o.c}\n\n`;
+  });
+  s+=`---\n\n## 📊 الخيارات غير المختارة (للمرجع)\n\n`;
+  O.filter(o=>!sel.has(o.id)).forEach(o=>{ s+=`- ~~خيار ${o.id}: ${o.t}~~\n`; });
+  return s;
+}
+document.getElementById("expBtn").onclick=()=>{
+  mdText=buildMD();
+  document.getElementById("mdPrev").textContent=mdText;
+  modal.classList.add("open");
+};
+document.getElementById("clBtn").onclick=()=>modal.classList.remove("open");
+modal.addEventListener("click",e=>{if(e.target===modal)modal.classList.remove("open");});
+document.getElementById("dlBtn").onclick=()=>{
+  const blob=new Blob([mdText],{type:"text/markdown;charset=utf-8"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="اختيارات.md"; a.click();
+  URL.revokeObjectURL(a.href);
+  toast(`تم تنزيل <b>اختيارات.md</b> — ارفعه إلى المستودع`);
+};
+document.getElementById("cpBtn").onclick=async()=>{
+  try{await navigator.clipboard.writeText(mdText);toast("تم نسخ النص ✓");}
+  catch{const p=document.getElementById("mdPrev");p.focus();document.execCommand("selectall");toast("حدد النص وانسخه يدويًا");}
+};
+function toast(h){const t=document.getElementById("toast");t.innerHTML=h;t.classList.add("show");clearTimeout(t._x);t._x=setTimeout(()=>t.classList.remove("show"),3200);}
+
+/* نجوم الخلفية */
+(()=>{const s=document.getElementById("stars");for(let i=0;i<46;i++){const d=document.createElement("i");
+d.style.cssText=`right:${Math.random()*100}%;top:${Math.random()*100}%;animation-delay:${Math.random()*3}s;animation-duration:${2.4+Math.random()*3}s;width:${1+Math.random()*1.8}px;height:${1+Math.random()*1.8}px`;s.appendChild(d);}})();
+
+/* ═══════════ منطق المعاينات ═══════════ */
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+
+/* 1 — انتقال اتجاهي: 3 صفحات، التقدم/الرجوع حسب الاتجاه (اتجاه عربي) */
+(()=>{const pages=$$("#d1 .page");let cur=2;
+const show=(n,dir)=>{ if(n<0||n>2||n===cur)return;
+  pages.forEach((p,i)=>{p.className="page "+["p-a","p-b","p-c"][i];
+    if(i===cur)p.classList.add(dir>0?"off-next":"off-prev");
+    else if(i===n){p.classList.remove("hide");void p.offsetWidth;}
+    else p.classList.add("hide");});
+  cur=n;};
+$$("[data-d1]").forEach(b=>b.onclick=e=>{e.stopPropagation();show(cur+(b.dataset.d1==="next"?-1:1),b.dataset.d1==="next"?1:-1);});})();
+
+/* 2 — مؤشر التنقل المنزلق */
+(()=>{const nav=$("#d2nav"),ind=$("#d2ind"),items=$$("#d2nav .ni");let cur=0;
+const move=()=>{ind.style.transform=`translateX(calc(${-cur*100}% - ${cur*6}px))`;};move();
+items.forEach((it,i)=>it.onclick=e=>{e.stopPropagation();items.forEach(x=>x.classList.remove("on"));it.classList.add("on");cur=i;move();});})();
+
+/* 3 — كشف دائري */
+$$("[data-d3]").forEach(b=>b.onclick=e=>{e.stopPropagation();$("#d3").classList.toggle("open",b.dataset.d3==="open");});
+
+/* 4 — رجوع توقّعي (ضغط مطول) */
+(()=>{const st=$("#d4stack"),btn=$("#d4btn");
+const on=()=>st.classList.add("peek"), off=()=>st.classList.remove("peek");
+btn.addEventListener("pointerdown",on);btn.addEventListener("pointerup",off);btn.addEventListener("pointerleave",off);
+st.addEventListener("pointerdown",on);st.addEventListener("pointerup",off);})();
+
+/* 5 — بحث مورف */
+(()=>{const sb=$("#d5sbar");sb.addEventListener("click",e=>{e.stopPropagation();
+  if(!sb.classList.contains("open")){sb.classList.add("open");sb.querySelector("input").focus();}});
+document.addEventListener("click",e=>{if(!sb.contains(e.target))sb.classList.remove("open");});})();
+
+/* 6 — مروف الأرقام */
+(()=>{const v=$("#d6val");setInterval(()=>{
+  const old=v.querySelector("span:not(.out)");const n=Math.floor(5+Math.random()*40);
+  const nw=document.createElement("span");nw.textContent=n;nw.classList.add("in");v.appendChild(nw);
+  requestAnimationFrame(()=>{requestAnimationFrame(()=>{old.classList.add("out");nw.classList.remove("in");
+    setTimeout(()=>old.remove(),500);});});},2100);})();
+
+/* 7 — دائري مقوس */
+(()=>{const svg=$("#d7svg");const segs=[[45,"var(--sky)"],[30,"var(--neon)"],[25,"var(--amber)"]];
+const C=2*Math.PI*42;let acc=0;
+function draw(){svg.innerHTML="";acc=0;
+  segs.forEach(([p,c],i)=>{const len=C*p/100;
+    const el=document.createElementNS("http://www.w3.org/2000/svg","circle");
+    el.setAttribute("cx",55);el.setAttribute("cy",55);el.setAttribute("r",42);
+    el.setAttribute("stroke",c);el.setAttribute("stroke-dasharray",`${len-6} ${C-len+6}`);
+    el.setAttribute("stroke-dashoffset",-acc);
+    el.style.strokeDasharray=`0 ${C}`;svg.appendChild(el);acc+=len;
+    setTimeout(()=>{el.style.strokeDasharray=`${len-6} ${C-len+6}`;},80+i*260);});}
+draw();$("#d7btn").addEventListener("click",e=>{e.stopPropagation();draw();});})();
+
+/* 8 — أعمدة نابضة */
+$("#d8btn").addEventListener("click",e=>{e.stopPropagation();
+  $$("#d8bars .b").forEach(b=>{const v=1+Math.floor(Math.random()*11);
+    b.style.height=(v/12*100)+"%";b.dataset.v=v;});});
+
+/* 9 — خط زمني ممتد */
+(()=>{let n=2;$("#d9btn").addEventListener("click",e=>{e.stopPropagation();n++;
+  const tl=$("#d9tl");const ev=document.createElement("div");ev.className="ev new";
+  ev.innerHTML=`<b>صيانة جديدة (${n})</b>الآن — بخط ممتد ونابض`;tl.appendChild(ev);});})();
+
+/* 10 — عدّاد الاستحقاق */
+(()=>{const fg=$("#d10fg"),mid=$("#d10mid"),txt=$("#d10txt"),root=$("#d10");
+const C=220;let day=30;
+function paint(){const f=day/30;fg.style.strokeDashoffset=C*(1-f);
+  const col=day>14?"var(--sky)":day>5?"var(--amber)":"var(--red)";
+  fg.style.stroke=col;mid.textContent=day;mid.style.color=col;
+  txt.textContent=day>0?`بعد ${day} يومًا`:"تجاوز الموعد!";
+  root.classList.toggle("warn",day<=14&&day>5);root.classList.toggle("late",day<=5);}
+paint();setInterval(()=>{day--;if(day<0)day=30;paint();},1400);})();
+
+/* 11 — إعادة ترتيب بالسحب */
+(()=>{const list=$("#d11list");const items=[["بطارية ليثيوم 200Ah","طاقة"],["كاميرا 4G شمسية","كاميرات"],["راوتر نقطة وصول","شبكات"],["لوح شمسي 330W","طاقة"]];
+items.forEach(([n,t])=>{const r=document.createElement("div");r.className="row";
+  r.innerHTML=`<span class="h">⠿</span><span class="nm">${n}</span><span class="tg">${t}</span>`;list.appendChild(r);});
+let drag=null,startY=0,origY=0;
+const rows=()=>[...list.children];
+list.addEventListener("pointerdown",e=>{const r=e.target.closest(".row");if(!r)return;
+  drag=r;startY=e.clientY;drag.classList.add("drag");if(r.setPointerCapture)r.setPointerCapture(e.pointerId);});
+list.addEventListener("pointermove",e=>{if(!drag)return;
+  const dy=e.clientY-startY;drag.style.transform=`translateY(${dy}px)`;
+  const rs=rows();const i=rs.indexOf(drag);
+  const next=rs[i+1],prev=rs[i-1];
+  if(next&&dy>next.offsetHeight/2){list.insertBefore(next,drag);startY+=next.offsetHeight+8;}
+  else if(prev&&dy<-prev.offsetHeight/2){list.insertBefore(drag,prev);startY-=prev.offsetHeight+8;}});
+list.addEventListener("pointerup",()=>{if(drag){drag.classList.remove("drag");drag.style.transform="";drag=null;}});})();
+
+/* 12 — زر مقسم */
+(()=>{const pill=$("#d12pill"),sgs=$$("#d12seg .sg");
+sgs.forEach(s=>s.addEventListener("click",e=>{e.stopPropagation();
+  sgs.forEach(x=>x.classList.remove("on"));s.classList.add("on");
+  const i=+s.dataset.i;pill.style.transform=`translateX(${-i*100}%)`;}));})();
+
+/* 13 — منزلق بفقاعة */
+(()=>{const inp=$("#d13in"),bub=$("#d13bub");let t;
+const paint=()=>{const p=(inp.value-inp.min)/(inp.max-inp.min);
+  inp.style.setProperty("--p",(1-p)*100+"%");
+  bub.style.right=`calc(${p*100}% + ${(0.5-p)*18}px)`;bub.textContent=inp.value;};
+inp.addEventListener("input",e=>{e.stopPropagation();paint();bub.classList.add("show");
+  clearTimeout(t);t=setTimeout(()=>bub.classList.remove("show"),900);});
+paint();})();
+
+/* 14 — مفتاح ليلي/نهاري */
+(()=>{const sw=$("#d14sw"),scene=$("#d14scene"),lbl=$("#d14lbl");
+sw.addEventListener("click",e=>{e.stopPropagation();
+  const day=sw.classList.toggle("day");scene.classList.toggle("day",day);
+  lbl.textContent=day?"الوضع النهاري — إضاءة واضحة":"الوضع الليلي — الوضع الأساسي للمجرة";});})();
+
+/* 15 — صح بجزيئات */
+$("#d15cb").addEventListener("click",e=>{e.stopPropagation();
+  const cb=$("#d15cb");cb.classList.remove("on");void cb.offsetWidth;cb.classList.add("on");});
+
+/* 16 — شرائح فلترة */
+$$("#d16chips .chip").forEach(c=>c.addEventListener("click",e=>{e.stopPropagation();
+  $$("#d16chips .chip").forEach(x=>x.classList.remove("on"));c.classList.add("on");}));
+
+/* 17 — سحب البطاقة */
+(()=>{const card=$("#d17card");let sx=0,dx=0,drag=false;
+card.addEventListener("pointerdown",e=>{drag=true;sx=e.clientX;card.classList.remove("snap");if(card.setPointerCapture)card.setPointerCapture(e.pointerId);});
+card.addEventListener("pointermove",e=>{if(!drag)return;dx=e.clientX-sx;
+  card.style.transform=`translateX(${dx}px) rotate(${dx/30}deg)`;});
+card.addEventListener("pointerup",()=>{drag=false;card.classList.add("snap");
+  card.style.transform=dx>0?"translateX(110%) rotate(6deg)":"translateX(-110%) rotate(-6deg)";
+  setTimeout(()=>{card.style.transform="";},650);dx=0;});})();
+
+/* 18 — شيمر */
+(()=>{const w=$("#d18"),btn=$("#d18btn");
+btn.addEventListener("click",e=>{e.stopPropagation();
+  const done=w.classList.toggle("done");btn.textContent=done?"إعادة التحميل":"اكتمال التحميل";});})();
+
+/* 19 — اهتزاز الخطأ */
+(()=>{const inp=$("#d19in"),msg=$("#d19msg");
+$("#d19btn").addEventListener("click",e=>{e.stopPropagation();
+  if(!inp.value.trim()){inp.classList.remove("err");void inp.offsetWidth;inp.classList.add("err");
+    msg.classList.remove("good");msg.textContent="سبب النزول مطلوب — لا يمكن الحفظ بدونه";msg.classList.add("show");}
+  else{inp.classList.remove("err");inp.classList.add("okk");
+    msg.classList.add("good","show");msg.textContent="تم حفظ النزول بنجاح ✓";
+    setTimeout(()=>{msg.classList.remove("show");inp.classList.remove("okk");inp.value="";},1800);}});
+inp.addEventListener("input",()=>msg.classList.remove("show"));})();
+
+/* 20 — نجوم النجاح */
+(()=>{const z=$("#d20zone");$("#d20btn").addEventListener("click",e=>{e.stopPropagation();
+  z.classList.remove("go");void z.offsetWidth;z.classList.add("go");});})();
+
+/* 21 — تقدم مداري */
+(()=>{const w=$("#d21wrap"),btn=$("#d21btn"),core=$("#d21core");let busy=false;
+btn.addEventListener("click",e=>{e.stopPropagation();if(busy)return;busy=true;
+  w.classList.remove("done21");core.textContent="⏳";btn.textContent="جاري المعالجة…";
+  setTimeout(()=>{w.classList.add("done21");core.textContent="✓";btn.textContent="إعادة التشغيل";busy=false;},2400);});})();
+
+/* 23 — بطاقة موقع 2.0 */
+$("#d23btn").addEventListener("click",e=>{e.stopPropagation();
+  const c=$("#d23card"),late=c.classList.toggle("late");
+  $("#d23stt").textContent=late?"متأخر 4 أيام":"سليم ✓";
+  $("#d23due").innerHTML=late?"<b style='color:var(--red)'>متجاوز</b> للموعد":"<b>بعد 78</b>يومًا للصيانة";});
+
+/* 24 — رأس التفاصيل */
+$$("#d24hd~.dots .cd, .d24 .cd").forEach(cd=>cd.addEventListener("click",e=>{e.stopPropagation();
+  $$(".d24 .cd").forEach(x=>x.classList.remove("on"));cd.classList.add("on");
+  const hd=$("#d24hd");hd.className="hd c-"+cd.dataset.c;}));
+
+/* 26 — صفوف الإعدادات تفاعلية باللمس فقط (تأثير الأيقونة) */
+
+/* 27 — شبكة المواد */
+(()=>{const g=$("#d27grid");const M=[["بطارية","#38BDF8",12],["كاميرا","#3DFB7F",8],["لوح شمسي","#FFC857",5],["راوتر","#38BDF8",9],["كيبل","#FF5A5A",21],["حساس","#3DFB7F",6]];
+M.forEach(([n,c,u])=>{const t=document.createElement("div");t.className="tile";
+  t.innerHTML=`<div class="av" style="background:${c}">${n[0]}</div><div class="nm27">${n}</div><div class="cn">استُخدمت ${u}×</div>`;
+  t.addEventListener("click",e=>{e.stopPropagation();
+    $$(".d27 .tile").forEach(x=>x.classList.remove("sel"));t.classList.add("sel");
+    const r=t.getBoundingClientRect(),rp=document.createElement("span");rp.className="ripple";
+    const s=Math.max(r.width,r.height);rp.style.cssText=`width:${s}px;height:${s}px;right:${e.clientX-r.left-s/2}px;top:${e.clientY-r.top-s/2}px`;
+    t.appendChild(rp);setTimeout(()=>rp.remove(),550);});
+  g.appendChild(t);});})();
+
+/* 29 — شريط الصيانة القابل للتوسيع */
+$("#d29strip").addEventListener("click",e=>{e.stopPropagation();$("#d29strip").classList.toggle("open");});
+
+/* 30 — قفل الكوكبات */
+(()=>{const keys=$("#d30keys"),stars=$$("#d30sky .star30"),lines=[ $("#d30l1"),$("#d30l2"),$("#d30l3") ],hint=$("#d30hint");
+let pin=[];
+const lit=()=>{const n=pin.length;stars[n-1].classList.add("lit");
+  if(n>1)lines[n-2].classList.add("on");
+  if(n===4){hint.innerHTML="<b>✦ اكتملت الكوكبة — الرمز صحيح</b>";
+    setTimeout(()=>{pin=[];stars.forEach(s=>s.classList.remove("lit"));lines.forEach(l=>l.classList.remove("on"));
+      hint.innerHTML='أدخل 4 أرقام لإشعال الكوكبة <b>✦</b>';},1100);}};
+const addDigit=d=>{if(pin.length>=4)return;pin.push(d);lit();};
+[1,2,3,4,5,6,7,8,9,0].forEach(d=>{const k=document.createElement("button");k.className="k";k.textContent=d;
+  k.addEventListener("click",e=>{e.stopPropagation();addDigit(d);});keys.appendChild(k);});
+const bs=document.createElement("button");bs.className="k";bs.textContent="⌫";
+bs.addEventListener("click",e=>{e.stopPropagation();if(!pin.length||pin.length>=4)return;
+  const n=pin.length;pin.pop();stars[n-1].classList.remove("lit");
+  if(n>1)lines[n-2].classList.remove("on");});keys.appendChild(bs);})();
+</script>
+</body>
+</html>
