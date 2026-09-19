@@ -25,6 +25,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -975,6 +976,7 @@ private fun MaterialsTab(
  * من القائمة. زر «إضافة» يختار من الكتالوج الموحد كما في النسخة 2.2
  * (واجهة الاختيار نفسها تبقى بأدوات التحديد لأن التحديد فيها منطقي).
  */
+@OptIn(ExperimentalLayoutApi::class) // FlowRow تجريبي في Compose 1.6
 @Composable
 private fun MaterialChipSection(
     items: List<MaterialItem>,
