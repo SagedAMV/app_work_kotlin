@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مقترحات حل المشكلات — تطبيق مجرة</title>
+<style>
+:root{
+  --bg:#070b16; --panel:#0d1424; --panel2:#111b33; --line:#1e2b4d;
+  --txt:#e8eefc; --dim:#93a3c7; --acc:#7dd3fc; --gold:#ffc857;
+  --good:#34d399; --bad:#f87171; --violet:#a78bfa;
+}
+*{box-sizing:border-box; margin:0; padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:radial-gradient(1200px 600px at 80% -10%, #14204a 0%, transparent 60%),
+             radial-gradient(900px 500px at 10% 20%, #0e1e3d 0%, transparent 55%),
+             var(--bg);
+  color:var(--txt);
+  font-family:"Segoe UI", Tahoma, "Noto Kufi Arabic", "Noto Sans Arabic", Arial, sans-serif;
+  line-height:1.7; padding-bottom:110px;
+}
+.wrap{max-width:880px; margin:0 auto; padding:20px 16px}
+header.hero{
+  text-align:center; padding:34px 12px 10px;
+}
+header.hero h1{font-size:1.9rem; letter-spacing:.5px}
+header.hero h1 .g{color:var(--acc)}
+header.hero p{color:var(--dim); max-width:640px; margin:10px auto 0; font-size:.95rem}
+.badges{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:14px}
+.badge{font-size:.75rem; border:1px solid var(--line); background:var(--panel); color:var(--dim); padding:4px 12px; border-radius:999px}
+.badge b{color:var(--gold)}
+
+section.block{
+  background:linear-gradient(180deg, var(--panel) 0%, #0b1120 100%);
+  border:1px solid var(--line); border-radius:18px; padding:20px 18px 22px; margin-top:26px;
+}
+.sec-head{display:flex; align-items:flex-start; gap:12px}
+.sec-num{
+  flex:0 0 auto; width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:1.15rem; color:#04121f; background:linear-gradient(135deg, var(--acc), #38bdf8);
+  box-shadow:0 0 18px rgba(125,211,252,.35);
+}
+.sec-head h2{font-size:1.2rem}
+.sec-head p{color:var(--dim); font-size:.85rem}
+.diagnosis{
+  margin:14px 0 4px; border:1px dashed #3b4d7d; background:#0c1730; border-radius:12px; padding:12px 14px; font-size:.85rem;
+}
+.diagnosis b{color:var(--gold)}
+.diagnosis code{color:var(--acc); font-family:Consolas, monospace; font-size:.8rem; background:#0a1122; padding:1px 6px; border-radius:6px}
+.opts-hint{color:var(--dim); font-size:.8rem; margin:12px 2px 8px}
+
+.opt{
+  border:1px solid var(--line); background:var(--panel2); border-radius:14px;
+  padding:14px; margin-top:12px; cursor:pointer; position:relative;
+  transition:border-color .2s, box-shadow .2s, transform .15s;
+}
+.opt:hover{border-color:#35507f; transform:translateY(-1px)}
+.opt.selected{
+  border-color:var(--acc);
+  box-shadow:0 0 0 1px var(--acc), 0 0 26px rgba(125,211,252,.25);
+}
+.opt-top{display:flex; align-items:center; gap:10px}
+.opt-num{
+  flex:0 0 auto; min-width:30px; height:30px; padding:0 8px; border-radius:999px; display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:.85rem; border:1px solid var(--line); color:var(--dim); background:#0a1122;
+}
+.opt.selected .opt-num{background:var(--acc); color:#04121f; border-color:var(--acc)}
+.opt h3{font-size:1rem}
+.opt .desc{color:var(--dim); font-size:.83rem; margin-top:8px}
+.opt .fix{
+  margin-top:8px; font-size:.78rem; color:#bcd0f5; background:#0a1326; border:1px solid #16233f;
+  border-radius:10px; padding:8px 10px;
+}
+.opt .fix b{color:var(--gold)}
+.opt .fix code{color:var(--acc); font-family:Consolas, monospace; background:#0a1122; padding:0 5px; border-radius:5px}
+.check{
+  position:absolute; top:12px; left:12px; width:26px; height:26px; border-radius:50%;
+  border:2px solid #33507f; display:flex; align-items:center; justify-content:center;
+  font-size:.9rem; color:transparent; transition:.2s;
+}
+.opt.selected .check{background:var(--acc); border-color:var(--acc); color:#04121f}
+
+/* ── مسارح المحاكاة ── */
+.demo{
+  margin-top:12px; height:132px; border-radius:12px; overflow:hidden; position:relative;
+  background:
+    radial-gradient(400px 140px at 70% 0%, rgba(125,211,252,.07), transparent 70%),
+    #060a14;
+  border:1px solid #101a33;
+}
+.demo .cap{
+  position:absolute; bottom:6px; right:0; left:0; text-align:center; font-size:.68rem; color:#7f92bb;
+}
+.demo .tag{
+  position:absolute; top:8px; right:8px; z-index:5; font-size:.62rem; padding:2px 8px; border-radius:999px;
+  background:rgba(10,17,34,.85); border:1px solid var(--line); color:var(--acc);
+}
+.demo .tag.warn{color:var(--bad)}
+.demo .tag.ok{color:var(--good)}
+
+/* عناصر مشتركة */
+.finger{
+  position:absolute; width:18px; height:18px; border-radius:50%; z-index:6;
+  background:radial-gradient(circle at 35% 30%, #ffe3a3, var(--gold));
+  box-shadow:0 0 0 4px rgba(255,200,87,.18), 0 0 14px rgba(255,200,87,.5);
+}
+.mcard{
+  position:absolute; border-radius:10px; background:linear-gradient(135deg,#1b2947,#16233f);
+  border:1px solid #2c4270; display:flex; flex-direction:column; gap:5px; padding:9px 10px; justify-content:center;
+}
+.mline{height:6px; border-radius:4px; background:#31456f}
+.mline.s{width:55%} .mline.xs{width:35%}
+.listbox{position:absolute; inset:12px 10px 22px; overflow:hidden; border-radius:10px}
+.gridbg{
+  position:absolute; inset:-60px; z-index:1;
+  background-image:linear-gradient(rgba(125,211,252,.16) 1px, transparent 1px),
+                   linear-gradient(90deg, rgba(125,211,252,.16) 1px, transparent 1px);
+  background-size:26px 26px; transform-origin:50% 50%;
+}
+.node{position:absolute; width:12px; height:12px; border-radius:50%; background:#e8eefc; box-shadow:0 0 10px rgba(125,211,252,.8); z-index:2}
+.revealL,.revealR{position:absolute; top:0; bottom:0; width:50%; display:flex; align-items:center; justify-content:center; font-size:.66rem; font-weight:700; z-index:0}
+.hud{position:absolute; top:8px; left:8px; z-index:5; font-size:.6rem; color:var(--good); background:rgba(10,17,34,.9); border:1px solid var(--line); padding:3px 8px; border-radius:8px; font-family:Consolas, monospace}
+
+/* ═══ أنيميشنات المشاكل ═══ */
+/* أ: تمرير عمودي ناجح والقائمة تنزل دون انحراف البطاقة */
+@keyframes d1-scroll{0%{transform:translateY(-46px)}55%{transform:translateY(6px)}100%{transform:translateY(-46px)}}
+@keyframes d1-finger{0%{top:26px}55%{top:96px}100%{top:26px}}
+/* ب: عتبة أفقية قبل تفعيل السحب */
+@keyframes d2-finger{0%{left:30%}30%{left:34%}60%{left:62%}100%{left:30%}}
+@keyframes d2-card{0%{transform:translateX(0)}30%{transform:translateX(0)}60%{transform:translateX(66px)}100%{transform:translateX(0)}}
+@keyframes d2-gate{0%,28%{opacity:1}32%,100%{opacity:.15}}
+/* ج: draggable أفقي يتعايش مع تمرير عمودي */
+@keyframes d3-card{0%,40%{transform:translateX(0)}55%{transform:translateX(60px)}70%,100%{transform:translateX(0)}}
+@keyframes d3-rows{0%,40%{transform:translateY(0)}15%{transform:translateY(-30px)}100%{transform:translateY(0)}}
+/* د: توجيه الأحداث (قناة عمودية وقناة أفقية) */
+@keyframes d4-v{0%{transform:translateY(-14px); opacity:0}30%{opacity:1}60%{transform:translateY(34px); opacity:0}100%{opacity:0}}
+@keyframes d4-h{0%,45%{transform:translateX(-16px); opacity:0}65%{opacity:1}90%{transform:translateX(40px); opacity:0}100%{opacity:0}}
+/* هـ: مفتاح الاستهلاك لا يستهلك العمودي */
+@keyframes d5-sw{0%,45%{background:#f87171}55%,100%{background:var(--good)}}
+@keyframes d5-drop{0%{transform:translateY(-18px); opacity:0}25%{opacity:1}55%{transform:translateY(26px); opacity:0}100%{opacity:0}}
+/* و: مقبض سحب مخصص */
+@keyframes d6-fingA{0%,38%{top:64px; left:20%}18%{top:96px; left:20%}}
+@keyframes d6-fingB{45%,60%{top:56px; left:76%}92%{top:56px; left:44%}100%{top:56px; left:76%}}
+@keyframes d6-card{0%,58%{transform:translateX(0)}92%{transform:translateX(-58px)}100%{transform:translateX(0)}}
+/* ز: تسليح بضغطة مطولة */
+@keyframes d7-press{0%,25%{transform:scale(1)}35%,55%{transform:scale(.8)}65%,100%{transform:scale(1)}}
+@keyframes d7-glow{0%,30%{box-shadow:0 0 0 0 rgba(125,211,252,0)}45%,60%{box-shadow:0 0 22px 4px rgba(125,211,252,.5)}75%,100%{box-shadow:0 0 0 0 rgba(125,211,252,0)}}
+@keyframes d7-slide{0%,60%{transform:translateX(0)}85%{transform:translateX(56px)}100%{transform:translateX(0)}}
+/* ح: قفل أثناء حركة القائمة */
+@keyframes d8-rows{0%{transform:translateY(-26px)}45%{transform:translateY(8px)}55%,100%{transform:translateY(8px)}}
+@keyframes d8-lock{0%,45%{opacity:1}55%,100%{opacity:0}}
+@keyframes d8-card{0%,55%{transform:translateX(0)}80%{transform:translateX(52px)}100%{transform:translateX(0)}}
+/* ط: SwipeToDismissBox جاهز */
+@keyframes d9-card{0%,30%{transform:translateX(0)}55%{transform:translateX(70px)}75%,100%{transform:translateX(0)}}
+@keyframes d9-act{0%,35%{opacity:0}55%{opacity:1}80%,100%{opacity:0}}
+/* ي: HUD تشخيص */
+@keyframes d10-finger{0%{top:24px; left:30%}40%{top:90px; left:32%}60%{top:90px; left:66%}100%{top:24px; left:30%}}
+@keyframes d10-hud1{0%,38%{opacity:1}42%,100%{opacity:.25}}
+@keyframes d10-hud2{0%,42%{opacity:.25}46%,100%{opacity:1}}
+
+/* مشكلة 2: الاتجاه المعكوس */
+@keyframes m1-bad{0%,42%{transform:translateX(0)}18%{transform:translateX(-52px)}}
+@keyframes m1-good{0%,42%{transform:translateX(0)}100%{transform:translateX(0)}58%{transform:translateX(0)}82%{transform:translateX(52px)}}
+@keyframes m1-finger{0%,42%{left:22%}18%{left:22%}58%{left:22%}82%{left:62%}100%{left:22%}}
+@keyframes m2-arrow{0%{transform:translateX(0); opacity:1}45%{transform:translateX(38px); opacity:1}50%{transform:translateX(38px) scaleX(-1); opacity:1;color:var(--good)}95%{transform:translateX(0) scaleX(-1); opacity:1}100%{opacity:0}}
+@keyframes m3-card{0%,35%{transform:translateX(0)}60%{transform:translateX(54px)}85%,100%{transform:translateX(0)}}
+@keyframes m3-finger{0%,35%{left:24%}60%{left:58%}85%,100%{left:24%}}
+@keyframes m4-card{0%,35%{transform:translateX(0)}65%{transform:translateX(58px)}90%,100%{transform:translateX(0)}}
+@keyframes m4-reveal{0%,35%{opacity:.12}65%{opacity:1}90%,100%{opacity:.12}}
+@keyframes m5-card{0%,40%{transform:translateX(0)}62%{transform:translateX(-64px)}82%,100%{transform:translateX(0)}}
+@keyframes m5-act{0%,42%{opacity:0}62%{opacity:1}84%,100%{opacity:0}}
+@keyframes m6-card{0%,30%{transform:translateX(0)}55%{transform:translateX(48px)}80%,100%{transform:translateX(0)}}
+@keyframes m6-finger{0%,30%{left:18%}55%{left:calc(18% + 48px)}80%,100%{left:18%}}
+@keyframes m7-tog{0%,45%{transform:translateX(0)}55%,100%{transform:translateX(-16px)}}
+@keyframes m7-lab{0%,45%{opacity:.35}55%,100%{opacity:1}}
+@keyframes m8-card{0%{transform:translateX(0)}30%{transform:translateX(44px)}45%{transform:translateX(36px)}60%{transform:translateX(0)}68%{transform:translateX(-7px)}76%{transform:translateX(0)}100%{transform:translateX(0)}}
+@keyframes m9-pop{0%,55%{transform:translateY(14px); opacity:0}70%{transform:translateY(0); opacity:1}100%{transform:translateY(0); opacity:1}}
+@keyframes m9-card{0%,40%{transform:translateX(0); opacity:1}60%{transform:translateX(80px); opacity:0}100%{opacity:0}}
+@keyframes m10-ok{0%,55%{opacity:0}65%,100%{opacity:1}}
+@keyframes m10-card{0%,30%{transform:translateX(0)}50%{transform:translateX(46px)}70%,100%{transform:translateX(0)}}
+
+/* مشكلة 3: قفزة التكبير */
+@keyframes z1-jump{0%,30%{transform:translate(0,0) scale(1)}36%{transform:translate(-30px,16px) scale(1.05)}46%{transform:translate(-30px,16px) scale(1.05)}100%{transform:translate(0,0) scale(1)}}
+@keyframes z1-stable{0%,30%{transform:scale(1)}100%{transform:scale(1.12)}}
+@keyframes z1-fingers{0%,28%{opacity:0}34%,90%{opacity:1}100%{opacity:0}}
+@keyframes z2-freeze{0%,30%{filter:none}32%,44%{filter:brightness(1.5) saturate(1.6)}46%,100%{filter:none}}
+@keyframes z3-grid{0%{transform:scale(.9)}100%{transform:scale(1.5)}}
+@keyframes z3-dot{0%,100%{box-shadow:0 0 0 3px rgba(52,211,153,.5)}50%{box-shadow:0 0 0 7px rgba(52,211,153,.15)}}
+@keyframes z4-in{0%{d:path("")}}
+@keyframes z4-raw{0%{transform:translateY(0)}12%{transform:translateY(-7px)}24%{transform:translateY(5px)}36%{transform:translateY(-9px)}48%{transform:translateY(3px)}60%{transform:translateY(-4px)}100%{transform:translateY(0)}}
+@keyframes z4-smooth{0%{transform:translateY(0)}50%{transform:translateY(-3px)}100%{transform:translateY(0)}}
+@keyframes z5-spike{0%,30%{height:12px}38%{height:74px}52%{height:20px}70%{height:26px}100%{height:12px}}
+@keyframes z5-soft{0%,30%{height:12px}46%{height:26px}62%{height:38px}80%{height:48px}100%{height:12px}}
+@keyframes z6-flow{0%{stroke-dashoffset:60}100%{stroke-dashoffset:0}}
+@keyframes z7-zoom{0%,20%{transform:scale(1)}45%{transform:scale(1.55)}70%{transform:scale(1.55)}100%{transform:scale(1)}}
+@keyframes z7-tap{0%,8%{transform:scale(1); opacity:1}14%{transform:scale(.5); opacity:.4}20%{transform:scale(1); opacity:1}26%{transform:scale(.5); opacity:.4}32%,100%{transform:scale(1); opacity:1}}
+@keyframes z8-btn{0%,70%,100%{transform:scale(1)}78%{transform:scale(1.25)}}
+@keyframes z8-grid{0%,72%{transform:scale(1)}86%{transform:scale(1.28)}100%{transform:scale(1)}}
+@keyframes z9-deb{0%,20%{opacity:0}24%{opacity:1}36%{opacity:1;border-color:var(--bad)}40%{opacity:0}60%,86%{opacity:1;border-color:var(--good)}100%{opacity:0}}
+@keyframes z10-matrix{0%{opacity:0; transform:translateY(8px)}100%{opacity:1; transform:translateY(0)}}
+@keyframes z10-grid{0%{transform:scale(1) translate(0,0)}40%{transform:scale(1.35) translate(10px,-6px)}70%{transform:scale(1.1) translate(-6px,4px)}100%{transform:scale(1) translate(0,0)}}
+
+/* إضافات */
+@keyframes x-pulse{0%,100%{transform:scale(1); opacity:.9}50%{transform:scale(1.25); opacity:1}}
+@keyframes x-snack{0%,40%{transform:translateY(26px); opacity:0}55%,90%{transform:translateY(0); opacity:1}100%{transform:translateY(0); opacity:0}}
+@keyframes x-arrow{0%{transform:translateX(0); opacity:.2}50%{transform:translateX(-34px); opacity:1}100%{transform:translateX(0); opacity:.2}}
+@keyframes x-restore{0%{transform:scale(.6); opacity:0}60%{transform:scale(1.15); opacity:1}100%{transform:scale(1); opacity:1}}
+@keyframes x-search{0%,20%{opacity:.2}30%,55%{opacity:1; box-shadow:0 0 16px 4px rgba(255,200,87,.6)}70%,100%{opacity:.2}}
+@keyframes x-pause{0%,44%{opacity:1}50%,94%{opacity:.25}100%{opacity:1}}
+@keyframes x-file{0%{transform:translateY(8px); opacity:0}40%,80%{transform:translateY(0); opacity:1}100%{transform:translateY(-6px); opacity:0}}
+@keyframes x-alarm{0%,70%,100%{transform:rotate(0)}76%{transform:rotate(14deg)}82%{transform:rotate(-12deg)}88%{transform:rotate(8deg)}94%{transform:rotate(-5deg)}}
+
+/* الشريط السفلي */
+.bar{
+  position:fixed; bottom:0; right:0; left:0; z-index:50;
+  background:rgba(9,13,26,.92); backdrop-filter:blur(10px);
+  border-top:1px solid var(--line); padding:12px 16px;
+}
+.bar .in{max-width:880px; margin:0 auto; display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.count{font-size:.85rem; color:var(--dim)}
+.count b{color:var(--acc)}
+.btn{
+  border:none; border-radius:12px; padding:11px 20px; font-size:.92rem; font-weight:700; cursor:pointer;
+  font-family:inherit; transition:.2s;
+}
+.btn.primary{
+  background:linear-gradient(135deg, var(--gold), #ffab2e); color:#231600;
+  box-shadow:0 4px 22px rgba(255,200,87,.35);
+}
+.btn.primary:hover{transform:translateY(-1px); box-shadow:0 6px 28px rgba(255,200,87,.5)}
+.btn.ghost{background:transparent; color:var(--dim); border:1px solid var(--line)}
+.btn.ghost:hover{color:var(--txt); border-color:#35507f}
+.toast{
+  position:fixed; top:18px; right:50%; transform:translateX(50%) translateY(-70px); z-index:60;
+  background:#0e2b1f; border:1px solid var(--good); color:#c8f5e0; padding:10px 18px; border-radius:12px;
+  font-size:.85rem; transition:transform .35s ease; max-width:90%;
+}
+.toast.show{transform:translateX(50%) translateY(0)}
+footer.foot{text-align:center; color:#5b6c93; font-size:.72rem; margin-top:34px}
+@media (max-width:560px){ header.hero h1{font-size:1.45rem} .demo{height:124px} }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <h1>🌌 مقترحات حل المشكلات — تطبيق <span class="g">مجرة</span></h1>
+  <p>
+    دراسة عميقة لكود <code dir="ltr">app_work_kotlin</code> وتحديد جذور المشكلات الثلاث،
+    مع <b>10 خيارات حل لكل مشكلة</b>. انقر الخيار الذي يعجبك — لكل خيار محاكاة متحركة توضح كيف سيعمل —
+    ثم صدّر اختياراتك إلى ملف <b dir="ltr">اختيارات.md</b> وارفعه إلى المستودع ليُنفَّذ في الجلسة التالية.
+  </p>
+  <div class="badges">
+    <span class="badge">المستودع: <b dir="ltr">SagedAmV/app_work_kotlin</b></span>
+    <span class="badge">مشكلات مشخّصة: <b>3</b></span>
+    <span class="badge">خيارات متاحة: <b>38</b></span>
+  </div>
+</header>
+
+<div class="wrap" id="root"></div>
+
+<div class="bar">
+  <div class="in">
+    <span class="count" id="count">لم تختر شيئًا بعد</span>
+    <span style="flex:1"></span>
+    <button class="btn ghost" id="resetBtn">تفريغ الاختيارات</button>
+    <button class="btn primary" id="exportBtn">⬇ تصدير اختياراتي (اختيارات.md)</button>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ══════════════ بيانات المشكلات والخيارات ══════════════ */
+const SECTIONS = [
+{
+  id:"p1", kind:"radio", num:"١", title:"واجهة المواقع — التمرير للأسفل لا يعمل",
+  sub:"القائمة تنحرف يمينًا/يسارًا بدل النزول عند السحب العمودي",
+  diagnosis:"<b>التشخيص من الكود:</b> في <code>SitesScreen.kt → SiteRow</code> كل بطاقة نشطة تحمل <code>pointerInput + detectDragGestures</code> بدون تقييد المحور. هذه الدالة تلتقط السحب <b>بأي اتجاه</b> بمجرد تجاوز عتبة اللمس، ثم ينفّذ المعالج <code>change.consume()</code> على كل حركة فيسرق الحدث من <code>LazyColumn</code> ويتوقف التمرير العمودي، بينما المركّب الأفقي لحركة الإصبع المائلة يُزيح البطاقة جانبًا — وهذا حرفيًا ما تراه.",
+  options:[
+    {n:1, demo:"d1", title:"قفل المحور الأفقي (الأنسب جذريًا)", desc:"تعديل دالة السحب لتتفعّل فقط عندما تكون الحركة الأفقية هي الغالبة في البداية؛ أي حركة عمودية تُترك بالكامل لقائمة LazyColumn فتنزل القائمة طبيعيًا.", fix:"<b>طريقة التنفيذ:</b> استبدال الحلقة الداخلية بـ <code>awaitHorizontalTouchSlopOrCancellation</code> داخل <code>awaitEachGesture</code> في <code>SiteRow</code>، فلا يبدأ السحب إلا بعد تجاوز السحب الأفقي لعتبة النظام أولًا."},
+    {n:2, demo:"d2", title:"عتبة مسافة أفقية قبل تفعيل السحب", desc:"البطاقة لا تتحرك إطلاقًا حتى يتجاوز الإصبع ~16 نقطة عرضية أفقيًا صريحًا؛ وما دون ذلك يُعامل كتمرير عمودي للقائمة.", fix:"<b>طريقة التنفيذ:</b> تجميع <code>dragAmount</code> في متغيرات <code>accX/accY</code> وعدم لمس <code>offsetX</code> حتى <code>|accX| &gt; thresholdPx و |accX| &gt; |accY|</code>، مع إلغاء الإيماءة إذا غلب العمودي."},
+    {n:3, demo:"d3", title:"استخدام Modifier.draggable الأفقي القياسي", desc:"استبدال السحب اليدوي بواجهة السحب المدمجة في Compose المصممة للتعايش مع التمرير العمودي، فهي تتنافس على الإيماءة حسب الاتجاه بشكل صحيح.", fix:"<b>طريقة التنفيذ:</b> <code>Modifier.draggable(state, orientation = Orientation.Horizontal)</code> مع <code>DraggableState</code> يغذّي <code>offsetX</code>، وتبقى منطق العتبة والنابض كما هو في <code>onDragEnd</code>."},
+    {n:4, demo:"d4", title:"تنسيق التمرير المتداخل (توجيه الأحداث)", desc:"اتفاق صريح بين البطاقة والقائمة: الأحداث العمودية تذهب للقائمة دائمًا، والأفقية فقط للبطاقة — عبر قناة تنسيق رسمية بدل الصراع على الاستهلاك.", fix:"<b>طريقة التنفيذ:</b> إضافة <code>Modifier.nestedScroll</code> بـ <code>NestedScrollConnection</code> على مستوى <code>SiteRow</code> يرفض البطاقةُ فيه استهلاك المتجه العمودي ويعيده للأب."},
+    {n:5, demo:"d5", title:"إيقاف استهلاك الحركة العمودية", desc:"الإبقاء على الدوال الحالية لكن بدون <code>change.consume()</code> للمركّب العمودي؛ فتستعيد القائمة حقها في التمرير فورًا مع أقل تعديل ممكن.", fix:"<b>طريقة التنفيذ:</b> داخل معالج السحب في <code>SiteRow</code>: الاستهلاك فقط عندما <code>|dragAmount.x| &gt; |dragAmount.y|</code>، وإلا ترك الحدث يمر لـ <code>LazyColumn</code> (تعديل سطرين)."},
+    {n:6, demo:"d6", title:"مقبض سحب جانبي مخصص", desc:"البطاقة كلها قابلة للتمرير العمودي بحرية، والسحب الجانبي للحذف/الأرشفة يتم فقط من مقبض ظاهر على طرف البطاقة — أوضح بصريًا وأمنع للخطأ.", fix:"<b>طريقة التنفيذ:</b> نقل <code>pointerInput</code> من كامل البطاقة إلى <code>Box</code> صغير بأيقونة قبضة داخل <code>SiteRow</code>، وتبقى الخلفية المنكشفة كما هي."},
+    {n:7, demo:"d7", title:"تسليح السحب بضغطة مطوّلة", desc:"التمرير العمودي يعمل دائمًا بلا قيود؛ أما السحب الجانبي فيُفتح بعد ضغطة مطولة قصيرة على البطاقة (توهج يدل على التسليح).", fix:"<b>طريقة التنفيذ:</b> <code>combinedClickable(onLongClick)</code> يرفع علم <code>swipeArmed</code>، ولا يستجيب معالج السحب إلا والعلم مرفوع."},
+    {n:8, demo:"d8", title:"قفل السحب أثناء حركة القائمة", desc:"أثناء تمرير القائمة (قصور ذاتي/سحب جارٍ) تُجمَّد إيماءة السحب الجانبي مؤقتًا، فلا يتصارع اثنان على نفس الإصبع.", fix:"<b>طريقة التنفيذ:</b> قراءة حالة تمرير <code>LazyColumn</code> عبر <code>LazyListState.isScrollInProgress</code> وتجاهل بدء السحب الجانبي أثناءها في <code>SiteRow</code>."},
+    {n:9, demo:"d9", title:"مكوّن SwipeToDismissBox الجاهز من Material", desc:"استخدام مكوّن المادة الثالث الرسمي للسحب-للإجراء؛ مدمج فيه تمييز المحاور والاتجاهات والوصولية، ويُلغي كود السحب اليدوي كله.", fix:"<b>طريقة التنفيذ:</b> لف <code>GalaxyCard</code> داخل <code>SwipeToDismissBox</code> مع <code>SwipeToDismissBoxValue.StartToEnd/EndToStart</code>، كلٌ يستدعي الحذف/الأرشفة."},
+    {n:10, demo:"d10", title:"وضع تشخيص الإيماءات (تحقق قبل الحل)", desc:"طبقة مؤقتة تعرض على الشاشة اتجاه كل إيماءة (عمودي/أفقي) وحالة الاستهلاك لحظة بلحظة، لتتأكد بعينك من سبب المشكلة قبل اختيار الحل النهائي.", fix:"<b>طريقة التنفيذ:</b> <code>overlay</code> بسيط داخل <code>SitesScreen</code> يسجّل آخر متجه سحب وقيمة <code>isConsumed</code> — يُضاف ثم يُحذف بعد التحقق."}
+  ]
+},
+{
+  id:"p2", kind:"radio", num:"٢", title:"واجهة المواقع — حركة السحب عكس اتجاه الإصبع",
+  sub:"تسحب يمينًا فتتحرك البطاقة يسارًا، وبالعكس",
+  diagnosis:"<b>التشخيص من الكود:</b> التطبيق عربي الاتجاه (RTL). في <code>SiteRow</code> الإزاحة مطبّقة بـ <code>Modifier.offset { IntOffset(offsetX…) }</code> وهذه الدالة <b>تحترم اتجاه التخطيط</b>: القيمة الموجبة في RTL تدفع البطاقة <b>يسارًا</b>. بينما <code>dragAmount.x</code> من نظام اللمس فيزيائي دائمًا (موجب = يمين). الناتج: الإصبع يمين والبطاقة يسار. الخلفية المنكشفة (حذف/أرشفة) أيضًا معكوسة الظهور.",
+  options:[
+    {n:1, demo:"m1", title:"الاستبدال بـ absoluteOffset (الحل الجراحي)", desc:"تعديل كلمة واحدة: الإزاحة المطلقة لا تعكسها اتجاهات التخطيط، فتتبع البطاقة الإصبع فيزيائيًا في RTL وLTR على السواء.", fix:"<b>طريقة التنفيذ:</b> في <code>SiteRow</code>: <code>Modifier.offset{}</code> ← <code>Modifier.absoluteOffset { IntOffset(offsetX.value.roundToInt(), 0) }</code>. تعديل سطر واحد يعالج جذر المشكلة."},
+    {n:2, demo:"m2", title:"عكس الإشارة حسب اتجاه التخطيط", desc:"الاحتفاظ بـ <code>offset</code> مع قلب إشارة الحركة الواردة عندما يكون الاتجاه RTL، فيتصالح نظاما الإحداثيات.", fix:"<b>طريقة التنفيذ:</b> قراءة <code>LocalLayoutDirection</code> وضرب <code>dragAmount.x</code> في <code>-1</code> عند <code>LayoutDirection.Rtl</code> قبل إضافتها إلى <code>offsetX</code>."},
+    {n:3, demo:"m3", title:"النقل إلى طبقة الرسم (تحويل فيزيائي)", desc:"استخدام <code>graphicsLayer.translationX</code> بدل <code>offset</code> — طبقة الرسم فيزيائية دائمًا لا علاقة لها باتجاه النصوص، وأداؤها أعلى.", fix:"<b>طريقة التنفيذ:</b> استبدال <code>Modifier.offset</code> بـ <code>Modifier.graphicsLayer { translationX = offsetX.value }</code> في <code>SiteRow</code>."},
+    {n:4, demo:"m4", title:"إعادة رسم الخلفية بمنطق بداية/نهاية", desc:"إعادة ربط ألوان الحذف/الأرشفة بجهتي «البداية/النهاية» بدل اليمين/اليسار الثابتين، فيصبح الظهور مطابقًا للحركة في أي اتجاه برمجي.", fix:"<b>طريقة التنفيذ:</b> في صف الخلفية داخل <code>SiteRow</code>: ترتيب الصندوقين حسب <code>LayoutDirection</code> وربط <code>deleteReveal/archiveReveal</code> بالإزاحة بعد تصحيحها."},
+    {n:5, demo:"m5", title:"SwipeToDismissBox — يعالج RTL تلقائيًا", desc:"مكوّن المادة الرسمي يفهم اتجاه التخطيط داخليًا؛ السحب والظهور والإجراء كلها صحيحة في العربية بلا أي حساب يدوي.", fix:"<b>طريقة التنفيذ:</b> إحلال <code>SwipeToDismissBox</code> مكان كود السحب اليدوي في <code>SiteRow</code> (يحل المشكلتين الأولى والثانية معًا)."},
+    {n:6, demo:"m6", title:"ربط 1:1 — البطاقة تحت الإصبع تمامًا", desc:"بدل تجميع الدلتا، موضع البطاقة = موضع الإصبع مباشرة منذ بداية السحب، فلا يتراكم أي خطأ إشارة أو تقريب.", fix:"<b>طريقة التنفيذ:</b> حفظ <code>startX</code> عند أول لمسة وجعل <code>offsetX = (change.position.x - startX)</code> بإزاحة مطلقة، مع نفس منطق العتبة عند الإفلات."},
+    {n:7, demo:"m7", title:"تخصيص اتجاهات السحب من الإعدادات", desc:"خيار في شاشة الإعدادات يحدد بنفسك: أي جهة تكشف الحذف وأيها الأرشفة — مرن لو تغيّر ذوقك لاحقًا.", fix:"<b>طريقة التنفيذ:</b> إضافة مفتاح <code>swipeDirection</code> في <code>SettingsRepository</code> وقراءته في <code>SiteRow</code> لعكس ربط الأفعال عند الحاجة."},
+    {n:8, demo:"m8", title:"مقاومة مرنة بنابض بعد تصحيح الاتجاه", desc:"بعد إصلاح الاتجاه: مقاومة مطاطية خفيفة بعد منتصف العرض وعودة نابضية مريحة عند الإفلات — إحساس ملمس مصقول.", fix:"<b>طريقة التنفيذ:</b> منطق المقاومة موجود (<code>limit = size.width * 0.6f</code>)؛ يُستبقى مع تصحيح الإحداثيات وضبط <code>spring</code> في <code>onDragEnd</code>."},
+    {n:9, demo:"m9", title:"الاستغناء عن السحب: أزرار + تراجع", desc:"زران صغيران على البطاقة (حذف/أرشفة) مع «تراجع» في سنابار بعد كل عملية — لا اتجاهات ولا إيماءات متنازعة أصلًا.", fix:"<b>طريقة التنفيذ:</b> إضافة أزرار في <code>SiteCardContent</code>، واستبدال الحذف الفوري بـ <code>Snackbar</code> مع تراجع في <code>SitesScreen</code>."},
+    {n:10, demo:"m10", title:"إعادة كتابة كاملة بـ AnchoredDraggable", desc:"الواجهة الحديثة المستقرة للسحب متعدد المراسي: مراسٍ صريحة (مركز/حذف/أرشفة) مع فيزياء سرعة ونابض — أنظف بنية للمستقبل.", fix:"<b>طريقة التنفيذ:</b> <code>AnchoredDraggableState</code> بثلاث مراسٍ + <code>Modifier.anchoredDraggable</code> + إزاحة مطلقة، مع حذف كود <code>Animatable</code> اليدوي."}
+  ]
+},
+{
+  id:"p3", kind:"radio", num:"٣", title:"واجهة المجرة — قفزة مفاجئة عند التكبير بالإصبعين",
+  sub:"بمجرد بدء القرصة يقفز العرض لأسفل/أعلى/جانبًا بشكل غريب",
+  diagnosis:"<b>التشخيص من الكود:</b> في <code>GalaxyNetworkScreen.kt</code> طبقة الإيماءات تحفظ <code>lastCentroid = down.position</code> (موضع الإصبع <b>الأول</b> فقط). عندما يلمس الإصبع <b>الثاني</b> الشاشة يصبح المركز الجديد منتصف المسافة بين الإصبعين — بعيدًا عن الأول — فينفّذ الكود <code>transform.panBy(centroid - lastCentroid)</code> فيلقطة واحدة: <b>قفزة فورية باتجاه عشوائي</b> يعتمد على أين وضع إصبعك الثاني. لا يوجد أي إعادة تهيئة للمراجع عند تغيّر عدد الأصابع.",
+  options:[
+    {n:1, demo:"z1", title:"إعادة التهيئة عند تغيّر عدد الأصابع (الجذري)", desc:"لحظة إضافة/رفع إصبع: تُجمَّد المراجع (المركز والمدى) على قيمها الجديدة بدون تطبيق أي حركة تلك اللقطة — تختفي القفزة من جذرها.", fix:"<b>طريقة التنفيذ:</b> داخل حلقة <code>awaitPointerEvent</code>: حفظ <code>prevCount</code>؛ عند اختلافه عن عدد الأصابع الحالي يُعاد ضبط <code>lastCentroid</code> و<code>lastSpan</code> ويُستكمل <code>continue</code> بلا <code>panBy</code>."},
+    {n:2, demo:"z2", title:"تجميد اللقطة الأولى بعد كل إضافة إصبع", desc:"نفس الفكرة بصياغة أبسط: أول حدث بعد انضمام إصبع جديد يُهمل بالكامل (تحديث مراجع فقط)، وما بعده يعمل طبيعيًا.", fix:"<b>طريقة التنفيذ:</b> متغير <code>skipFrames</code> في <code>pointerInput</code> المجرة: يُضبط إلى 1 عند تغيّر عدد الأصابع ويُتناقص مع كل حدث متجاهَل."},
+    {n:3, demo:"z3", title:"تكبير يحافظ على النقطة تحت الإصبع", desc:"معادلة التكبير تُحسب بحيث تبقى نقطة العالم الواقعة تحت مركز القرصة ثابتة تحتها تمامًا مهما تغيرت الزوم — السلوك الطبيعي في كل تطبيقات الخرائط.", fix:"<b>طريقة التنفيذ:</b> <code>zoomAbout</code> موجود وصحيح؛ يُستكمل بتطبيقه <b>بعد</b> إعادة التهيئة (الخيار 1) وحساب الإزاحة من <code>screenToWorld(centroid)</code> الثابت."},
+    {n:4, demo:"z4", title:"تنعيم حركة المركز (مرشّح منخفض التردد)", desc:"أي قفزة صغيرة متبقية في مركز القرصة تُرشَّح بمعادلة تنعيم، فينساب العرض بدل أن ينفض — إحساس كاميرا احترافية.", fix:"<b>طريقة التنفيذ:</b> <code>smoothCentroid = lerp(smoothCentroid, centroid, 0.35f)</code> قبل <code>panBy</code> في حلقة الإيماءات."},
+    {n:5, demo:"z5", title:"تقييد معامل التكبير لكل لقطة", desc:"حماية إضافية: لا يُسمح بمعامل تكبير أكبر من ~1.15 أو أصغر من ~0.85 في اللقطة الواحدة، فأي شذوذ في المدى يُبتلع ولا يقفز.", fix:"<b>طريقة التنفيذ:</b> في <code>zoomAbout</code>: <code>factor.coerceIn(0.85f, 1.15f)</code> قبل الضرب، مع حدود <code>MIN_ZOOM/MAX_ZOOM</code> القائمة."},
+    {n:6, demo:"z6", title:"استخدام detectTransformGestures القياسية", desc:"استبدال الحل اليدوي بدالة النظام الرسمية للقـرص/التحريك/التدوير — مجرّبة وتعالج تغيّر عدد الأصابع داخليًا.", fix:"<b>طريقة التنفيذ:</b> <code>Modifier.pointerInput { detectTransformGestures { centroid, pan, zoom, _ -> … } }</code> بدل حلقة <code>awaitEachGesture</code>، مع إبقاء سحب العقد في طبقة لمس منفصلة."},
+    {n:7, demo:"z7", title:"تكبير بالنقر المزدوج على نقطة", desc:"نقرتان سريعتان تكبّران بسلاسة حول نقطة النقر نفسها (وثلاث تصغّر) — بديل سريع بيد واحدة يغني عن القرصة أحيانًا.", fix:"<b>طريقة التنفيذ:</b> عدّاد نقرات في طبقة الإيماءات: نقرتان خلال 300مللي ← <code>animateTo</code> نحو <code>zoomAbout(tapPoint, 1.8f)</code>."},
+    {n:8, demo:"z8", title:"أزرار تكبير/تصغير عائمة", desc:"أزرار + و − بجانب زر ملاءمة العرض الحالي — تحكم دقيق بلا إيماءات، ومفيد لمن يجد القرصة صعبة.", fix:"<b>طريقة التنفيذ:</b> زرّان صغيران فوق الـ <code>FloatingActionButton</code> الحالي يستدعيان <code>transform.zoomAbout(مركز الشاشة, 1.25f / 0.8f)</code>."},
+    {n:9, demo:"z9", title:"مهلة استقرار للأصابع الجديدة", desc:"الإصبع الذي يلمس الشاشة يُنتظر 50مللي ثانية قبل اعتماده في حساب القرصة — يمتص اللمسات المرتجفة واللحظية.", fix:"<b>طريقة التنفيذ:</b> ختم زمني لكل <code>pointerId</code> في حلقة الإيماءات؛ الأصابع الأحدث من 50مللي تُستبعد من حساب المركز والمدى."},
+    {n:10, demo:"z10", title:"إعادة بناء شاملة: مصفوفة تحويل بقصور ذاتي", desc:"بنية جديدة كاملة: مصفوفة (إزاحة×تكبير) موحدة، تكبير حول المركز الصحيح، حدود مرنة، وانسياب قصوري بعد الإفلات — تجربة خرائط كاملة.", fix:"<b>طريقة التنفيذ:</b> ترقية <code>GalaxyTransform</code> إلى <code>4x4</code> منطقية مع <code>fling</code> عبر <code>Animatable</code> للسرعة النهائية، وتحديث كل مستهلكيها."}
+  ]
+},
+{
+  id:"p4", kind:"check", num:"٤", title:"مقترحات إضافية — تحسينات وتعديلات عامة",
+  sub:"اختر ما تشاء (متعدد) — ملاحظات مكتشفة أثناء الفحص العميق للكود",
+  diagnosis:"<b>ملاحظات من الفحص:</b> <code>SitesViewModel.init</code> يحسب المواقع المستحقة <b>مرة واحدة فقط</b> ولا يتحدث بعد إضافة/تعديل موقع؛ ولا يوجد تراجع عن الأرشفة السريعة؛ وانيميشنات المجرة اللانهائية (<code>rememberInfiniteTransition</code>) تعمل بلا توقف حتى مع إخفاء الشاشة.",
+  options:[
+    {n:1, demo:"x1", title:"تحديث شريط «صيانة مستحقة» تلقائيًا", desc:"الشريط العلوي يعيد الحساب فور أي إضافة/تعديل/حذف موقع بدل الحساب اليتيم عند فتح الشاشة.", fix:"<b>طريقة التنفيذ:</b> تحويل <code>_dueSites</code> إلى <code>combine(observeSites())</code> مستمر مع <code>CheckMaintenanceDueUseCase</code> بدل <code>init</code> الحالي."},
+    {n:2, demo:"x2", title:"«تراجع» بعد الأرشفة والحذف", desc:"شريط عائم يظهر بعد كل أرشفة/حذف يتيح الإلغاء خلال ثوانٍ — شبكة أمان مثالية مع إيماءات السحب.", fix:"<b>طريقة التنفيذ:</b> <code>SnackbarHost</code> في <code>SitesScreen</code> مع <code>actionLabel = \"تراجع\"</code> يستدعي <code>restore</code>."},
+    {n:3, demo:"x3", title:"تلميح متحرك لأول استخدام للسحب", desc:"سهم يلمع مرة واحدة فوق أول بطاقة يشرح إيماءة السحب — كما تفعل واجهة المجرة بتلميحاتها.", fix:"<b>طريقة التنفيذ:</b> <code>rememberSaveable hintSeen</code> + سهم <code>infiniteTransition</code> يختفي بعد أول سحب ناجح."},
+    {n:4, demo:"x4", title:"حفظ عرض المجرة (تكبير/تحريك) بين الجلسات", desc:"تعود للمجرة فتجد نفس زاوية العرض التي تركتها، بدل البدء من الملاءمة كل مرة.", fix:"<b>طريقة التنفيذ:</b> حفظ <code>transform.pan/zoom</code> في <code>SettingsRepository</code> عند الخروج واستعادتها في <code>LaunchedEffect(viewport)</code>."},
+    {n:5, demo:"x5", title:"بحث داخل المجرة مع توهج النتيجة", desc:"حقل بحث صغير في المجرة: اكتب اسم موقع فتنبض عقدته وتوهج حتى تجدها وسط الشبكة الكبيرة.", fix:"<b>طريقة التنفيذ:</b> حقل عائم يقارن الأسماء ويغذي الرسم بـ <code>highlightId</code> يرسم هالة نابضة حول العقدة المطابقة."},
+    {n:6, demo:"x6", title:"إيقاف انيميشنات المجرة عند الإخفاء", desc:"الساعات اللانهائية تتوقف عندما تغادر الشاشة أو يُطفأ الهاتف — توفير بطارية ومعالج بلا أي أثر بصري.", fix:"<b>طريقة التنفيذ:</b> ربط <code>clockTransition</code> بـ <code>LocalLifecycleOwner</code> أو تحويلها إلى <code>LaunchedEffect</code> يتوقف مع دورة الحياة."},
+    {n:7, demo:"x7", title:"تصدير/استيراد البيانات JSON من الإعدادات", desc:"زر في الإعدادات يصدّر كل المواقع والروابط والتصنيفات إلى ملف، ويستعيدها عند الحاجة — نسخة احتياطية بيدك.", fix:"<b>طريقة التنفيذ:</b> <code>SafFile</code> عبر <code>ACTION_CREATE_DOCUMENT</code> + استخدام حالات <code>BackupReminderUseCase</code> القائمة."},
+    {n:8, demo:"x8", title:"إعادة فحص الصيانة عند فتح التطبيق", desc:"كلما فتحت التطبيق يعاد فحص المواعيد المستحقة — لا تفاجئك مواعيد فاتت أثناء الإغلاق.", fix:"<b>طريقة التنفيذ:</b> استدعاء <code>CheckMaintenanceDueUseCase</code> في <code>onStart</code> عبر مراقب دورة الحياة في <code>MainActivity</code>."}
+  ]
+}];
+
+/* ══════════════ مولّدات مسارح المحاكاة ══════════════ */
+function card(x,y,w,h,extra){return `<div class="mcard" style="top:${y}px;right:${x};width:${w}px;height:${h}px;${extra||""}"><div class="mline"></div><div class="mline s"></div><div class="mline xs"></div></div>`;}
+
+const DEMOS = {
+  /* ── مشكلة 1 ── */
+  d1: ()=>`<div class="demo"><span class="tag ok">الإصبع ↓ والقائمة تنزل فقط</span>
+    <div class="listbox"><div style="animation:d1-scroll 3s ease-in-out infinite">${card(12,4,230,30)+card(12,40,230,30)+card(12,76,230,30)+card(12,112,230,30)}</div></div>
+    <div class="finger" style="right:46%; animation:d1-finger 3s ease-in-out infinite"></div>
+    <div class="cap">البطاقة لا تنحرف — المحور العمودي يذهب للقائمة كاملةً</div></div>`,
+  d2: ()=>`<div class="demo"><span class="tag">بوابة العتبة: 16 نقطة أفقية أولًا</span>
+    <div style="position:absolute; top:44px; right:12%; width:8px; height:34px; background:var(--gold); border-radius:4px; animation:d2-gate 3s linear infinite"></div>
+    ${card("26%","44","54%","34","animation:d2-card 3s ease-in-out infinite")}
+    <div class="finger" style="top:50px; animation:d2-finger 3s ease-in-out infinite"></div>
+    <div class="cap">قبل العتبة: لا حركة جانبية إطلاقًا — بعدها فقط يبدأ السحب</div></div>`,
+  d3: ()=>`<div class="demo"><span class="tag ok">draggable أفقي + تمرير عمودي</span>
+    <div class="listbox"><div style="animation:d3-rows 4s ease-in-out infinite">${card(10,2,220,26)+card(10,32,220,26)+card(10,62,220,26)+card(10,92,220,26)}</div></div>
+    <div class="mcard" style="top:46px; right:10%; width:56%; height:30px; animation:d3-card 4s ease-in-out infinite; border-color:var(--acc)"><div class="mline"></div><div class="mline s"></div></div>
+    <div class="cap">المرحلة الأولى ↓ تمرير، الثانية ← سحب جانبي: كلاهما يعمل</div></div>`,
+  d4: ()=>`<div class="demo"><span class="tag">توجيه الأحداث حسب الاتجاه</span>
+    <div style="position:absolute; top:34px; right:8%; width:38%; height:56px; border:1px dashed #2c4270; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:.62rem; color:var(--dim)">LazyColumn<br>⬇ عمودي</div>
+    <div style="position:absolute; top:34px; left:8%; width:38%; height:56px; border:1px dashed #2c4270; border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:.62rem; color:var(--dim)">البطاقة<br>↔ أفقي</div>
+    <div style="position:absolute; top:16px; right:26%; width:10px; height:10px; border-radius:50%; background:var(--acc); animation:d4-v 2.6s linear infinite"></div>
+    <div style="position:absolute; top:58px; left:30%; width:10px; height:10px; border-radius:50%; background:var(--gold); animation:d4-h 2.6s linear infinite"></div>
+    <div class="cap">كل حدث يُوجَّه لقناته الصحيحة — لا صراع ولا استهلاك متبادل</div></div>`,
+  d5: ()=>`<div class="demo"><span class="tag">consume() على الأفقي فقط</span>
+    <div style="position:absolute; top:14px; left:14px; font-size:.62rem; color:var(--dim)">الاستهلاك:</div>
+    <div style="position:absolute; top:30px; left:14px; width:40px; height:16px; border-radius:999px; animation:d5-sw 3s linear infinite"></div>
+    <div style="position:absolute; top:18px; right:20%; width:12px; height:12px; border-radius:50%; background:var(--acc); animation:d5-drop 3s linear infinite"></div>
+    ${card("16%","52","58%","32","")}
+    <div class="cap">الأحداث العمودية تمر للقائمة (نقطة) ولا تُستهلك في البطاقة</div></div>`,
+  d6: ()=>`<div class="demo"><span class="tag">سحب الجسم = تمرير • سحب المقبض = إزاحة</span>
+    <div class="listbox"><div>${card(10,2,230,26)+card(10,32,230,26)}</div></div>
+    <div class="mcard" style="top:42px; right:12%; width:58%; height:34px; animation:d6-card 4s ease-in-out infinite; flex-direction:row; align-items:center; justify-content:space-between">
+      <div style="display:flex; flex-direction:column; gap:5px; flex:1"><div class="mline"></div><div class="mline s"></div></div>
+      <div style="width:16px; height:24px; border-radius:5px; background:#33507f; flex:0 0 auto"></div>
+    </div>
+    <div class="finger" style="animation:d6-fingB 4s ease-in-out infinite"></div>
+    <div class="cap">المقبض الرمادي وحده يستجيب للسحب الجانبي</div></div>`,
+  d7: ()=>`<div class="demo"><span class="tag">ضغط مطوّل ← توهج تسليح ← سحب</span>
+    ${card("18%","48","58%","34","animation:d7-slide 4s ease-in-out infinite, d7-glow 4s linear infinite")}
+    <div class="finger" style="top:56px; right:44%; animation:d7-press 4s ease-in-out infinite"></div>
+    <div class="cap">بدون الضغط المطوّل: التمرير العمودي حرّ بالكامل</div></div>`,
+  d8: ()=>`<div class="demo"><span class="tag">السحب الجانبي مقفول أثناء حركة القائمة</span>
+    <div class="listbox"><div style="animation:d8-rows 3.4s ease-in-out infinite">${card(10,2,230,26)+card(10,32,230,26)+card(10,62,230,26)}</div></div>
+    <div style="position:absolute; top:14px; left:14px; font-size:.62rem; color:var(--bad); animation:d8-lock 3.4s linear infinite">🔒 مقفول أثناء الحركة</div>
+    <div class="mcard" style="top:44px; right:12%; width:52%; height:30px; animation:d8-card 3.4s ease-in-out infinite"><div class="mline"></div><div class="mline s"></div></div>
+    <div class="cap">بعد استقرار القائمة فقط يُسمح بالسحب الجانبي</div></div>`,
+  d9: ()=>`<div class="demo"><span class="tag ok">SwipeToDismissBox — جاهز وموثوق</span>
+    <div style="position:absolute; top:42px; right:14%; width:60%; height:36px; border-radius:10px; background:rgba(255,90,90,.25); display:flex; align-items:center; justify-content:center; color:#ffb4b4; font-size:.66rem; font-weight:700; animation:d9-act 3s linear infinite">🗑 حذف</div>
+    <div class="mcard" style="top:42px; right:14%; width:60%; height:36px; animation:d9-card 3s ease-in-out infinite"><div class="mline"></div><div class="mline s"></div></div>
+    <div class="cap">مكوّن النظام يتولى تمييز المحاور والاتجاهات تلقائيًا</div></div>`,
+  d10: ()=>`<div class="demo"><span class="tag">وضع التشخيص المؤقت</span>
+    <div class="hud" style="animation:d10-hud1 4s linear infinite">axis = VERTICAL ↧</div>
+    <div class="hud" style="top:36px; animation:d10-hud2 4s linear infinite">axis = HORIZONTAL ↔</div>
+    ${card("14%","60","56%","30","")}
+    <div class="finger" style="animation:d10-finger 4s ease-in-out infinite"></div>
+    <div class="cap">شاشة حية تبين اتجاه كل إيماءة — لتشخيص المشكلة والتحقق من الحل</div></div>`,
+
+  /* ── مشكلة 2 ── */
+  m1: ()=>`<div class="demo"><span class="tag warn">قبل: offset تعكس الاتجاه في RTL</span><span class="tag ok" style="right:auto; left:8px">بعد: absoluteOffset</span>
+    <div class="mcard" style="top:20px; right:20%; width:52%; height:26px; animation:m1-bad 5s ease-in-out infinite; border-color:var(--bad)"><div class="mline"></div></div>
+    <div class="mcard" style="top:62px; right:20%; width:52%; height:26px; animation:m1-good 5s ease-in-out infinite; border-color:var(--good)"><div class="mline"></div></div>
+    <div class="cap">العلوي (خطأ): الإصبع يمين والبطاقة يسار • السفلي (صحيح): تتبع تام</div></div>`,
+  m2: ()=>`<div class="demo"><span class="tag">قلب الإشارة عند RTL</span>
+    <div style="position:absolute; top:44px; right:16%; font-size:1.5rem; color:var(--gold); animation:m2-arrow 3s ease-in-out infinite">👆➜</div>
+    <div style="position:absolute; top:40px; left:14%; width:3px; height:34px; background:linear-gradient(180deg,transparent,var(--acc),transparent)"></div>
+    <div style="position:absolute; top:80px; right:16%; left:16%; text-align:center; font-size:.66rem; color:var(--dim)">dx الفيزيائي ⟵ مرآة التخطيط ⟶ dx محلي صحيح</div>
+    <div class="cap">الإشارة تُصحَّح مرة واحدة عند دخول الحركة — والبطاقة تتبع الإصبع</div></div>`,
+  m3: ()=>`<div class="demo"><span class="tag ok">graphicsLayer — تحويل فيزيائي دائمًا</span>
+    ${card("22%","44","52%","32","animation:m3-card 3s ease-in-out infinite")}
+    <div class="finger" style="top:52px; animation:m3-finger 3s ease-in-out infinite"></div>
+    <div class="cap">طبقة الرسم لا تعرف اتجاه النصوص — الموجب يمين دائمًا</div></div>`,
+  m4: ()=>`<div class="demo"><span class="tag">الظهور مرتبط بالبداية/النهاية لا اليمين/اليسار</span>
+    <div class="revealL" style="left:0; background:rgba(255,200,87,.28); color:var(--gold); animation:m4-reveal 3s linear infinite">🗄 أرشفة</div>
+    <div class="revealR" style="right:0; background:rgba(255,90,90,.25); color:#ffb4b4">🗑 حذف</div>
+    <div class="mcard" style="top:38px; right:16%; width:62%; height:38px; animation:m4-card 3s ease-in-out infinite"><div class="mline"></div><div class="mline s"></div></div>
+    <div class="cap">كل جهة تكشف فعلها الصحيح في الاتجاهين العربي واللاتيني</div></div>`,
+  m5: ()=>`<div class="demo"><span class="tag ok">Material يفهم RTL داخليًا</span>
+    <div style="position:absolute; top:42px; left:12%; width:44%; height:36px; border-radius:10px; background:rgba(255,90,90,.25); display:flex; align-items:center; justify-content:center; color:#ffb4b4; font-size:.66rem; font-weight:700; animation:m5-act 3s linear infinite">حذف</div>
+    <div class="mcard" style="top:42px; left:12%; width:66%; height:36px; animation:m5-card 3s ease-in-out infinite"><div class="mline"></div><div class="mline s"></div></div>
+    <div class="cap">StartToEnd / EndToStart — الاتجاه صحيح تلقائيًا في العربية</div></div>`,
+  m6: ()=>`<div class="demo"><span class="tag">البطاقة تحت الإصبع 1:1</span>
+    ${card("20%","46","50%","30","animation:m6-card 3s ease-in-out infinite")}
+    <div class="finger" style="top:54px; animation:m6-finger 3s ease-in-out infinite"></div>
+    <div class="cap">لا تجميع دلتا — الموضع يُحسب من نقطة البداية مباشرة</div></div>`,
+  m7: ()=>`<div class="demo"><span class="tag">أنت تختار الاتجاه من الإعدادات</span>
+    <div style="position:absolute; top:34px; right:20%; font-size:.72rem; color:var(--dim)">يمين = حذف</div>
+    <div style="position:absolute; top:34px; right:calc(20% + 120px); width:34px; height:18px; border-radius:999px; background:#0a1326; border:1px solid var(--line)"><div style="width:14px; height:14px; border-radius:50%; background:var(--acc); margin-top:1px; margin-right:1px; animation:m7-tog 3s ease-in-out infinite"></div></div>
+    <div style="position:absolute; top:64px; right:20%; font-size:.72rem; color:var(--gold); animation:m7-lab 3s linear infinite">✓ يسار = حذف</div>
+    <div class="cap">تبديل محفوظ في الإعدادات يغيّر ربط الجهات فورًا</div></div>`,
+  m8: ()=>`<div class="demo"><span class="tag">مقاومة مطاطية بنابض</span>
+    ${card("18%","46","56%","32","animation:m8-card 3.4s ease-in-out infinite")}
+    <div class="cap">يتباطأ بعد المنتصف ثم يرتدّ بنابض عند الإفلات — الاتجاه صحيح</div></div>`,
+  m9: ()=>`<div class="demo"><span class="tag">أزرار صريحة + تراجع</span>
+    <div class="mcard" style="top:22px; right:16%; width:56%; height:30px; animation:m9-card 4s ease-in-out infinite"><div class="mline"></div></div>
+    <div style="position:absolute; bottom:22px; right:16%; left:16%; background:#123; border:1px solid var(--line); border-radius:10px; padding:7px 12px; font-size:.68rem; display:flex; justify-content:space-between; animation:m9-pop 4s ease-in-out infinite"><span>تمت الأرشفة</span><span style="color:var(--gold); font-weight:700">تراجع</span></div>
+    <div class="cap">بلا إيماءات متنازعة — أزرار واضحة وشبكة أمان</div></div>`,
+  m10: ()=>`<div class="demo"><span class="tag ok">AnchoredDraggable — مراسٍ صريحة</span>
+    ${card("20%","40","54%","32","animation:m10-card 3s ease-in-out infinite")}
+    <div style="position:absolute; bottom:26px; right:14%; left:14%; display:flex; justify-content:space-between; font-size:.6rem; color:var(--dim)"><span>◉ مركز</span><span>◉ أرشفة</span><span>◉ حذف</span></div>
+    <div style="position:absolute; top:14px; left:14px; color:var(--good); font-size:.66rem; animation:m10-ok 3s linear infinite">✓ اتجاه صحيح + فيزياء سرعة</div>
+    <div class="cap">البطاقة تنجذب لأقرب مرساة — بنية نظيفة للمستقبل</div></div>`,
+
+  /* ── مشكلة 3 ── */
+  z1: ()=>`<div class="demo"><span class="tag warn">الآن: قفزة عند نزول الإصبع الثاني</span><span class="tag ok" style="right:auto; left:8px">بعد الإصلاح: استقرار</span>
+    <div class="gridbg" style="animation:z1-jump 4s ease-in-out infinite"></div>
+    <div class="finger" style="top:60px; right:30%; animation:z1-fingers 4s linear infinite"></div>
+    <div class="finger" style="top:38px; right:58%; animation:z1-fingers 4s linear infinite; animation-delay:.12s"></div>
+    <div class="cap">القفزة تحدث في لقطة واحدة — إعادة تهيئة المراجع تلغيها</div></div>`,
+  z2: ()=>`<div class="demo"><span class="tag">تجميد أول لقطة بعد إضافة إصبع</span>
+    <div class="gridbg" style="animation:z1-stable 4s ease-in-out infinite, z2-freeze 4s linear infinite"></div>
+    <div class="finger" style="top:58px; right:32%; animation:z1-fingers 4s linear infinite"></div>
+    <div class="finger" style="top:40px; right:56%; animation:z1-fingers 4s linear infinite; animation-delay:.12s"></div>
+    <div class="cap">الومضة = اللقطة المجمّدة (تحديث مراجع فقط) — بعدها تكبير ناعم</div></div>`,
+  z3: ()=>`<div class="demo"><span class="tag ok">النقطة تحت الإصبعين تبقى ثابتة</span>
+    <div class="gridbg" style="animation:z3-grid 3s ease-in-out infinite alternate"></div>
+    <div style="position:absolute; top:50%; left:50%; width:10px; height:10px; margin:-5px; border-radius:50%; background:var(--good); z-index:4; animation:z3-dot 1.5s ease-in-out infinite"></div>
+    <div class="cap">علامة الخضراء لا تغادر مركز القرصة مهما تكبّر العرض</div></div>`,
+  z4: ()=>`<div class="demo"><span class="tag">الخام ⟵ مرشّح ⟵ ناعم</span>
+    <div style="position:absolute; top:44px; right:16%; width:26%; height:4px; border-radius:3px; background:var(--bad); animation:z4-raw 2.2s linear infinite; opacity:.8"></div>
+    <div style="position:absolute; top:44px; left:16%; width:26%; height:4px; border-radius:3px; background:var(--good); animation:z4-smooth 2.2s ease-in-out infinite"></div>
+    <div style="position:absolute; top:30px; right:16%; font-size:.6rem; color:var(--bad)">حركة المركز الخام (قفزات)</div>
+    <div style="position:absolute; top:56px; left:16%; font-size:.6rem; color:var(--good)">بعد التنعيم (انسياب)</div>
+    <div class="cap">lerp بسيط يمتص أي قفزة صغيرة متبقية في مركز القرصة</div></div>`,
+  z5: ()=>`<div class="demo"><span class="tag warn">شذوذ كبير</span><span class="tag ok" style="right:auto; left:8px">مقيّد</span>
+    <div style="position:absolute; bottom:26px; right:26%; width:14px; border-radius:5px 5px 0 0; background:var(--bad); animation:z5-spike 3s linear infinite"></div>
+    <div style="position:absolute; bottom:26px; left:26%; width:14px; border-radius:5px 5px 0 0; background:var(--good); animation:z5-soft 3s linear infinite"></div>
+    <div style="position:absolute; bottom:22px; right:12%; left:12%; height:1px; background:var(--line)"></div>
+    <div class="cap">معامل التكبير لكل لقطة محصور بين 0.85 و1.15 — بلا طفرات</div></div>`,
+  z6: ()=>`<div class="demo"><span class="tag ok">detectTransformGestures القياسية</span>
+    <svg style="position:absolute; inset:0; z-index:2" width="100%" height="100%" viewBox="0 0 300 132" preserveAspectRatio="none">
+      <path d="M30,90 C100,30 200,30 270,90" fill="none" stroke="var(--acc)" stroke-width="2" stroke-dasharray="6 6" style="animation:z6-flow 1.6s linear infinite"/>
+    </svg>
+    <div style="position:absolute; top:52px; right:10%; font-size:.64rem; color:var(--dim)">لمسات</div>
+    <div style="position:absolute; top:52px; left:8%; font-size:.64rem; color:var(--acc)">قرص+تحريك+دوران</div>
+    <div class="cap">خط الأنابيب الرسمي للنظام — يعالج تغيّر الأصابع داخليًا</div></div>`,
+  z7: ()=>`<div class="demo"><span class="tag">نقرتان = تكبير حول النقطة</span>
+    <div class="gridbg" style="animation:z7-zoom 3s ease-in-out infinite"></div>
+    <div class="finger" style="top:46px; right:44%; animation:z7-tap 3s ease-in-out infinite"></div>
+    <div class="cap">يد واحدة تكفي — تكبير سلس ينطلق من نقطة النقر نفسها</div></div>`,
+  z8: ()=>`<div class="demo"><span class="tag">أزرار ± العائمة</span>
+    <div class="gridbg" style="animation:z8-grid 3s ease-in-out infinite"></div>
+    <div style="position:absolute; bottom:24px; right:16px; z-index:5; display:flex; flex-direction:column; gap:6px">
+      <div style="width:26px; height:26px; border-radius:50%; background:#16233f; border:1px solid var(--acc); color:var(--acc); display:flex; align-items:center; justify-content:center; font-weight:700; animation:z8-btn 3s ease-in-out infinite">+</div>
+      <div style="width:26px; height:26px; border-radius:50%; background:#16233f; border:1px solid var(--line); color:var(--dim); display:flex; align-items:center; justify-content:center; font-weight:700">−</div>
+    </div>
+    <div class="cap">تحكم دقيق بجانب زر ملاءمة العرض الحالي</div></div>`,
+  z9: ()=>`<div class="demo"><span class="tag">مهلة 50 مللي ثانية للأصابع الجديدة</span>
+    <div class="finger" style="top:44px; right:30%; animation:z9-deb 3s linear infinite"></div>
+    <div class="finger" style="top:58px; right:56%; animation:z9-deb 3s linear infinite; animation-delay:.3s"></div>
+    <div class="cap">الأحمر = مرفوض مؤقتًا • الأخضر = معتمد في الحساب</div></div>`,
+  z10: ()=>`<div class="demo"><span class="tag ok">مصفوفة تحويل كاملة + قصور ذاتي</span>
+    <div class="gridbg" style="animation:z10-grid 4s ease-in-out infinite"></div>
+    <div style="position:absolute; top:10px; right:10px; z-index:5; font-size:.58rem; color:var(--good); background:rgba(10,17,34,.9); border:1px solid var(--line); border-radius:8px; padding:4px 8px; animation:z10-matrix 1s ease both">✔ تكبير حول المركز</div>
+    <div style="position:absolute; top:34px; right:10px; z-index:5; font-size:.58rem; color:var(--good); background:rgba(10,17,34,.9); border:1px solid var(--line); border-radius:8px; padding:4px 8px; animation:z10-matrix 1s .3s ease both">✔ حدود مرنة</div>
+    <div style="position:absolute; top:58px; right:10px; z-index:5; font-size:.58rem; color:var(--good); background:rgba(10,17,34,.9); border:1px solid var(--line); border-radius:8px; padding:4px 8px; animation:z10-matrix 1s .6s ease both">✔ انسياب بعد الإفلات</div>
+    <div class="cap">تجربة خرائط كاملة — الحل الأشمل</div></div>`,
+
+  /* ── إضافات ── */
+  x1: ()=>`<div class="demo"><span class="tag">إضافة موقع ← يتحدث الشريط فورًا</span>
+    <div style="position:absolute; top:30px; right:16%; left:16%; height:26px; border-radius:10px; background:rgba(255,200,87,.14); border:1px solid rgba(255,200,87,.4); display:flex; align-items:center; padding:0 10px; gap:8px">
+      <div style="width:14px; height:14px; border-radius:50%; border:2px solid var(--gold); animation:x-pulse 1.6s ease-in-out infinite"></div>
+      <div style="font-size:.62rem; color:var(--gold)">صيانة مستحقة — يتحدث مباشرة</div>
+    </div>
+    <div class="cap">بدل الحساب اليتيم في init — مراقبة مستمرة للبيانات</div></div>`,
+  x2: ()=>`<div class="demo"><span class="tag">شبكة أمان للسحب السريع</span>
+    ${card("18%","22","56%","26","")}
+    <div style="position:absolute; bottom:20px; right:14%; left:14%; background:#123; border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:.7rem; display:flex; justify-content:space-between; animation:x-snack 3s ease-in-out infinite"><span>تمت الأرشفة</span><span style="color:var(--gold); font-weight:700">تراجع</span></div>
+    <div class="cap">ثوانٍ كافية للتراجع عن أي عملية</div></div>`,
+  x3: ()=>`<div class="demo"><span class="tag">تلميح أول استخدام</span>
+    ${card("18%","44","56%","32","")}
+    <div style="position:absolute; top:52px; right:26%; font-size:1.2rem; color:var(--gold); animation:x-arrow 2s ease-in-out infinite">⟸</div>
+    <div class="cap">سهم متحرك واحد يشرح الإيماءة ثم يختفي للأبد</div></div>`,
+  x4: ()=>`<div class="demo"><span class="tag">العودة لنفس زاوية العرض</span>
+    <div class="gridbg" style="animation:x-restore 3s ease-in-out infinite"></div>
+    <div class="cap">تكبيرك وتحريكك محفوظان — تعود للمجرة كما تركتها</div></div>`,
+  x5: ()=>`<div class="demo"><span class="tag">اكتب اسمًا ← توهج عقدة</span>
+    <div class="node" style="top:40px; right:30%"></div>
+    <div class="node" style="top:64px; right:56%; animation:x-search 3s linear infinite; background:var(--gold)"></div>
+    <div class="node" style="top:34px; right:66%"></div>
+    <div style="position:absolute; top:12px; right:14px; left:14px; height:20px; border-radius:8px; border:1px solid var(--line); background:#0a1326; font-size:.6rem; color:var(--dim); display:flex; align-items:center; padding:0 10px">🔍 البرج الشمالي…</div>
+    <div class="cap">ابحث عن أي موقع وسط عشرات العقد</div></div>`,
+  x6: ()=>`<div class="demo"><span class="tag">إيقاف الساعات عند الإخفاء</span>
+    <div style="position:absolute; top:44px; right:50%; margin-right:-20px; width:40px; height:40px; border-radius:50%; border:2px solid var(--acc); display:flex; align-items:center; justify-content:center; font-size:1rem; animation:x-pause 3s linear infinite">⏱</div>
+    <div class="cap">توفير بطارية ومعالج — الأنيميشن ينام مع الشاشة</div></div>`,
+  x7: ()=>`<div class="demo"><span class="tag">نسخة احتياطية بيدك</span>
+    <div style="position:absolute; top:38px; right:50%; margin-right:-26px; width:52px; height:40px; border-radius:8px; background:#16233f; border:1px solid var(--gold); display:flex; align-items:center; justify-content:center; font-size:.6rem; color:var(--gold); animation:x-file 3s ease-in-out infinite">JSON ⬇</div>
+    <div class="cap">تصدير كل المواقع والروابط واستعادتها متى شئت</div></div>`,
+  x8: ()=>`<div class="demo"><span class="tag">فحص المواعيد عند كل فتح</span>
+    <div style="position:absolute; top:38px; right:50%; margin-right:-18px; font-size:2rem; animation:x-alarm 3s linear infinite">⏰</div>
+    <div class="cap">لا تفاجئك مواعيد فاتت أثناء إغلاق التطبيق</div></div>`
+};
+
+/* ══════════════ الحالة والاختيار ══════════════ */
+const LS_KEY = "galaxy-proposals-v1";
+let sel = { p1:null, p2:null, p3:null, p4:[] };
+try{
+  const raw = localStorage.getItem(LS_KEY);
+  if(raw){ const s = JSON.parse(raw); sel = Object.assign(sel, s); if(!Array.isArray(sel.p4)) sel.p4=[]; }
+}catch(e){}
+
+function save(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(sel)); }catch(e){} }
+
+function toggle(sectionId, n){
+  const section = SECTIONS.find(s=>s.id===sectionId);
+  if(section.kind==="radio"){ sel[sectionId] = (sel[sectionId]===n? null : n); }
+  else{
+    const arr = sel.p4.includes(n)? sel.p4.filter(x=>x!==n) : sel.p4.concat([n]);
+    sel.p4 = arr;
+  }
+  save(); refreshUI();
+}
+
+function refreshUI(){
+  document.querySelectorAll(".opt").forEach(el=>{
+    const sid = el.dataset.section, n = Number(el.dataset.n);
+    const section = SECTIONS.find(s=>s.id===sid);
+    const on = section.kind==="radio" ? sel[sid]===n : sel.p4.includes(n);
+    el.classList.toggle("selected", on);
+  });
+  const c1 = ["p1","p2","p3"].filter(k=>sel[k]!=null).length;
+  const c2 = sel.p4.length;
+  document.getElementById("count").innerHTML =
+    (c1===0 && c2===0) ? "لم تختر شيئًا بعد"
+    : `اخترت <b>${c1}</b> من 3 حلول للمشكلات` + (c2? ` و <b>${c2}</b> من الإضافات`:"");
+}
+
+function optById(sid, n){ return SECTIONS.find(s=>s.id===sid).options.find(o=>o.n===n); }
+
+/* ══════════════ بناء الصفحة ══════════════ */
+function render(){
+  const root = document.getElementById("root");
+  root.innerHTML = SECTIONS.map(sec=>`
+    <section class="block" id="${sec.id}">
+      <div class="sec-head">
+        <div class="sec-num">${sec.num}</div>
+        <div><h2>${sec.title}</h2><p>${sec.sub}</p></div>
+      </div>
+      <div class="diagnosis">${sec.diagnosis}</div>
+      <div class="opts-hint">${sec.kind==="radio"?"انقر خيارًا واحدًا للحل":"فعّل ما تشاء — اختيار متعدد"} • لكل خيار محاكاة متحركة 👇</div>
+      ${sec.options.map(o=>`
+        <div class="opt" data-section="${sec.id}" data-n="${o.n}" role="button" tabindex="0">
+          <div class="check">✓</div>
+          <div class="opt-top">
+            <div class="opt-num">${o.n}</div>
+            <h3>${o.title}</h3>
+          </div>
+          <div class="desc">${o.desc}</div>
+          ${DEMOS[o.demo] ? DEMOS[o.demo]() : ""}
+          <div class="fix">${o.fix}</div>
+        </div>`).join("")}
+    </section>`).join("") +
+    `<footer class="foot">صفحة مقترحات جلسة العمل — تطبيق مجرة (Kotlin) • المستودع: SagedAmV/app_work_kotlin • اختر ثم صدّر اختياراتك وارفعها باسم «اختيارات.md»</footer>`;
+
+  root.querySelectorAll(".opt").forEach(el=>{
+    el.addEventListener("click", ()=>toggle(el.dataset.section, Number(el.dataset.n)));
+    el.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggle(el.dataset.section, Number(el.dataset.n)); }});
+  });
+  refreshUI();
+}
+
+/* ══════════════ التصدير ══════════════ */
+function plainText(html){ const d=document.createElement("div"); d.innerHTML=html; return d.textContent.trim(); }
+
+function buildMarkdown(){
+  const now = new Date();
+  const dateStr = now.toLocaleString("ar-IQ", {dateStyle:"full", timeStyle:"short"});
+  let md = `# 📋 اختياراتي — حلول مشكلات تطبيق «مجرة»\n\n`;
+  md += `> صُدِّرت هذه الاختيارات من صفحة «مقترحات حل المشكلات».\n`;
+  md += `> **التاريخ:** ${dateStr}\n`;
+  md += `> **المستودع:** https://github.com/SagedAmV/app_work_kotlin\n\n`;
+  md += `**تعليمات للجلسة التالية:** اقرأ هذا الملف ونفّذ الخيارات المحددة أدناه كلٌ في مكانه المبيّن في كود التطبيق، `;
+  md += `ثم افحص الأكواد بحثًا عن أخطاء أو دوال ميتة، وارفع التعديلات إلى نفس المستودع وتأكد من رفعها.\n`;
+  md += `ولا تلمس ملف «تعليمات.md» بالحذف تحت أي ظرف.\n\n---\n\n`;
+
+  const titles = {p1:"المشكلة ١ — واجهة المواقع: التمرير للأسفل ينحرف جانبيًا",
+                  p2:"المشكلة ٢ — واجهة المواقع: السحب الجانبي عكس اتجاه الإصبع",
+                  p3:"المشكلة ٣ — واجهة المجرة: قفزة مفاجئة عند التكبير بالإصبعين"};
+  ["p1","p2","p3"].forEach(id=>{
+    md += `## ${titles[id]}\n\n`;
+    if(sel[id]==null){ md += `- لم يُختر حل بعد — أعد فتح صفحة المقترحات واختر.\n`; }
+    else{
+      const o = optById(id, sel[id]);
+      md += `- **الخيار المختار:** رقم (${o.n}) — «${plainText(o.title)}»\n`;
+      md += `- **وصف الحل:** ${plainText(o.desc)}\n`;
+      md += `- **طريقة التنفيذ:** ${plainText(o.fix)}\n`;
+    }
+    md += `\n`;
+  });
+
+  md += `## إضافات وتعديلات أخرى (ما فُعِّل)\n\n`;
+  if(sel.p4.length===0){ md += `- لم تُفعَّل أي إضافة.\n`; }
+  else sel.p4.slice().sort((a,b)=>a-b).forEach(n=>{
+    const o = optById("p4", n);
+    md += `- [x] **(${o.n}) ${plainText(o.title)}** — ${plainText(o.desc)}\n  - التنفيذ: ${plainText(o.fix)}\n`;
+  });
+
+  md += `\n---\n\n**ملخص الاختيار:** `;
+  md += `مشكلة ١: ${sel.p1==null?"بدون اختيار":"الخيار "+sel.p1} • `;
+  md += `مشكلة ٢: ${sel.p2==null?"بدون اختيار":"الخيار "+sel.p2} • `;
+  md += `مشكلة ٣: ${sel.p3==null?"بدون اختيار":"الخيار "+sel.p3} • `;
+  md += `الإضافات: ${sel.p4.length? sel.p4.slice().sort((a,b)=>a-b).join("، ") : "لا شيء"}\n`;
+  return md;
+}
+
+function toast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"), 3400);
+}
+
+function exportChoices(){
+  const md = buildMarkdown();
+  // 1) تنزيل الملف على الجهاز
+  const blob = new Blob([md], {type:"text/markdown;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "اختيارات.md";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 4000);
+  // 2) حفظ نسخة على الخادم إن كان متاحًا (داخل تطبيق المعاينة)
+  fetch("/api/choices", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({markdown: md, source:"proposals-page"})})
+    .then(r=>r.ok? toast("✓ نُزّل ملف اختيارات.md وحُفظت نسخة على الخادم") : toast("✓ نُزّل ملف اختيارات.md — ارفعه إلى المستودع"))
+    .catch(()=>toast("✓ نُزّل ملف اختيارات.md — ارفعه إلى المستودع باسم «اختيارات.md»"));
+}
+
+document.getElementById("exportBtn").addEventListener("click", exportChoices);
+document.getElementById("resetBtn").addEventListener("click", ()=>{
+  sel = {p1:null, p2:null, p3:null, p4:[]}; save(); refreshUI(); toast("تم تفريغ جميع الاختيارات");
+});
+
+render();
+</script>
+</body>
+</html>
