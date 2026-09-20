@@ -11,7 +11,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -24,7 +23,6 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -56,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableFloatState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -75,15 +74,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -581,20 +579,51 @@ private fun DueSitesBanner(
 private val SwipeDeleteColor = Color(0xFFFF5A5A)
 private val SwipeArchiveColor = Color(0xFFFFC857)
 
-/** نصف خلفية «الحذف» المنكشفة — شفافته تتبع مسافة السحب الموجبة */
+/* ── ثوابت سحب بطاقة الموقع (إصلاح 2.10.3 الجذري) ──
+ * العتبة: 28٪ من عرض البطاقة بحدّ أقصى 110dp — سحبة قصيرة مريحة تكفي
+ * لتفعيل الفعل (كانت 120dp ثابتة، ومع تعثر تتبع الإصبع كانت المسافة
+ * الفعلية المطلوبة تتضاعف فلا يُنفَّذ الأمر إلا بسحب شبه كامل).
+ * النفضة: حركة سريعة (600dp/s) تتجاوز 8٪ من العرض في اتجاه الفعل
+ * تفعّله فورًا دون إكمال مسافة العتبة (كانت 750dp/s فوق 12٪). */
+private const val SWIPE_THRESHOLD_FRACTION = 0.28f
+private val SWIPE_THRESHOLD_CAP = 110.dp
+private val SWIPE_FLING_VELOCITY = 600.dp
+private const val SWIPE_FLING_MIN_FRACTION = 0.08f
+
+/** عتبة تفعيل الفعل بالبكسل — نسبة من العرض الكامل للبطاقة بحدّ أعلى */
+private fun swipeThresholdPx(fullWidthPx: Float, density: Density): Float =
+    minOf(fullWidthPx * SWIPE_THRESHOLD_FRACTION, with(density) { SWIPE_THRESHOLD_CAP.toPx() })
+
+/**
+ * نسبة انكشاف الفعل (0..1) من حالة الإزاحة — تُستدعى داخل كتل الرسم
+ * والطبقات فقط (DrawScope/GraphicsLayerScope) فلا تُعيد تركيب الشاشة
+ * أثناء السحب إطلاقًا.
+ */
+private fun swipeReveal(offsetPx: Float, fullWidthPx: Float, density: Density): Float =
+    (offsetPx / swipeThresholdPx(fullWidthPx, density)).coerceIn(0f, 1f)
+
+/**
+ * نصف خلفية «الحذف» المنكشفة — شفافيته تتبع مسافة السحب الموجبة.
+ * القراءة داخل `drawBehind`/`graphicsLayer` مباشرة من حالة الإزاحة:
+ * تحديث السحب يُبطل الرسم فقط دون أي إعادة تخطيط أو تركيب.
+ */
 @Composable
-private fun RowScope.SwipeDeleteReveal(reveal: Float) {
+private fun RowScope.SwipeDeleteReveal(offsetX: MutableFloatState) {
     Box(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
-            .background(SwipeDeleteColor.copy(alpha = 0.12f + 0.78f * reveal)),
+            .drawBehind {
+                drawRect(SwipeDeleteColor.copy(alpha = 0.12f + 0.78f * swipeReveal(offsetX.floatValue, size.width * 2f, this)))
+            },
         contentAlignment = Alignment.Center
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.graphicsLayer { alpha = reveal }
+            modifier = Modifier.graphicsLayer {
+                alpha = swipeReveal(offsetX.floatValue, size.width * 2f, this)
+            }
         ) {
             Icon(Icons.Filled.Delete, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
             Text("حذف", color = Color.White, style = MaterialTheme.typography.labelLarge)
@@ -602,20 +631,24 @@ private fun RowScope.SwipeDeleteReveal(reveal: Float) {
     }
 }
 
-/** نصف خلفية «الأرشفة» المنكشفة — شفافته تتبع مسافة السحب السالبة */
+/** نصف خلفية «الأرشفة» المنكشفة — شفافيته تتبع مسافة السحب السالبة */
 @Composable
-private fun RowScope.SwipeArchiveReveal(reveal: Float) {
+private fun RowScope.SwipeArchiveReveal(offsetX: MutableFloatState) {
     Box(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
-            .background(SwipeArchiveColor.copy(alpha = 0.10f + 0.72f * reveal)),
+            .drawBehind {
+                drawRect(SwipeArchiveColor.copy(alpha = 0.10f + 0.72f * swipeReveal(-offsetX.floatValue, size.width * 2f, this)))
+            },
         contentAlignment = Alignment.Center
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier.graphicsLayer { alpha = reveal }
+            modifier = Modifier.graphicsLayer {
+                alpha = swipeReveal(-offsetX.floatValue, size.width * 2f, this)
+            }
         ) {
             Icon(Icons.Filled.Archive, contentDescription = null, tint = Color(0xFF3A2A00), modifier = Modifier.size(18.dp))
             Text("أرشفة", color = Color(0xFF3A2A00), style = MaterialTheme.typography.labelLarge)
@@ -624,28 +657,33 @@ private fun RowScope.SwipeArchiveReveal(reveal: Float) {
 }
 
 /**
- * صف موقع — النسخة 2.7 (جلسة تنفيذ اختيارات الاختيار 1 ثلاثي):
- * - المشكلة 1 (تمرير القائمة ينحرف): السحب الجانبي أصبح مقفل المحور —
- *   لا يبدأ إلا بعد أن تتجاوز الحركة الأفقية عتبة النظام وهي الغالبة؛
- *   الحركة العمودية لا تُستهلك في البطاقة أبدًا فتصل كاملة لقائمة
- *   `LazyColumn`. كان `detectDragGestures` القديم يلتقط أي اتجاه
- *   ويستهلك الحدث فيسرق النزول في القائمة.
- * - المشكلة 2 (السحب عكس الإصبع): الإزاحة الآن بـ `absoluteOffset`
- *   الفيزيائية التي لا تعكسها اتجاهات التخطيط — كانت `offset` تقلب
- *   القيمة الموجبة في اتجاه العربية (الموجب يدفع يسارًا في RTL)
- *   بينما إشارات اللمس فيزيائية دائمًا. كما رُتّب نصفا الخلفية
- *   المنكشفة حسب اتجاه التخطيط حتى يطابق الفعل المنكشف جهة السحب.
- * - إصلاح 2.9.4 (سحب أقصر وبلا ارتعاش): الإزاحة صارت حالة سنكرونية
- *   تُكتب مباشرة في حلقة الإيماءة بدل إطلاق كوروتين `snapTo` لكل حدث
- *   لمس (كان إلغاء كل مهمة قبل اكتمالها يُضيع دلتات حركة فيلزم سحب
- *   أطول بكثير من العتبة الاسمية ويرتعش). أُضيفت أيضًا عتبة «نفضة»:
- *   حركة سريعة قصيرة تفعل الفعل دون إكمال مسافة العتبة، وخُفّضت عتبة
- *   المسافة قليلًا. الحركات بعد الإفلات (تجاوز ثم حذف/أرشفة، أو عودة
- *   بنابض) تبقى متحركة عبر مهمة واحدة قابلة للإلغاء.
- * - ثوابت من الإصدارات السابقة: بطاقة بزجاجية خفيفة (اختيار 45)،
+ * صف موقع — النسخة 2.10.3 (إصلاح جذري لمشكلتَي السحب المزمنتين):
+ * - **السبب الجذري المكتشف أخيرًا (الاهتزاز + مسافة السحب الطويلة):**
+ *   معالج الإيماءة كان معلّقًا على نفس العقدة التي تتحرك —
+ *   `pointerInput` على الـ`Box` الذي يُزاح بـ`absoluteOffset`. Compose
+ *   يحسب مواضع اللمس بالنسبة لموضع التخطيط الحالي للعقدة في كل حدث،
+ *   فحين تنزاح البطاقة تنزلق «أرضية القياس» تحت الإصبع: الدلتا المقيسة
+ *   يُخصم منها ما تحركته البطاقة نفسها (dx_k = حركة_الإصبع − dx_{k−1}).
+ *   النتيجتان هما تمامًا ما شُكي منه: سرعة البطاقة نصف سرعة الإصبع
+ *   تقريبًا فيلزم سحب شبه كامل للشاشة رغم عتبة 120dp، وتضخيم أي رجفة
+ *   إصبع طبيعية إلى اهتزاز يمين/يسار مستمر طوال اللمس يزول برفعه.
+ *   (إصلاح 2.9.4 عالج كتابة الحالة سنكرونيًا — وهو صحيح لكنه ثانوي؛
+ *   الإطار المرجعي المتحرك بقي، فبقيت العرضان.)
+ * - **الحل — فصل القياس عن الحركة** (نفس نمط مكوّنات المكتبة نفسها
+ *   مثل SwipeToDismiss: كاشف الإيماءة على حاوية ثابتة والمحتوى
+ *   المنزلق داخلها):
+ *   1. `pointerInput` على الحاوية الخارجية الثابتة التي لا تتحرك —
+ *      الدلتات تُقاس في إطار مرجعي ثابت فتلتصق البطاقة بالإصبع 1:1.
+ *   2. تحريك البطاقة بـ`graphicsLayer` (طور الرسم) بدل `absoluteOffset`
+ *      (طور التخطيط): لا إعادة تخطيط ولا إعادة تركيب لكل حدث لمس —
+ *      كل تحديثات السحب في طور الرسم فقط.
+ *   3. سرعة إفلات قياسية بـ`VelocityTracker` لكشف النفضة السريعة.
+ *   4. عتبة أقصر: 28٪ من عرض البطاقة بحد أقصى 110dp، ونفضة عند
+ *      600dp/s فوق 8٪ من العرض، وعودة بعد الإفلات بلا نوابض ارتدادية.
+ * - ثوابت الإصدارات السابقة: قفل المحور الأفقي (2.7) فالحركة العمودية
+ *   تصل كاملة لقائمة `LazyColumn`، البطاقة بززاجية خفيفة (اختيار 45)،
  *   شريط جانبي بلون التصنيف، إطار متوهج للمتأخر، حلقة عد تنازلي
- *   (اختيار 37)، مقاومة بعد الحد الأقصى وعودة بنابض، والمؤرشفة بلا
- *   سحب (زر استعادة فقط).
+ *   (اختيار 37)، والمؤرشفة بلا سحب (زر استعادة فقط).
  */
 @Composable
 private fun SiteRow(
@@ -683,161 +721,155 @@ private fun SiteRow(
         return
     }
 
-    val density = LocalDensity.current
-    val threshold = with(density) { 120.dp.toPx() }
-    // عتبة النفضة: حركة سريعة قصيرة تكفي لتفعيل الفعل دون إكمال مسافة
-    // العتبة — بالبكسل/ثانية مشتقة من dp فتتناسب مع كثافة الشاشة.
-    // تُقارن بها سرعة الإصبع اللحظية عند الإفلات، مع تجاوز أدنى 12٪ من
-    // عرض البطاقة في اتجاه الفعل حتى لا تُفعّل نفضة عابرة في مكانها.
-    val flingVelocity = with(density) { 750.dp.toPx() }
-    // إصلاح جذري (2.9.4) لمشكلتَي السحب: «يجب السحب من طرف الشاشة للطرف»
-    // و«الارتعاش السريع الغريب». السبب الجذري واحد: الإزاحة كانت تُكتب
-    // عبر `scope.launch { offsetX.snapTo(...) }` لكل حدث لمس — إلغاء المهمة
-    // السابقة قبل اكتمالها كان يُضيع دلتات حركة (فتتزحزح البطاقة أبطأ
-    // بكثير من الإصبع ويلزم سحب أطول بكثير من العتبة الاسمية) والتحديث
-    // غير المتزامن كان يُرّعش البطاقة والخلفية المنكشفة معًا. الحل:
-    // الإزاحة حالة سنكرونية تُكتب مباشرة داخل حلقة الإيماءة فتلصق
-    // البطاقة بالإصبع 1:1، بينما تبقى حركات ما بعد الإفلات (التجاوز
-    // ثم الحذف/الأرشفة، أو العودة بنابض) متحركة عبر مهمة واحدة قابلة
-    // للإلغاء. ملاحظة: `snapTo` مُعلّقة ولا تُستدعى مباشرة داخل نطاق
-    // الإيماءات المقيّد التعليق، لذا كان هذا التصميم البديل لازمًا.
-    var offsetX by remember(site.id) { mutableFloatStateOf(0f) }
+    // ── حالة السحب (2.10.3) ──
+    // كائن الحالة يُقرأ من كتل الرسم/الطبقات خارج التركيب مباشرة، فكل
+    // تحديث إصبع يُبطل الرسم فقط — لا إعادة تخطيط ولا إعادة تركيب.
+    val offsetXState = remember(site.id) { mutableFloatStateOf(0f) }
     var settleJob by remember(site.id) { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
-    // نسب انكشاف الفعلين حسب مسافة السحب (0..1)
-    val deleteReveal = (offsetX / threshold).coerceIn(0f, 1f)
-    val archiveReveal = (-offsetX / threshold).coerceIn(0f, 1f)
 
     val layoutDirection = LocalLayoutDirection.current
 
-    Box(modifier = Modifier.fillMaxWidth()) {
-        // الخلفية المنكشفة — ترتيب نصفيها حسب اتجاه التخطيط (تتمة
-        // اختيار المشكلة 2): بالإزاحة المطلقة السحب يمينًا يزيح البطاقة
-        // يمينًا فيكشف النصف الأيسر دائمًا، وعتبة السحب الموجبة تعني
-        // «حذفًا» — فيجب أن يحمل النصف الأيسر صندوق الحذف. الأيسر هو
-        // آخر أبناء `Row` في الاتجاه العربي وأولهم في اللاتيني، لذا
-        // يُعكس الترتيب هنا. السحب يسارًا يكشف الأرشفة بالتماثل.
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            // ═══ الإصلاح الجذري 2.10.3 ═══
+            // كاشف الإيماءة على الحاوية الخارجية الثابتة التي لا تتحرك
+            // أبدًا: مواضع اللمس هنا في إطار مرجعي ثابت، فالدلتات حقيقية
+            // 1:1 مع الإصبع مهما انزاحت البطاقة فوقها. (كان معلقًا على
+            // البطاقة نفسها، فكان إطار القياس ينزلق معها ويُخصم تحركها
+            // من الحركة المقيسة — الاهتزاز ومسافة السحب المضاعفة.)
+            .pointerInput(site.id) {
+                // قفل المحور الأفقي (ثابت من 2.7): السحب الجانبي يبدأ
+                // فقط بعد أن تتجاوز الحركة الأفقية عتبة النظام وهي
+                // الغالبة؛ أي حركة عمودية لا تُستهلك هنا أبدًا فتصل
+                // كاملة لقائمة التمرير وتنزل القائمة طبيعيًا.
+                val touchSlop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // لمسة جديدة: أوقف أي حركة استقرار جارية (عودة أو
+                    // انزلاق إتمام) فنُمسك البطاقة حيث هي فورًا
+                    settleJob?.cancel()
+                    var accX = 0f
+                    var accY = 0f
+                    var dragging = false
+                    var lastX = down.position.x
+                    // سرعة الإفلات بمتتبّع المكتبة القياسي — أدق من
+                    // التنعيم اليدوي السابق وأدق قياسًا للنفضة
+                    val velocityTracker = VelocityTracker()
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        // نتابع إصبع البداية فقط ونهمل أي أصابع أخرى
+                        val change = event.changes.firstOrNull { it.id == down.id }
+                            ?: break
+                        if (!change.pressed) break
+                        if (!dragging) {
+                            // قبل التسليح: إن خطفت جهة أخرى الحدث
+                            // (القائمة بدأت تمريرًا) ننسحب بلا أثر
+                            if (change.isConsumed) break
+                            accX += change.position.x - change.previousPosition.x
+                            accY += change.position.y - change.previousPosition.y
+                            if (abs(accX) > touchSlop && abs(accX) > abs(accY)) {
+                                // غلبة أفقية: بدأ سحب البطاقة
+                                dragging = true
+                                lastX = change.position.x
+                                velocityTracker.resetTracking()
+                                change.consume()
+                            } else if (abs(accY) > touchSlop) {
+                                // غلبة عمودية: الإيماءة للقائمة نهائيًا
+                                break
+                            }
+                        } else {
+                            // الدلتا في الإطار الثابت: تتبع حقيقي للإصبع
+                            // لا يُخصم منه تحرك البطاقة نفسها
+                            val dx = change.position.x - lastX
+                            lastX = change.position.x
+                            velocityTracker.addPosition(change.uptimeMillis, change.position)
+                            // سقف إزاحة 60٪ من عرض البطاقة
+                            val limit = size.width * 0.6f
+                            offsetXState.floatValue =
+                                (offsetXState.floatValue + dx).coerceIn(-limit, limit)
+                            change.consume()
+                        }
+                    }
+                    if (dragging) {
+                        // نهاية السحب: عتبة مسافة قصيرة أو نفضة سريعة —
+                        // الاتجاه الموجب حذف والسالب أرشفة كما قبل.
+                        val x = offsetXState.floatValue
+                        val width = size.width.toFloat()
+                        val threshold = swipeThresholdPx(width, this)
+                        val velocity = velocityTracker.calculateVelocity().x
+                        val flingVelocity = SWIPE_FLING_VELOCITY.toPx()
+                        val flingDelete = velocity > flingVelocity && x > width * SWIPE_FLING_MIN_FRACTION
+                        val flingArchive = velocity < -flingVelocity && x < -width * SWIPE_FLING_MIN_FRACTION
+                        settleJob = scope.launch {
+                            when {
+                                x > threshold || flingDelete -> {
+                                    animate(x, width * 0.85f, animationSpec = tween(180)) { value, _ ->
+                                        offsetXState.floatValue = value
+                                    }
+                                    onSwipeDelete()
+                                    // عودة سلسة فور فتح حوار التأكيد: إن
+                                    // أُلغي الحوار تكون البطاقة في مكانها
+                                    // بلا قفزة (كانت قفزة `= 0f` لحظية)
+                                    animate(offsetXState.floatValue, 0f, animationSpec = tween(220)) { value, _ ->
+                                        offsetXState.floatValue = value
+                                    }
+                                }
+                                x < -threshold || flingArchive -> {
+                                    animate(x, -width * 0.85f, animationSpec = tween(180)) { value, _ ->
+                                        offsetXState.floatValue = value
+                                    }
+                                    onSwipeArchive()
+                                }
+                                else -> animate(
+                                    x,
+                                    0f,
+                                    // بلا ارتداد نابضي: عودة حاسمة لا
+                                    // تُقرأ كاهتزاز إضافي بعد الإفلات
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioNoBouncy,
+                                        stiffness = Spring.StiffnessMedium
+                                    )
+                                ) { value, _ ->
+                                    offsetXState.floatValue = value
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+    ) {
+        // الخلفية المنكشفة — ترتيب نصفيها حسب اتجاه التخطيط (ثابت من 2.7):
+        // السحب يمينًا (موجب) يزيح البطاقة يمينًا فيكشف النصف الأيسر
+        // فيزيائيًا، وعتبة السحب الموجبة تعني «حذفًا» — فيحمل النصف
+        // الأيسر صندوق الحذف. الأيسر هو آخر أبناء `Row` في الاتجاه
+        // العربي وأولهم في اللاتيني، لذا يُعكس الترتيب هنا. السحب يسارًا
+        // يكشف الأرشفة بالتماثل. تحديث الانكشاف في طور الرسم قراءةً
+        // مباشرة من حالة الإزاحة — بلا إعادة تركيب أثناء السحب.
         Row(
             modifier = Modifier
                 .matchParentSize()
                 .clip(RoundedCornerShape(16.dp))
         ) {
             if (layoutDirection == LayoutDirection.Rtl) {
-                SwipeArchiveReveal(archiveReveal)
-                SwipeDeleteReveal(deleteReveal)
+                SwipeArchiveReveal(offsetXState)
+                SwipeDeleteReveal(offsetXState)
             } else {
-                SwipeDeleteReveal(deleteReveal)
-                SwipeArchiveReveal(archiveReveal)
+                SwipeDeleteReveal(offsetXState)
+                SwipeArchiveReveal(offsetXState)
             }
         }
 
-        // البطاقة الأمامية المنزلقة
+        // البطاقة الأمامية المنزلقة — إزاحة طور-الرسم (translationX):
+        // تتبع الإصبع 1:1 بلا أي إعادة تخطيط لكل إطار، وهي فيزيائية
+        // لا تنعكس في اتجاه RTL (كما كانت `absoluteOffset` المطلقة).
+        // كاشف الإيماءة ليس هنا بل على الحاوية الثابتة أعلاه —
+        // الإصلاح الجذري 2.10.3.
         Box(
-            modifier = Modifier
-                // اختيار المشكلة 2: إزاحة مطلقة فيزيائية لا تعكسها
-                // اتجاهات التخطيط — البطاقة تتبع الإصبع في العربية
-                // واللاتينية معًا (كانت `offset` تقلب الموجب في RTL).
-                .absoluteOffset { IntOffset(offsetX.roundToInt(), 0) }
-                .pointerInput(site.id) {
-                    // اختيار المشكلة 1: قفل المحور الأفقي. السحب الجانبي
-                    // يبدأ فقط بعد أن تتجاوز الحركة الأفقية عتبة النظام
-                    // وهي الغالبة؛ أي حركة عمودية لا تُستهلك هنا أبدًا
-                    // فتصل كاملة لقائمة التمرير وتنزل القائمة طبيعيًا.
-                    // (بدل `detectDragGestures` التي كانت تلتقط كل اتجاه
-                    // وتستهلك الحدث فيسرق النزول في القائمة.)
-                    val touchSlop = viewConfiguration.touchSlop
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        // لمسة جديدة: أوقف أي حركة استقرار جارية (عودة
-                        // بنابض أو تجاوز) فنُمسك البطاقة حيث هي فورًا
-                        settleJob?.cancel()
-                        var accX = 0f
-                        var accY = 0f
-                        var dragging = false
-                        var lastX = down.position.x
-                        var lastTime = down.uptimeMillis
-                        // سرعة الإصبع اللحظية (متوسط أسّي) لكشف النفضات
-                        var velocity = 0f
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            // نتتبع إصبع البداية فقط ونهمل أي أصابع أخرى
-                            val change = event.changes.firstOrNull { it.id == down.id }
-                                ?: event.changes.firstOrNull()
-                                ?: break
-                            if (!change.pressed) break
-                            if (!dragging) {
-                                // قبل التسليح: إن خطفت جهة أخرى الحدث
-                                // (القائمة بدأت تمريرًا) ننسحب بلا أثر
-                                if (change.isConsumed) break
-                                accX += change.position.x - change.previousPosition.x
-                                accY += change.position.y - change.previousPosition.y
-                                if (abs(accX) > touchSlop && abs(accX) > abs(accY)) {
-                                    // غلبة أفقية: بدأ سحب البطاقة
-                                    dragging = true
-                                    lastX = change.position.x
-                                    lastTime = change.uptimeMillis
-                                    velocity = 0f
-                                    change.consume()
-                                } else if (abs(accY) > touchSlop) {
-                                    // غلبة عمودية: الإيماءة للقائمة نهائيًا
-                                    break
-                                }
-                            } else {
-                                val dx = change.position.x - lastX
-                                lastX = change.position.x
-                                // تقدير السرعة: إزاحة الحدث على زمنه، مع
-                                // تنعيم أسّي يمتص اهتزاز القياسات الفردية
-                                val dt = (change.uptimeMillis - lastTime).coerceAtLeast(1L)
-                                velocity = velocity * 0.72f + (dx * 1000f / dt) * 0.28f
-                                lastTime = change.uptimeMillis
-                                // مقاومة خفيفة بعد 60٪ من عرض البطاقة
-                                val limit = size.width * 0.6f
-                                // كتابة سنكرونية مباشرة داخل حلقة الإيماءة
-                                // (2.9.4): لا إلغاء/إطلاق كوروتين لكل حدث،
-                                // فلا تضيع دلتات حركة ولا ارتعاش — البطاقة
-                                // تلتصق بالإصبع 1:1 والسحب القصير قصير فعلًا.
-                                offsetX = (offsetX + dx).coerceIn(-limit, limit)
-                                change.consume()
-                            }
-                        }
-                        if (dragging) {
-                            // نهاية السحب: عتبة مسافة أو نفضة سريعة قصيرة —
-                            // الاتجاه الموجب حذف والسالب أرشفة كما قبل.
-                            // النفضة تُشترط مع تجاوز أدنى 12٪ من العرض حتى
-                            // لا تُفعّل حركة عابرة في مكانها.
-                            val x = offsetX
-                            val v = velocity
-                            val flingDelete = v > flingVelocity && x > size.width * 0.12f
-                            val flingArchive = v < -flingVelocity && x < -size.width * 0.12f
-                            settleJob = scope.launch {
-                                when {
-                                    x > threshold || flingDelete -> {
-                                        animate(x, size.width.toFloat() * 0.85f, animationSpec = tween(180)) { value, _ ->
-                                            offsetX = value
-                                        }
-                                        onSwipeDelete()
-                                        // إن أُلغي الحذف من حوار التأكيد تعود
-                                        // البطاقة لمكانها بدل بقائها مزاحة
-                                        offsetX = 0f
-                                    }
-                                    x < -threshold || flingArchive -> {
-                                        animate(x, -size.width.toFloat() * 0.85f, animationSpec = tween(180)) { value, _ ->
-                                            offsetX = value
-                                        }
-                                        onSwipeArchive()
-                                    }
-                                    else -> animate(
-                                        x,
-                                        0f,
-                                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
-                                    ) { value, _ ->
-                                        offsetX = value
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+            modifier = Modifier.graphicsLayer {
+                translationX = offsetXState.floatValue
+            }
         ) {
             GalaxyCard(
                 onClick = onClick,
