@@ -247,4 +247,63 @@ class NetworkLayoutTest {
         assertEquals(ids.size, layout.size)
         for (id in ids) assertNotNull("فُقدت العقدة $id", layout[id])
     }
+
+    /* ── اختبارات مساحة التنفّس — النسخة 2.11.0 (منطق زر ترتيب الذكي) ── */
+
+    /** أضف مسافة بين أي زوج عقد في التخطيط */
+    private fun minPairDistance(layout: Map<Long, NetworkLayout.Node>): Float {
+        val ids = layout.keys.toList()
+        var min = Float.MAX_VALUE
+        for (i in ids.indices) for (j in i + 1 until ids.size) {
+            val a = layout.getValue(ids[i])
+            val b = layout.getValue(ids[j])
+            val d = kotlin.math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
+            if (d < min) min = d
+        }
+        return min
+    }
+
+    @Test
+    fun `arrange enforces breathing distance around a large component`() {
+        // الحالة التي عانى منها زر الترتيب سابقًا: مكوّن مترابط بجوار
+        // مواقع منفردة — كانت الشبكة المتساوية تحشر المكوّن الكبير
+        val ids = (1L..14L).toList()
+        val edges = listOf(
+            1L to 2L, 2L to 3L, 3L to 4L, 4L to 5L, 5L to 1L, 2L to 6L, 6L to 7L, 7L to 8L
+        )
+        val layout = NetworkLayout.arrange(ids, edges)
+        val min = minPairDistance(layout)
+        assertTrue(
+            "مواقع متلاصقة بعد الترتيب (أقرب مسافة $min)",
+            min >= 95f
+        )
+    }
+
+    @Test
+    fun `arrange spreads lone sites with readable gaps`() {
+        // شبكة بلا روابط إطلاقًا — لا يجوز أن تتزاحم المنفردات
+        val layout = NetworkLayout.arrange((1L..15L).map { it * 7L }, emptyList())
+        val min = minPairDistance(layout)
+        assertTrue("منفردات متزاحمة (أقرب مسافة $min)", min >= 110f)
+    }
+
+    @Test
+    fun `arrange keeps linked neighbors far enough apart to follow`() {
+        // الروابط المنكمشة كانت الشكوى الثانية: رابط أقصر من قطر
+        // عقدتين يصعب تمييزه عن التصاق
+        val ids = (1L..14L).toList()
+        val edges = listOf(
+            1L to 2L, 2L to 3L, 3L to 4L, 4L to 5L, 5L to 1L, 2L to 6L, 6L to 7L, 7L to 8L
+        )
+        val layout = NetworkLayout.arrange(ids, edges)
+        for ((a, b) in edges) {
+            val na = layout.getValue(a)
+            val nb = layout.getValue(b)
+            val d = kotlin.math.hypot((na.x - nb.x).toDouble(), (na.y - nb.y).toDouble()).toFloat()
+            assertTrue(
+                "الرابط $a-$b منكمش ($d)",
+                d >= NetworkLayout.NODE_RADIUS * 2.2f
+            )
+        }
+    }
 }

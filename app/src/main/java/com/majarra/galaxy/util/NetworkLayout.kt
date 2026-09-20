@@ -21,7 +21,7 @@ import kotlin.math.sqrt
  *      تطفو المكونات غير المرتبطة بعيدًا.
  *   3) تطبيع نهائي: تحجيم وإزاحة لملء مساحة العالم بهامش ثابت.
  *
- * النسخة 2.10.0 — زر «ترتيب» (ضغط مطوّل على مكان فارغ في المجرة):
+ * النسخة 2.11.0 — زر «ترتيب» (ضغط مطوّل على مكان فارغ في المجرة):
  * الدالة `arrange` — ترتيب ذكي متعدد الاستراتيجيات يجعل شكل
  * الترابط مفهومًا بالنظر حتى مع مواقع كثيرة:
  *   1) تعقيم المدخلات: معرفات مكررة، روابط ذاتية، روابط مكررة
@@ -36,10 +36,16 @@ import kotlin.math.sqrt
  *      - مكوّن كثيف (فيه حلقات) → استرخاء قوة-موجهة بعدد تكرارات
  *        يتناقص كلما كبر المكوّن حتى يبقى الحساب سريعًا.
  *      - موقع منفرد → مركز خليته.
- *   4) تعبئة الخلايا: العالم يُقسَّم شبكةَ خلايا تناسب عدد
- *      المكونات، وكل مكوّن يُقاس ليملأ خليته (الكبيرة أولًا)،
- *      فتبقى المسافات بين المجموعات واضحة مهما كثرت.
- *   5) خطة الطوارئ الاستباقية — الدالة لا ترمي استثناءً ولا تُعيد
+ *   4) توزيع مساحة متناسب مع الحجم (2.11.0): العالم يُقسَّم
+ *      انقسامًا ثنائيًا حتميًا (خريطة شجرة) بحيث تنال كل مجموعة
+ *      مساحة بمقدار عدد مواقعها — المكوّن الكبير يبقى واسعًا
+ *      بجوار المنفردين بدل أن يُحشر في خلية صغيرة متساوية.
+ *   5) تمرير تنفّس (2.11.0): بعد التخطيط تُفحص كل أزواج المواقع،
+ *      وأي زوج أقرب من المسافة الدنيا (قطر العقدة + تنفسة تسمح
+ *      بقراءة الأسماء وتتبع الروابط) يُدفَع تدريجيًا حتى يتباعد،
+ *      ثم يُعاد توسيط الناتج وملء العالم بهامش ثابت — فلا تبقى
+ *      مواقع ملاصقة يصعب تمييزها مهما كانت طبيعة الشبكة.
+ *   6) خطة الطوارئ الاستباقية — الدالة لا ترمي استثناءً ولا تُعيد
  *      نتيجة ناقصة أبدًا: أي فشل في المسار الذكي يقع على `compute`
  *      (القوة-الموجهة الكاملة)، وأي فشل هناك يقع على شبكة صفوف
  *      وأعمدة مضمونة، ويُفحص الناتج نهائيًا (اكتمال + إحداثيات
@@ -73,6 +79,16 @@ object NetworkLayout {
 
     /** دورة كاملة بالراديان — لتوزيع زوايا التخطيط الشجري الشعاعي */
     private const val TAU = 6.2831853f
+
+    /**
+     * المسافة الدنيا بين مركزي أي موقعين بعد زر «ترتيب» — قطر العقدة
+     * (2 × 30) + تنفسة تُبقي الأسماء مقروءة والروابط قابلة للتتبع.
+     */
+    private const val MIN_SEPARATION = 130f
+
+    /** سقف جولات تمرير التنفّس — يتناقص مع كثرة المواقع ليبقى الحساب سريعًا */
+    private const val SEPARATION_ROUNDS = 160
+    private const val MIN_SEPARATION_ROUNDS = 40
 
     /** حد تنزل عنده تكرارات الاسترخاء في المكونات الكبيرة (يبقى الحساب سريعًا) */
     private const val LARGE_COMPONENT = 140
@@ -114,11 +130,13 @@ object NetworkLayout {
     }
 
     /* ══════════════════════════════════════════════════════════
-     * الترتيب الذكي — النسخة 2.10.0 (زر «ترتيب» بالضغط المطوّل).
+     * الترتيب الذكي — النسخة 2.11.0 (زر «ترتيب» بالضغط المطوّل).
      * ══════════════════════════════════════════════════════════ */
 
     /**
      * يرتّب المواقع ببنية نظيفة مفهومة بالنظر — هدف زر «ترتيب».
+     * المساحة موزّعة على المكونات بمقدار حجمها، ولا تبقى أي عقدتان
+     * أقرب من مسافة التنفّس الدنيا إلا عجزًا صريحًا عن سعة العالم.
      *
      * خطة الطوارئ الاستباقية (لا ترمي استثناءً ولا تُعيد نقصًا أبدًا):
      *  - مدخلات معقّمة أولًا (تكرار/روابط ذاتية/أطراف مجهولة).
@@ -249,39 +267,151 @@ object NetworkLayout {
                 layout
             }
 
-        // 3) تعبئة الخلايا: العالم شبكة خلايا بعدد المكونات، الكبيرة أولًا
+        // 3) توزيع مساحة متناسب مع الحجم (2.11.0): انقسام ثنائي حتمي
+        //    (خريطة شجرة) — كل مكوّن ينال مساحة بمقدار عدد مواقعه،
+        //    فلا يُحشر المكوّن الكبير في خلية صغيرة متساوية كما كانت
+        //    شبكة الخلايا السابقة. الأكبر أولًا ليأخذ القطاع الأول.
         val margin = NODE_RADIUS * 2.2f
         val usableW = WORLD_WIDTH - 2f * margin
         val usableH = WORLD_HEIGHT - 2f * margin
         val result = HashMap<Long, Node>(n)
 
-        if (components.size == 1) {
-            placeInCell(components[0], margin, margin, usableW, usableH, ids, result)
-            return result
-        }
-
-        val k = components.size
-        val rows = ceil(sqrt(k.toFloat() * usableH / usableW)).toInt().coerceAtLeast(1)
-        val cols = ceil(k.toFloat() / rows).toInt().coerceAtLeast(1)
-        val cellW = usableW / cols
-        val cellH = usableH / rows
-
-        // الخلايا تُملأ صفًا صفًا؛ المكونات الأكبر تأخذ الخلايا الأولى
         val ordered = components.sortedWith(
             compareByDescending<ComponentLayout> { it.members.size }
                 .thenBy { it.members.first() }
         )
-        for ((slot, comp) in ordered.withIndex()) {
-            val col = slot % cols
-            val row = slot / cols
-            placeInCell(
-                comp,
-                margin + col * cellW,
-                margin + row * cellH,
-                cellW,
-                cellH,
-                ids,
-                result
+        splitSlots(ordered, 0, ordered.size, margin, margin, usableW, usableH, ids, result)
+        return finalizeSpacing(result)
+    }
+
+    /**
+     * انقسام ثنائي حتمي لمستطيل العالم بين المكوّنات (خريطة شجرة
+     * بالانقسام المتكرر): يُقسَّم المكوّنات إلى نصفين متوازني الوزن
+     * (الوزن = عدد المواقع)، ويُقسَّم المستطيل على محوره الأطول
+     * بنسبة الوزنين، ثم يتكرر على كل نصف حتى يملأ كل مكوّن قطاعه.
+     * القطاعات لا تتداخل ببنائها (انقسام قاطع)، والأكبر ينال أكبر
+     * مساحة، فتبقى المجموعات متباعدة وواضحة مهما اختلفت أحجامها.
+     */
+    private fun splitSlots(
+        comps: List<ComponentLayout>,
+        from: Int,
+        to: Int,
+        cellX: Float,
+        cellY: Float,
+        cellW: Float,
+        cellH: Float,
+        ids: List<Long>,
+        out: HashMap<Long, Node>
+    ) {
+        if (to - from == 1) {
+            placeInCell(comps[from], cellX, cellY, cellW, cellH, ids, out)
+            return
+        }
+        var total = 0
+        for (i in from until to) total += comps[i].members.size
+        // نقطة الانقسام: أقرب تراكم أوزان إلى المنتصف (حتمية كاملة)
+        var acc = 0
+        var bestDiff = Int.MAX_VALUE
+        var split = from + 1
+        for (i in from until to - 1) {
+            acc += comps[i].members.size
+            val diff = kotlin.math.abs(total - 2 * acc)
+            if (diff < bestDiff) {
+                bestDiff = diff
+                split = i + 1
+            }
+        }
+        split = split.coerceIn(from + 1, to - 1)
+        var half = 0
+        for (i in from until split) half += comps[i].members.size
+        // النسبة محصورة في [0.3، 0.7] كي لا يولّد الانقسام شرائح ضيقة
+        val frac = (half.toFloat() / total.toFloat()).coerceIn(0.3f, 0.7f)
+        if (cellW >= cellH) {
+            val w1 = cellW * frac
+            splitSlots(comps, from, split, cellX, cellY, w1, cellH, ids, out)
+            splitSlots(comps, split, to, cellX + w1, cellY, cellW - w1, cellH, ids, out)
+        } else {
+            val h1 = cellH * frac
+            splitSlots(comps, from, split, cellX, cellY, cellW, h1, ids, out)
+            splitSlots(comps, split, to, cellX, cellY + h1, cellW, cellH - h1, ids, out)
+        }
+    }
+
+    /**
+     * تمرير التنفّس (2.11.0) — ضمان مسافة الترتيب: فحص كل أزواج
+     * المواقع بعد التخطيط، وأي زوج أقرب من [MIN_SEPARATION] يُدفَع
+     * نصف النقص على خط الوصل (تطابق نادر: إزاحة حتمية تفك الاشتباك)،
+     * جولةً بعد جولة حتى استقرار المواقع أو بلوغ السقف (السقف
+     * يتناقص مع كثرة المواقع ليبقى الحساب سريعًا). ثم يُوسَّط الناتج
+     * ويُحجَّم لملء العالم بهامش [NODE_RADIUS] * 2.2 — والتحجيم
+     * صغيرٌ فقط عند الضرورة (سقفه 1) حتى لا يُفقد ما كسبه التنفّس.
+     */
+    private fun finalizeSpacing(result: HashMap<Long, Node>): HashMap<Long, Node> {
+        val m = result.size
+        if (m < 2) return result
+        val ids = result.keys.toLongArray()
+        ids.sort()
+        val xs = FloatArray(m) { result.getValue(ids[it]).x }
+        val ys = FloatArray(m) { result.getValue(ids[it]).y }
+        val minDistSq = MIN_SEPARATION * MIN_SEPARATION
+        val maxRounds = if (m <= 60) {
+            SEPARATION_ROUNDS
+        } else {
+            max(MIN_SEPARATION_ROUNDS, SEPARATION_ROUNDS * 60 / m)
+        }
+
+        var rounds = 0
+        var moved = true
+        while (moved && rounds < maxRounds) {
+            moved = false
+            rounds++
+            for (i in 0 until m) {
+                for (j in i + 1 until m) {
+                    var dx = xs[i] - xs[j]
+                    var dy = ys[i] - ys[j]
+                    var distSq = dx * dx + dy * dy
+                    if (distSq >= minDistSq) continue
+                    if (distSq < 0.01f) {
+                        // تطابق نادر: إزاحة حتمية صغيرة تفك الاشتباك
+                        dx = (i - j).toFloat()
+                        dy = 0.5f
+                        distSq = dx * dx + dy * dy
+                    }
+                    val dist = sqrt(distSq)
+                    val push = (MIN_SEPARATION - dist) * 0.5f
+                    val ux = dx / dist
+                    val uy = dy / dist
+                    xs[i] += ux * push
+                    ys[i] += uy * push
+                    xs[j] -= ux * push
+                    ys[j] -= uy * push
+                    moved = true
+                }
+            }
+        }
+
+        // إعادة التوسيط والملء: صغيرٌ عند التجاوز فقط، لا تمديد فوق الطبيعي
+        var loX = Float.MAX_VALUE
+        var loY = Float.MAX_VALUE
+        var hiX = -Float.MAX_VALUE
+        var hiY = -Float.MAX_VALUE
+        for (i in 0 until m) {
+            loX = min(loX, xs[i]); hiX = max(hiX, xs[i])
+            loY = min(loY, ys[i]); hiY = max(hiY, ys[i])
+        }
+        val spanX = max(hiX - loX, 1f)
+        val spanY = max(hiY - loY, 1f)
+        val margin = NODE_RADIUS * 2.2f
+        val scale = min(
+            min((WORLD_WIDTH - 2f * margin) / spanX, (WORLD_HEIGHT - 2f * margin) / spanY),
+            1f
+        )
+        val offsetX = (WORLD_WIDTH - spanX * scale) / 2f
+        val offsetY = (WORLD_HEIGHT - spanY * scale) / 2f
+        for (i in 0 until m) {
+            result[ids[i]] = Node(
+                offsetX + (xs[i] - loX) * scale,
+                offsetY + (ys[i] - loY) * scale
             )
         }
         return result
