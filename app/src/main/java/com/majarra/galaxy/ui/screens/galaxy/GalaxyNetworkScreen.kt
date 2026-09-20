@@ -25,12 +25,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CenterFocusWeak
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Link
@@ -69,9 +71,12 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -79,6 +84,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -97,6 +103,9 @@ import com.majarra.galaxy.domain.usecase.UnlinkSitesUseCase
 import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.util.NetworkLayout
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -106,11 +115,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -142,6 +153,15 @@ import kotlin.math.sqrt
  * كان المركز يُحفظ على موضع الإصبع الأول، وعند نزول الثاني ينتقل
  * لمنتصف المسافة بينهما فيُطبَّق الفرق القديم في لقطة واحدة:
  * القفزة المفاجئة التي كانت تحدث عند بدء التكبير.
+ *
+ * النسخة 2.10.0 — زر «ترتيب» (تعليمات هذه الجلسة): عندما تكثر
+ * المواقع المرتبطة يتعقّد شكل الشبكة بالنظر، فصار بالإمكان
+ * الضغط المطوّل على أي مكان فارغ في المجرة (ليس فوق موقع) ليظهر
+ * زر «ترتيب» عند الإصبع؛ ضغطه يستدعي الترتيب الذكي في
+ * `NetworkLayout.arrange` (فصل المكونات + شجري شعاعي للأشجار +
+ * قوة-موجهة متكيفة للكثيف + تعبئة خلايا)، ثم تنزلق كل عقدة من
+ * موضعها الحالي إلى موضعها الجديد بانيميشن واحد، ويُثبَّت الترتيب
+ * إزاحاتٍ يدوية، ويلائم العرض نفسه للشبكة كاملة تلقائيًا.
  * ============================================================ */
 
 /** عقدة غادر موقعها (حُذف) حديثًا — تُرسم وهي تذبل بدل الاختفاء المفاجئ (مقترح 8) */
@@ -296,6 +316,52 @@ class GalaxyNetworkViewModel @Inject constructor(
         }
     }
 
+    /* ── الترتيب الذكي (2.10.0): زر «ترتيب» بالضغط المطوّل على الفراغ ── */
+
+    /** أهداف الترتيب الذكي — يُبثّ مرة لكل ضغطة زر «ترتيب» */
+    private val _arrangements =
+        MutableSharedFlow<Map<Long, NetworkLayout.Node>>(extraBufferCapacity = 1)
+    val arrangements: SharedFlow<Map<Long, NetworkLayout.Node>> = _arrangements
+
+    /** هل حساب ترتيب جارٍ الآن — يمنع الضغطات المكررة عملاً مكررًا */
+    private val arranging = MutableStateFlow(false)
+
+    /**
+     * يطلب الترتيب الذكي للشبكة الحالية:
+     *  - لا شيء إن كانت الشاشة فارغة أو حسابًا سابقًا لا يزال يجري.
+     *  - الحساب على [Dispatchers.Default] حتى لا تتجمد الواجهة مع
+     *    مواقع كثيرة (الخوارزمية تربيعية في المكونات الكثيفة).
+     *  - النتيجة تُبثّ للأحداث لتلتقطها الشاشة وتحرّك العقد إليها.
+     */
+    fun arrangeSites() {
+        if (arranging.value) return
+        val sites = state.value.sites
+        val links = state.value.links
+        if (sites.isEmpty()) return
+        viewModelScope.launch {
+            arranging.value = true
+            val targets = withContext(Dispatchers.Default) {
+                NetworkLayout.arrange(
+                    nodeIds = sites.map { it.id },
+                    edges = links.map { it.fromSiteId to it.toSiteId }
+                )
+            }
+            arranging.value = false
+            if (targets.isNotEmpty()) _arrangements.tryEmit(targets)
+        }
+    }
+
+    /**
+     * يثبّت الترتيب بعد اكتمال انيميشن الانتقال: تُحفظ المواضع
+     * الجديدة إزاحاتٍ يدوية (فوق التوزيع الأساسي) كما لو رتّبها
+     * المستخدم بيده. مواقع حُذفت أثناء الانيميشن تُهمل بأمان.
+     */
+    fun applyArrangement(targets: Map<Long, NetworkLayout.Node>) {
+        val liveIds = state.value.sites.mapTo(HashSet()) { it.id }
+        _overrides.value = targets.filterKeys { it in liveIds }
+        message("تم ترتيب الشبكة — المكونات منفصلة والروابط واضحة")
+    }
+
     private fun message(text: String) {
         _events.tryEmit(text)
     }
@@ -371,6 +437,16 @@ private data class FitAnim(
     val progress: Animatable<Float, AnimationVector1D>
 )
 
+/**
+ * حالة انيميشن الترتيب الجاري (2.10.0): كل عقدة تنزلق من موضعها
+ * اللحظي (from) إلى موضع الترتيب الذكي (to) على مؤشر تقدم واحد.
+ */
+private data class ArrangeAnim(
+    val from: Map<Long, NetworkLayout.Node>,
+    val to: Map<Long, NetworkLayout.Node>,
+    val progress: Animatable<Float, AnimationVector1D>
+)
+
 /** نقطة في ذيل المذنّب أثناء سحب عقدة (مقترح 2) */
 private data class TrailPoint(val x: Float, val y: Float, val at: Long)
 
@@ -388,6 +464,9 @@ private data class GalaxyStar(
 
 /** دورة كاملة بالراديان — للساعات الدائرية أدناه */
 private const val TWO_PI = 6.2831853f
+
+/** مدة الضغط المطوّل على الفراغ حتى يظهر زر «ترتيب» (2.10.0) */
+private const val LONG_PRESS_MS = 480L
 
 /** نصف قطر عقدة الموقع حسب عدد روابطها — المحورية أكبر (مقترح 28) */
 private fun nodeRadiusFor(degree: Int): Float =
@@ -454,6 +533,13 @@ fun GalaxyNetworkScreen(
     var menuSiteId by remember { mutableStateOf<Long?>(null) }
     var hintSeen by rememberSaveable { mutableStateOf(false) }
 
+    // الترتيب (2.10.0): مرساة زر «ترتيب» عند مكان الضغط المطوّل على
+    // الفراغ (إحداثيات شاشة)، وانيميشن الانتقال الجاري إن وُجد
+    var arrangeAnchor by remember { mutableStateOf<Offset?>(null) }
+    var arrangeAnim by remember { mutableStateOf<ArrangeAnim?>(null) }
+    val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
+
     val textMeasurer = rememberTextMeasurer()
     val layoutDirection = LocalLayoutDirection.current
 
@@ -508,6 +594,34 @@ fun GalaxyNetworkScreen(
     // رسائل العمليات على سنابار الشاشة الرئيسية (قادمة من الجذر)
     LaunchedEffect(Unit) {
         viewModel.events.collect { snackbarHostState.showSnackbar(it) }
+    }
+
+    /* ── 2.10.0: استقبال أهداف الترتيب الذكي — تنزلق العقد إلى
+     * مواضعها الجديدة ثم يلائم العرض الشبكة كاملة تلقائيًا ── */
+    LaunchedEffect(Unit) {
+        viewModel.arrangements.collect { targets ->
+            if (targets.isEmpty()) return@collect
+            // لقطة المواضع الحالية لحظة الضغط — منطلق الانزلاق
+            val current = viewModel.state.value.positions
+            val from = HashMap<Long, NetworkLayout.Node>(targets.size)
+            for ((id, to) in targets) from[id] = current[id] ?: to
+            arrangeAnchor = null
+            val anim = ArrangeAnim(from, targets, Animatable(0f))
+            arrangeAnim = anim
+            anim.progress.animateTo(1f, tween(950, easing = FastOutSlowInEasing))
+            // تثبيت الترتيب إزاحاتٍ يدوية (يمرّر حتى لو حُذف موقع أثناءها)
+            viewModel.applyArrangement(targets)
+            arrangeAnim = null
+            // ملاءمة تلقائية: الشبكة المرتبة تظهر كاملة في الشاشة
+            if (viewport != IntSize.Zero) {
+                val (toPan, toZoom) = transform.fitTarget(viewport)
+                val fit = FitAnim(transform.pan, toPan, transform.zoom, toZoom, Animatable(0f))
+                fitAnim = fit
+                fit.progress.animateTo(1f, tween(420, easing = FastOutSlowInEasing))
+                transform.apply(fit.toPan, fit.toZoom)
+                fitAnim = null
+            }
+        }
     }
 
     /* ── مقترح 22: ملاءمة عرض ناعمة بنابض بدل القفزة الفورية ── */
@@ -577,6 +691,33 @@ fun GalaxyNetworkScreen(
     // نجوم السماء — نفس السماء كل مرة (مقترح 15)
     val stars = remember { galaxyStars(110) }
 
+    /* ── 2.10.0: مواضع الرسم — أثناء انيميشن الترتيب تُستوفى بين
+     * الموضع القديم والجديد لكل عقدة، وبعده تعود مواضع الحالة.
+     * موقع أُضيف أو حُذف أثناء الانيميشن يرسم بموضع حالته مباشرة. ── */
+    val runningArrange = arrangeAnim
+    val positions: Map<Long, NetworkLayout.Node> = if (runningArrange != null) {
+        val t = runningArrange.progress.value
+        val merged = HashMap(ui.positions)
+        for ((id, to) in runningArrange.to) {
+            if (id !in ui.positions) continue
+            val from = runningArrange.from[id] ?: to
+            merged[id] = NetworkLayout.Node(
+                from.x + (to.x - from.x) * t,
+                from.y + (to.y - from.y) * t
+            )
+        }
+        merged
+    } else {
+        ui.positions
+    }
+
+    // مصدر المواضع لطبقة الإيماءات: أهداف الترتيب أثناء انيميشنه
+    // (العقد تتجه إليها) وإلا مواضع الـ ViewModel الحية
+    val positionsNow: () -> Map<Long, NetworkLayout.Node> = {
+        val a = arrangeAnim
+        if (a != null) a.to else viewModel.state.value.positions
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -600,7 +741,7 @@ fun GalaxyNetworkScreen(
                             val d = s.links.count { it.fromSiteId == id || it.toSiteId == id }
                             nodeRadiusFor(d)
                         }
-                        val hitId = hitNode(down.position, transform, viewModel.state.value, radiusFn)
+                        val hitId = hitNode(down.position, transform, positionsNow(), radiusFn)
                         // التمييز بين النقرة والسحب يعتمد على الإزاحة الصافية من
                         // نقطة اللمس الأولى، لا على المسافة الكلية — يمنع
                         // تصنيف الهزّ الخفيف كسحب عندما يعود الإصبع قريبًا.
@@ -608,6 +749,24 @@ fun GalaxyNetworkScreen(
                         var pinched = false
                         var lastCentroid = down.position
                         var lastSpan = 0f
+
+                        // الترتيب (2.10.0): مؤقّت ضغط مطوّل يعمل فقط فوق
+                        // مكان فارغ (لا موقع تحته) وفيه مواقع تُرتَّب.
+                        // إن ثبت الإصبع حتى نهاية المهلة يظهر زر «ترتيب»
+                        // عند موضع الإصبع مع اهتزاز تأكيد، وإلغاؤه يكون
+                        // بالحركة أو بنزول إصبع ثانٍ أو برفع الإصبع.
+                        var longPressDone = false
+                        val longPressJob: Job? =
+                            if (hitId == null && viewModel.state.value.sites.isNotEmpty()) {
+                                launch {
+                                    delay(LONG_PRESS_MS)
+                                    longPressDone = true
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    arrangeAnchor = down.position
+                                }
+                            } else {
+                                null
+                            }
 
                         var pressed: List<PointerInputChange>
                         var prevCount = 1 // الإيماءة بدأت بإصبع واحد
@@ -628,6 +787,7 @@ fun GalaxyNetworkScreen(
                             if (pressed.size >= 2) {
                                 // تكبير بإصبعين مع تحريك مركز القرصة
                                 pinched = true
+                                longPressJob?.cancel() // إصبع ثانٍ يلغي الترتيب
                                 val centroid = pressed
                                     .fold(Offset.Zero) { acc, c -> acc + c.position } *
                                     (1f / pressed.size)
@@ -653,46 +813,61 @@ fun GalaxyNetworkScreen(
                                 pressed.forEach { it.consume() }
                             } else {
                                 val change = pressed.first()
-                                if (lastSpan > 0f || countChanged) {
-                                    // إصبع واحد بعد قرصة أو بعد تغيّر عدد
-                                    // الأصابع: تحديث المراجع بلا قفزة
-                                    lastCentroid = change.position
-                                    lastSpan = 0f
-                                }
-                                val delta = change.position - change.previousPosition
-                                val displacement = (change.position - down.position).getDistance()
-                                if (displacement > touchSlop || moved) {
-                                    moved = true
-                                    hintSeen = true
-                                    if (pinched) {
-                                        transform.panBy(delta)
-                                    } else if (hitId != null) {
-                                        // سحب عقدة: تحويل حركة الشاشة لوحدات العالم
-                                        draggingId = hitId
-                                        // مقترح 2: نقطة جديدة في ذيل المذنّب
-                                        val world = transform.screenToWorld(change.position)
-                                        trail.add(TrailPoint(world.x, world.y, System.currentTimeMillis()))
-                                        while (trail.size > 44) trail.removeAt(0)
-                                        viewModel.dragNodeBy(
-                                            hitId,
-                                            delta.x / transform.zoom,
-                                            delta.y / transform.zoom
-                                        )
-                                    } else {
-                                        transform.panBy(delta)
-                                    }
+                                if (longPressDone) {
+                                    // زر الترتيب ظهر بالفعل: الإيماءة انتهت
+                                    // عمليًا — تُستهلك الأحداث الباقية حتى
+                                    // الرفع فلا يتحرك شيء تحت الإصبع
                                     change.consume()
+                                } else {
+                                    if (lastSpan > 0f || countChanged) {
+                                        // إصبع واحد بعد قرصة أو بعد تغيّر عدد
+                                        // الأصابع: تحديث المراجع بلا قفزة
+                                        lastCentroid = change.position
+                                        lastSpan = 0f
+                                    }
+                                    val delta = change.position - change.previousPosition
+                                    val displacement = (change.position - down.position).getDistance()
+                                    if (displacement > touchSlop || moved) {
+                                        moved = true
+                                        hintSeen = true
+                                        // الحركة تلغي مؤقّت الترتيب وتُخفي
+                                        // زره إن كان قد ظهر — التحريك أولًا
+                                        longPressJob?.cancel()
+                                        arrangeAnchor = null
+                                        if (pinched) {
+                                            transform.panBy(delta)
+                                        } else if (hitId != null && arrangeAnim == null) {
+                                            // سحب عقدة: تحويل حركة الشاشة لوحدات العالم
+                                            // (السحب مقفل أثناء انيميشن الترتيب
+                                            // حتى لا تتصارع يد المستخدم مع
+                                            // المواضع المنزلاقة)
+                                            draggingId = hitId
+                                            // مقترح 2: نقطة جديدة في ذيل المذنّب
+                                            val world = transform.screenToWorld(change.position)
+                                            trail.add(TrailPoint(world.x, world.y, System.currentTimeMillis()))
+                                            while (trail.size > 44) trail.removeAt(0)
+                                            viewModel.dragNodeBy(
+                                                hitId,
+                                                delta.x / transform.zoom,
+                                                delta.y / transform.zoom
+                                            )
+                                        } else {
+                                            transform.panBy(delta)
+                                        }
+                                        change.consume()
+                                    }
                                 }
                             }
                         } while (pressed.isNotEmpty())
 
+                        longPressJob?.cancel() // رفع الإصبع يلغي المؤقّت إن لم يكتمل
                         draggingId = null
 
                         // نقرة قصيرة على عقدة: فتح القائمة أو إتمام الربط
-                        if (!moved && !pinched && hitId != null) {
+                        if (!moved && !pinched && !longPressDone && hitId != null) {
                             hintSeen = true
                             // مقترح 4: موجة نقر تنطلق من العقدة
-                            viewModel.state.value.positions[hitId]?.let { node ->
+                            positionsNow()[hitId]?.let { node ->
                                 ripples.add(RipplePoint(node.x, node.y, System.currentTimeMillis()))
                                 while (ripples.size > 8) ripples.removeAt(0)
                             }
@@ -701,6 +876,9 @@ fun GalaxyNetworkScreen(
                             } else {
                                 menuSiteId = hitId
                             }
+                        } else if (!moved && !pinched && !longPressDone && hitId == null) {
+                            // نقرة على الفراغ تُغلق زر الترتيب إن كان مفتوحًا
+                            arrangeAnchor = null
                         }
                     }
                 }
@@ -764,17 +942,17 @@ fun GalaxyNetworkScreen(
             val worldCenter = Offset(NetworkLayout.WORLD_WIDTH / 2f, NetworkLayout.WORLD_HEIGHT / 2f)
             var centroidX = 0f
             var centroidY = 0f
-            if (ui.positions.isNotEmpty()) {
-                for (n in ui.positions.values) {
+            if (positions.isNotEmpty()) {
+                for (n in positions.values) {
                     centroidX += n.x
                     centroidY += n.y
                 }
-                centroidX /= ui.positions.size
-                centroidY /= ui.positions.size
+                centroidX /= positions.size
+                centroidY /= positions.size
             }
             val heart = Offset(centroidX * renderZoom + renderPan.x, centroidY * renderZoom + renderPan.y)
 
-            if (ui.positions.isNotEmpty()) {
+            if (positions.isNotEmpty()) {
                 // مقترح 19: توهج مركزي يتنفس خلف قلب الشبكة
                 val glowAlpha = 0.07f + 0.05f * sin(tSlow + 1f)
                 val glowRadius = (300f * renderZoom).coerceIn(90f, 640f)
@@ -799,7 +977,7 @@ fun GalaxyNetworkScreen(
                 }
             }
 
-            if (ui.positions.isEmpty()) return@Canvas
+            if (positions.isEmpty()) return@Canvas
 
             /* ═══ عالم المجرة: تحويل واحد يحمل الخطوط والعقد والأسماء ═══ */
             val pulse = linkPulse.value
@@ -816,7 +994,7 @@ fun GalaxyNetworkScreen(
             }) {
                 // أقصى بعد عن المركز — لتدريج الظهور المتدرج (مقترح 5)
                 var maxDist = 1f
-                for (n in ui.positions.values) {
+                for (n in positions.values) {
                     val dx = n.x - worldCenter.x
                     val dy = n.y - worldCenter.y
                     val d = sqrt(dx * dx + dy * dy)
@@ -828,9 +1006,9 @@ fun GalaxyNetworkScreen(
 
                 /* ── 1) الخطوط أولًا حتى تمر تحت العقد (مقترحات 9-14 و29) ── */
                 for ((index, link) in ui.links.withIndex()) {
-                    val fromNode = ui.positions[link.fromSiteId]
+                    val fromNode = positions[link.fromSiteId]
                         ?: ui.departing[link.fromSiteId]?.node ?: continue
-                    val toNode = ui.positions[link.toSiteId]
+                    val toNode = positions[link.toSiteId]
                         ?: ui.departing[link.toSiteId]?.node ?: continue
                     val a = Offset(fromNode.x, fromNode.y)
                     val b = Offset(toNode.x, toNode.y)
@@ -932,9 +1110,9 @@ fun GalaxyNetworkScreen(
 
                 /* ── 2) العقد وأسمائها (مقترحات 1 و3 و5-7 و27-28 و30) ── */
                 val linkingFrom = ui.linkingFromId
-                val sourceNode = linkingFrom?.let { ui.positions[it] }
+                val sourceNode = linkingFrom?.let { positions[it] }
                 for (site in ui.sites) {
-                    val node = ui.positions[site.id] ?: continue
+                    val node = positions[site.id] ?: continue
                     val isSource = linkingFrom == site.id
                     val isCandidate = linkingFrom != null && !isSource
 
@@ -1185,7 +1363,7 @@ fun GalaxyNetworkScreen(
         // ── تلميح الاستخدام الأول — يختفي بعد أول تفاعل ──
         if (!hintSeen && !ui.isLoading && ui.sites.isNotEmpty()) {
             Text(
-                text = "اسحب للتحريك • قرّب بإصبعين • انقر موقعًا للخيارات",
+                text = "اسحب للتحريك • قرّب بإصبعين • انقر موقعًا للخيارات • اضغط مطولًا على الفراغ للترتيب",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -1227,6 +1405,60 @@ fun GalaxyNetworkScreen(
                     .size(44.dp)
             ) {
                 Icon(Icons.Filled.CenterFocusWeak, contentDescription = "ملاءمة العرض")
+            }
+        }
+
+        /* ── زر «ترتيب» (2.10.0) — يظهر عند مكان الضغط المطوّل على
+         * الفراغ، وينبثق بحركة توسع، وضغطه يستدعي الترتيب الذكي.
+         * يُثبَّت داخل حدود الشاشة كي لا يخرج عن حافة قريبة. ── */
+        val anchor = arrangeAnchor
+        if (anchor != null && arrangeAnim == null && !ui.isLoading && ui.sites.isNotEmpty()) {
+            val pop = remember { Animatable(0f) }
+            LaunchedEffect(anchor) {
+                pop.snapTo(0f)
+                pop.animateTo(1f, tween(220, easing = FastOutSlowInEasing))
+            }
+            // أبعاد تقريبية بالبكسل — لتثبيت الزر داخل الشاشة (dp × الكثافة)
+            val chipW = 150f * density.density
+            val chipH = 52f * density.density
+            val chipPad = 10f
+            val chipX = (anchor.x - chipW / 2f).coerceIn(
+                chipPad, (viewport.width - chipW - chipPad).coerceAtLeast(chipPad)
+            )
+            val chipY = (anchor.y + 24f).coerceIn(
+                chipPad, (viewport.height - chipH - chipPad).coerceAtLeast(chipPad)
+            )
+            Surface(
+                onClick = {
+                    arrangeAnchor = null
+                    viewModel.arrangeSites()
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset { IntOffset(chipX.roundToInt(), chipY.roundToInt()) }
+                    .graphicsLayer {
+                        val s = 0.6f + 0.4f * pop.value
+                        scaleX = s
+                        scaleY = s
+                        alpha = pop.value
+                    },
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shadowElevation = 6.dp
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.AutoAwesome,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = "ترتيب", style = MaterialTheme.typography.titleMedium)
+                }
             }
         }
     }
@@ -1303,13 +1535,13 @@ fun GalaxyNetworkScreen(
 private fun hitNode(
     screen: Offset,
     transform: GalaxyTransform,
-    ui: GalaxyNetworkUiState,
+    positions: Map<Long, NetworkLayout.Node>,
     radiusOf: (Long) -> Float
 ): Long? {
     val world = transform.screenToWorld(screen)
     var bestId: Long? = null
     var bestDist = Float.MAX_VALUE
-    for ((id, node) in ui.positions) {
+    for ((id, node) in positions) {
         val dx = node.x - world.x
         val dy = node.y - world.y
         val dist = sqrt(dx * dx + dy * dy)
