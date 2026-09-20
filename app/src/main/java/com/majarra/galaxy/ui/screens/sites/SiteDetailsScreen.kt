@@ -44,6 +44,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -93,7 +94,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -607,13 +607,15 @@ fun SiteDetailsScreen(
                 Text("طارئ")
             }
 
-            // إصلاح UX (طلب هذه الجلسة): صفوف التبويبات العلوية كانت تُفتح
-            // بالنقر فقط، فيضطر المستخدم للوصول لشريط بعيد أعلى الشاشة في
-            // كل تبديل. الحل الاحترافي القياسي في الأندرويد: ربط شريط
-            // التبويبات بـ `HorizontalPager` فيصبح بالإمكان أيضًا التنقل
-            // بالسحب يمينًا/يسارًا فوق محتوى أي تبويب — بلا التخلي عن
-            // النقر المباشر على الشريحة لمن يفضّله. الشريط ما زال يُمرَّر
-            // تلقائيًا ليبقى التبويب النشط ظاهرًا (الإصلاح السابق).
+            // إصلاح UX (2.9.2 + تتمته في 2.9.3): صفوف التبويبات العلوية
+            // كانت تُفتح بالنقر فقط، فيضطر المستخدم للوصول لشريط بعيد أعلى
+            // الشاشة في كل تبديل. الحل الاحترافي القياسي في الأندرويد: ربط
+            // شريط التبويبات بـ `HorizontalPager` فيصبح بالإمكان أيضًا التنقل
+            // بالسحب يمينًا/يسارًا فوق محتوى أي تبويب — بلا التخلي عن النقر
+            // المباشر على الشريحة لمن يفضّله. الشريط ما زال يُمرَّر تلقائيًا
+            // ليبقى التبويب النشط ظاهرًا. وفي 2.9.3 أُضيف `weight(1f)`
+            // للمُصفّح: بدونه كان يُقاس بارتفاع العمود كاملًا فيمتد خارج
+            // أسفل الشاشة ويُقصّ آخر محتوى كل تبويب (لا يصل إليه التمرير).
             val tabsScrollState = rememberLazyListState()
             val pagerState = rememberPagerState(
                 initialPage = DetailsTab.entries.indexOf(tab)
@@ -659,7 +661,9 @@ fun SiteDetailsScreen(
                 // متتابعة بفاصل 30 مللي ثانية عبر StaggeredItem بداخله.
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
                 ) { page ->
                     when (DetailsTab.entries[page]) {
                         DetailsTab.INFO -> InfoTab(s, categories)
@@ -1288,12 +1292,12 @@ private fun WithdrawalsTab(
 ) {
     var showWithdrawDialog by remember { mutableStateOf(false) }
     val openCount = withdrawals.count { it.status != WithdrawalStatus.RETURNED }
-    // إصلاح تعثّر التمرير: نفس حل شاشة المواقع — نتذكر السجلات التي
-    // ظهرت بالفعل خارج عناصر LazyColumn حتى لا يعاد تشغيل تأخير
-    // ظهورها عند كل دخول/خروج من منطقة الرؤية أثناء التمرير.
-    val revealedWithdrawalIds = remember { mutableStateListOf<Long>() }
+    // إصلاح تعثّر التمرير (2.9.3): نفس حل شاشة المواقع — أثناء
+    // التمرير النشط تظهر العناصر فورًا بلا تأخير ولا حركة.
+    val listState = rememberLazyListState()
 
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -1334,8 +1338,7 @@ private fun WithdrawalsTab(
                 StaggeredItem(
                     index = index,
                     trigger = "withdrawals-tab",
-                    alreadyRevealed = w.id in revealedWithdrawalIds,
-                    onRevealed = { revealedWithdrawalIds.add(w.id) }
+                    immediate = listState.isScrollInProgress
                 ) {
                     WithdrawalRow(
                         w = w,
@@ -1546,8 +1549,9 @@ private fun WithdrawDialog(
  */
 @Composable
 private fun EmergencyTab(visits: List<EmergencyVisit>) {
-    // إصلاح تعثّر التمرير: نفس حل شاشة المواقع.
-    val revealedVisitIds = remember { mutableStateListOf<Long>() }
+    // إصلاح تعثّر التمرير (2.9.3): نفس حل شاشة المواقع.
+    // (يُعلَن قبل العودة المبكرة — الدوال المركّبة تُستدعى دائمًا وبلا شروط)
+    val listState = rememberLazyListState()
     if (visits.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.WarningAmber,
@@ -1558,6 +1562,7 @@ private fun EmergencyTab(visits: List<EmergencyVisit>) {
     }
 
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -1576,8 +1581,7 @@ private fun EmergencyTab(visits: List<EmergencyVisit>) {
             StaggeredItem(
                 index = index,
                 trigger = "emergency-tab",
-                alreadyRevealed = visit.id in revealedVisitIds,
-                onRevealed = { revealedVisitIds.add(visit.id) }
+                immediate = listState.isScrollInProgress
             ) {
                 EmergencyVisitCard(visit)
             }
@@ -1715,7 +1719,12 @@ private fun MaintenanceTab(
         seenLogIds.value = current
     }
 
+    // إصلاح تعثّر التمرير (2.9.3): نفس الحل — أثناء التمرير النشط
+    // تظهر العناصر فورًا بلا تأخير.
+    val listState = rememberLazyListState()
+
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -1894,9 +1903,11 @@ private fun TimelineLogRow(
     onDelete: () -> Unit
 ) {
     // التقدم يبدأ صفرًا عند أول تركيب للسجل ويتحرك بتأخير متزايد
+    // مقصور على أول 8 سجلات (إصلاح 2.9.3): بلا سقف كان السجل رقم 20
+    // ينتظر ~4 ثوانٍ قبل أن يظهر.
     val progress by animateFloatAsState(
         targetValue = 1f,
-        animationSpec = tween(durationMillis = 420, delayMillis = 250 + index * 180),
+        animationSpec = tween(durationMillis = 420, delayMillis = 250 + minOf(index, 8) * 180),
         label = "timeline-$index"
     )
     // نبض الحلقة للسجل الجديد (اختيار 36): حلقتان متعاقبتان
@@ -2124,12 +2135,14 @@ private fun AttachmentsTab(
     val context = LocalContext.current
     val images = attachments.filter { it.fileType == AttachmentType.IMAGE }
     val files = attachments.filter { it.fileType != AttachmentType.IMAGE }
-    // إصلاح تعثّر التمرير: نفس حل شاشة المواقع، لكل من شبكة الصور
-    // وقائمة الملفات (كلٌ منهما قائمة كسولة منفصلة).
-    val revealedImageIds = remember { mutableStateListOf<Long>() }
-    val revealedFileIds = remember { mutableStateListOf<Long>() }
+    // إصلاح تعثّر التمرير (2.9.3): نفس حل شاشة المواقع، لكل من شبكة
+    // الصور وقائمة الملفات (كلٌ منهما قائمة كسولة منفصلة) — أثناء
+    // أي تمرير نشط تظهر العناصر فورًا بلا تأخير ولا حركة.
+    val listState = rememberLazyListState()
+    val gridState = rememberLazyGridState()
 
     LazyColumn(
+        state = listState,
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -2165,6 +2178,7 @@ private fun AttachmentsTab(
                 // ضغطة طويلة = حذف.
                 val rows = (images.size + 2) / 3
                 LazyVerticalGrid(
+                    state = gridState,
                     columns = GridCells.Fixed(3),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -2179,8 +2193,7 @@ private fun AttachmentsTab(
                         StaggeredItem(
                             index = index,
                             trigger = images.size,
-                            alreadyRevealed = image.id in revealedImageIds,
-                            onRevealed = { revealedImageIds.add(image.id) }
+                            immediate = gridState.isScrollInProgress || listState.isScrollInProgress
                         ) {
                             var loaded by remember(image.id) { mutableStateOf(false) }
                             Box(
@@ -2229,8 +2242,7 @@ private fun AttachmentsTab(
                 StaggeredItem(
                     index = index + 1,
                     trigger = "attachments-tab",
-                    alreadyRevealed = file.id in revealedFileIds,
-                    onRevealed = { revealedFileIds.add(file.id) }
+                    immediate = listState.isScrollInProgress
                 ) {
                 GalaxyCard(onClick = {
                     // فتح الملف في عارض خارجي (إجابة الاسئله.md)

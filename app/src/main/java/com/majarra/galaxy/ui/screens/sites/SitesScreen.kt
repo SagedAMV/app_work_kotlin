@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
@@ -56,7 +57,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -260,14 +260,11 @@ fun SitesScreen(
         is ListFilter.ByCategory -> "cat-${currentFilter.categoryId}"
         is ListFilter.Archived -> "archived"
     }
-    // إصلاح تعثّر التمرير: نحفظ هنا (خارج عناصر LazyColumn) أي موقع
-    // ظهر بالفعل منذ آخر تغيير لـ staggerTrigger. عناصر LazyColumn
-    // تُنزع من التركيب وتُعاد عند التمرير خارج الشاشة وداخلها؛ بدون
-    // هذا الحفظ الخارجي كان كل عنصر يعيد تشغيل تأخير ظهوره الكامل في
-    // كل مرة يدخل فيها الشاشة أثناء التمرير (نزولًا أو صعودًا) فيبدو
-    // التمرير متقطعًا. الآن العنصر يتحرك مرة واحدة فقط ثم يظهر فورًا
-    // في كل تمرير لاحق طالما لم يتغيّر البحث/الفلتر.
-    val revealedSiteIds = remember(staggerTrigger) { mutableStateListOf<Long>() }
+    // إصلاح تعثّر التمرير (2.9.3): حالة القائمة تُقرأ منها
+    // `isScrollInProgress` — أي عنصر يُركَّب أثناء تمرير نشط يظهر
+    // فورًا في `StaggeredItem` بلا تأخير ولا حركة (تتبّع «العناصر
+    // الظاهرة» القديم في مجموعة خارجية صار غير ضروري وحُذف).
+    val listState = rememberLazyListState()
 
     Scaffold(
         floatingActionButton = {
@@ -404,17 +401,19 @@ fun SitesScreen(
                 )
             } else {
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     itemsIndexed(sites, key = { _, site -> site.id }) { index, site ->
                         // ظهور متتابع عند الفتح/البحث (مقترح 13)، وانهيار
-                        // ارتفاع عند الاستعادة قبل خروج العنصر (مقترح 14)
+                        // ارتفاع عند الاستعادة قبل خروج العنصر (مقترح 14).
+                        // `immediate`: أثناء التمرير النشط يظهر العنصر فورًا —
+                        // لا تأخير ولا انيميشن (إصلاح تعثّر التمرير 2.9.3).
                         StaggeredItem(
                             index = index,
                             trigger = staggerTrigger,
-                            alreadyRevealed = site.id in revealedSiteIds,
-                            onRevealed = { revealedSiteIds.add(site.id) }
+                            immediate = listState.isScrollInProgress
                         ) {
                             AnimatedVisibility(
                                 visible = collapsingId != site.id,
