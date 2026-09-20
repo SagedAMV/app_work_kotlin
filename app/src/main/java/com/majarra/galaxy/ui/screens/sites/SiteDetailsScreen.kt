@@ -621,20 +621,25 @@ fun SiteDetailsScreen(
                 initialPage = DetailsTab.entries.indexOf(tab)
             ) { DetailsTab.entries.size }
 
-            // نقرة على شريحة: تنتقل بحركة سلسة إلى صفحتها في المُصفّح
-            LaunchedEffect(tab) {
-                tabsScrollState.animateScrollToItem(DetailsTab.entries.indexOf(tab))
-                val target = DetailsTab.entries.indexOf(tab)
-                if (pagerState.currentPage != target) {
-                    pagerState.animateScrollToPage(target)
-                }
-            }
+            // إصلاح جذري (2.9.4) لمشكلة «الرجوع للخلف عند السحب السريع بين
+            // التبويبات»: المزامنة السابقة كانت ثنائية الاتجاه — السحب يحدّث
+            // `tab` عبر `settledPage`، و`LaunchedEffect(tab)` كان يستدعي
+            // `animateScrollToPage` لكن بعد تعليق `animateScrollToItem`
+            // (تمرير شريط الشرائح) الذي يستغرق مئات المللي ثواني، فيُقيَّم
+            // شرط الحراسة ببيانات تقادمت أثناءها: إن كان المستخدم قد مرّر
+            // مجددًا خلال ذلك التأخير سحبت الحركة البرمجية المُصفّح إلى
+            // الصفحة السابقة — وهذا بالضبط سلوك «يتقدم ثم يرجع» المبلَّغ
+            // عنه. الحل القياسي: تدفق أحادي الاتجاه — المُصفّح يقود التبويب
+            // (عند الاستقرار) والنقرة على الشريحة تقود المُصفّح مباشرة،
+            // ولا يوجد أي مسار يعيد تحريك المُصفّح استجابةً لتغيّر `tab`.
             // سحب يستقر على صفحة جديدة: يُحدَّث التبويب المحدد ليطابقها
-            // (settledPage لا يتغير أثناء السحب نفسه فلا يتعارض الإسنادان)
+            // ويُمرَّر الشريط ليبقى ظاهرًا (`settledPage` لا يتغير أثناء
+            // السحب نفسه فلا تعارض، وتمرير الشريط لا يمس المُصفّح).
             LaunchedEffect(pagerState) {
                 snapshotFlow { pagerState.settledPage }.collect { page ->
-                    val newTab = DetailsTab.entries.getOrNull(page)
-                    if (newTab != null && newTab != tab) tab = newTab
+                    val newTab = DetailsTab.entries.getOrNull(page) ?: return@collect
+                    if (newTab != tab) tab = newTab
+                    tabsScrollState.animateScrollToItem(page)
                 }
             }
 
@@ -643,8 +648,19 @@ fun SiteDetailsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(DetailsTab.entries, key = { _, t -> t.name }) { _, t ->
-                    FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
+                itemsIndexed(DetailsTab.entries, key = { _, t -> t.name }) { index, t ->
+                    FilterChip(
+                        selected = tab == t,
+                        onClick = {
+                            // نقرة على شريحة: تُحرّك المُصفّح صراحةً وبلا وسيط
+                            // متأخر — المستخدم هو مصدر هذه الحركة وحده.
+                            if (tab != t) {
+                                tab = t
+                                scope.launch { pagerState.animateScrollToPage(index) }
+                            }
+                        },
+                        label = { Text(t.label) }
+                    )
                 }
             }
 
@@ -659,8 +675,18 @@ fun SiteDetailsScreen(
                 // انتقال التبويبات: سحب أفقي حي بين الصفحات (بدل تلاشي
                 // AnimatedContent السابق) — وعناصر كل تبويب لا تزال تدخل
                 // متتابعة بفاصل 30 مللي ثانية عبر StaggeredItem بداخله.
+                //
+                // إصلاح (2.9.4) لمشكلة «البيانات تظهر في وسط التبويب بدل
+                // أعلاه»: المُصفّح يقيس صفحاته بارتفاع أدنى صفر، و`LazyColumn`
+                // الذي أقصر من الصفحة يلتفّ حول محتواه، والمُصفّح يضع الصفحة
+                // الافتراضية عموديًا بمنتصف المساحة (`verticalAlignment`
+                // الافتراضي `CenterVertically`) — فكانت بيانات تبويبات
+                // المعلومات/المسحوبات/الطوارئ/الصيانة/المرفقات تظهر بالوسط
+                // بينما تبويب المواد سليم لأن جذره `fillMaxSize`. الحل:
+                // محاذاة الصفحات لأعلى دائمًا.
                 HorizontalPager(
                     state = pagerState,
+                    verticalAlignment = Alignment.Top,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
