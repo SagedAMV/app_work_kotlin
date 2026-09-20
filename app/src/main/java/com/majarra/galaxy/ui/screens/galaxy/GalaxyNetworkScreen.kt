@@ -213,6 +213,9 @@ class GalaxyNetworkViewModel @Inject constructor(
     /** آخر مجموعة معرفات شوهدت — لاكتشاف المواقع المحذوفة بين إصدارين (مقترح 8) */
     private var lastSiteIds: Set<Long> = emptySet()
 
+    /** آخر مواضع عُرضت — منها يُلتقط موضع العقدة المحذوفة ليذبل (مقترح 8) */
+    private var lastPositions: Map<Long, NetworkLayout.Node> = emptyMap()
+
     /** العقد المغادرة حديثًا — تذبل خلال 400 مللي ثانية ثم تُنسى */
     private val departing = HashMap<Long, DepartingNode>()
 
@@ -244,12 +247,17 @@ class GalaxyNetworkViewModel @Inject constructor(
         val liveIds = sites.mapTo(HashSet()) { it.id }
         val positions = baseLayout + overrides.filterKeys { it in liveIds }
 
-        // مقترح 8: من اختفى منذ الإصدار السابق يُحفظ موضعُه ليذبل على الشاشة
+        // مقترح 8: من اختفى منذ الإصدار السابق يُحفظ موضعُه ليذبل على الشاشة.
+        // الالتقاط يكون من مواضع الإصدار السابق (آخر ما عُرض فعلًا) لا من
+        // خريطة هذا الإصدار: حذف موقع يعيد حساب التوزيع بدونه ويصفّي
+        // إزاحاته، فالبحث عنه في الخريطة الجديدة يعيد دائمًا قيمة غائبة
+        // وكان الذبول لا يعمل قط قبل إصلاح 2.10.1.
         val nowMs = System.currentTimeMillis()
         for (id in lastSiteIds - liveIds) {
-            positions[id]?.let { departing[id] = DepartingNode(it, nowMs) }
+            lastPositions[id]?.let { departing[id] = DepartingNode(it, nowMs) }
         }
         lastSiteIds = liveIds
+        lastPositions = positions
         departing.entries.removeAll { nowMs - it.value.removedAt > 700L }
 
         GalaxyNetworkUiState(
@@ -596,6 +604,13 @@ fun GalaxyNetworkScreen(
         viewModel.events.collect { snackbarHostState.showSnackbar(it) }
     }
 
+    /* ── مقترح 22: ملاءمة عرض ناعمة بنابض بدل القفزة الفورية ──
+     * (التعريف هنا قبل كتلة استقبال الترتيب 2.10.0 لأنها تكتب في
+     * `fitAnim` بعد اكتمال انزلاق العقد — الترجمة تتطلب التعريف قبل
+     * الاستعمال.) ── */
+    val scope = rememberCoroutineScope()
+    var fitAnim by remember { mutableStateOf<FitAnim?>(null) }
+
     /* ── 2.10.0: استقبال أهداف الترتيب الذكي — تنزلق العقد إلى
      * مواضعها الجديدة ثم يلائم العرض الشبكة كاملة تلقائيًا ── */
     LaunchedEffect(Unit) {
@@ -624,9 +639,6 @@ fun GalaxyNetworkScreen(
         }
     }
 
-    /* ── مقترح 22: ملاءمة عرض ناعمة بنابض بدل القفزة الفورية ── */
-    val scope = rememberCoroutineScope()
-    var fitAnim by remember { mutableStateOf<FitAnim?>(null) }
     val fa = fitAnim
     val renderZoom = if (fa != null) {
         fa.fromZoom + (fa.toZoom - fa.fromZoom) * fa.progress.value
@@ -758,7 +770,9 @@ fun GalaxyNetworkScreen(
                         var longPressDone = false
                         val longPressJob: Job? =
                             if (hitId == null && viewModel.state.value.sites.isNotEmpty()) {
-                                launch {
+                                // `PointerInputScope` ليس `CoroutineScope`، فيُطلق
+                                // المؤقّت من نطاق التركيب (`scope`) لا ضمنيا
+                                scope.launch {
                                     delay(LONG_PRESS_MS)
                                     longPressDone = true
                                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
