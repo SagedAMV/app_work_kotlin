@@ -576,19 +576,38 @@ fun SlidingColorPalette(
  * `40 + 30×الفهرس` مللي ثانية. تغيير `trigger` يعيد تشغيل الظهور
  * (تبديل تبويب، تغيير بحث…). يُستخدم أيضًا لعناصر الخط الزمني
  * وشبكة الصور (الاختيارات 9 و13 و18 و20).
+ *
+ * **إصلاح تعثّر التمرير (جلسة هذه المحادثة):** داخل `LazyColumn` يُلغي
+ * Compose تركيب العناصر الخارجة عن نطاق الشاشة ويعيد تركيبها من جديد
+ * عند عودتها للظهور — وبما أن `remember(trigger)` كان يبدأ دائمًا من
+ * `false`، كان كل عنصر يعيد تشغيل تأخيره الكامل (`40 + 30×index`) في
+ * كل مرة يدخل فيها منطقة الرؤية أثناء التمرير (نزولًا أو صعودًا)،
+ * فيظهر التمرير متقطعًا كأنه يتوقف بانتظار كل عنصر قبل أن يكمل. الحل:
+ * يمرّر المستدعي `alreadyRevealed` (هل ظهر هذا العنصر من قبل منذ آخر
+ * `trigger`؟ محفوظة في مجموعة على مستوى الشاشة تنجو من إعادة تركيب
+ * عنصر القائمة) — فإن كان قد ظهر من قبل يُعرض فورًا بلا تأخير ولا
+ * حركة، وإلا يُشغَّل التأخير المعتاد ثم يُبلَّغ المستدعي عبر
+ * `onRevealed` ليحفظه فلا يتكرر التأخير لاحقًا.
  */
 @Composable
 fun StaggeredItem(
     index: Int,
     trigger: Any?,
     modifier: Modifier = Modifier,
+    alreadyRevealed: Boolean = false,
+    onRevealed: () -> Unit = {},
     content: @Composable () -> Unit
 ) {
-    var shown by remember(trigger) { mutableStateOf(false) }
+    var shown by remember(trigger) { mutableStateOf(alreadyRevealed) }
     LaunchedEffect(trigger) {
-        shown = false
-        delay(40L + index * 30L)
-        shown = true
+        if (alreadyRevealed) {
+            shown = true
+        } else {
+            shown = false
+            delay(40L + index * 30L)
+            shown = true
+            onRevealed()
+        }
     }
     AnimatedVisibility(
         visible = shown,

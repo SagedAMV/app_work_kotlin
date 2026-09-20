@@ -56,6 +56,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -259,6 +260,14 @@ fun SitesScreen(
         is ListFilter.ByCategory -> "cat-${currentFilter.categoryId}"
         is ListFilter.Archived -> "archived"
     }
+    // إصلاح تعثّر التمرير: نحفظ هنا (خارج عناصر LazyColumn) أي موقع
+    // ظهر بالفعل منذ آخر تغيير لـ staggerTrigger. عناصر LazyColumn
+    // تُنزع من التركيب وتُعاد عند التمرير خارج الشاشة وداخلها؛ بدون
+    // هذا الحفظ الخارجي كان كل عنصر يعيد تشغيل تأخير ظهوره الكامل في
+    // كل مرة يدخل فيها الشاشة أثناء التمرير (نزولًا أو صعودًا) فيبدو
+    // التمرير متقطعًا. الآن العنصر يتحرك مرة واحدة فقط ثم يظهر فورًا
+    // في كل تمرير لاحق طالما لم يتغيّر البحث/الفلتر.
+    val revealedSiteIds = remember(staggerTrigger) { mutableStateListOf<Long>() }
 
     Scaffold(
         floatingActionButton = {
@@ -401,7 +410,12 @@ fun SitesScreen(
                     itemsIndexed(sites, key = { _, site -> site.id }) { index, site ->
                         // ظهور متتابع عند الفتح/البحث (مقترح 13)، وانهيار
                         // ارتفاع عند الاستعادة قبل خروج العنصر (مقترح 14)
-                        StaggeredItem(index = index, trigger = staggerTrigger) {
+                        StaggeredItem(
+                            index = index,
+                            trigger = staggerTrigger,
+                            alreadyRevealed = site.id in revealedSiteIds,
+                            onRevealed = { revealedSiteIds.add(site.id) }
+                        ) {
                             AnimatedVisibility(
                                 visible = collapsingId != site.id,
                                 enter = expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)) + fadeIn(tween(200)),

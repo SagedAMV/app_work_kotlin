@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -16,12 +15,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -92,12 +93,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -470,7 +473,7 @@ class SiteDetailsViewModel @Inject constructor(
  * لا يُمرَّر معرف الموقع كمعامل: الـ ViewModel يقرأه من SavedStateHandle
  * مباشرة (مرتبط بمدخل التنقل الحالي عبر hiltViewModel).
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SiteDetailsScreen(
     onBack: () -> Unit,
@@ -604,14 +607,35 @@ fun SiteDetailsScreen(
                 Text("طارئ")
             }
 
-            // إصلاح UX: صف التبويبات كان قائمة أفقية لا تتحرك تلقائيًا، فقد
-            // يبدّل المستخدم إلى تبويب خارج الشاشة (أو يعود إليه عند فتح
-            // الموقع) بلا رؤية الشريحة المحددة. الآن يُمرَّر الشريط تلقائيًا
-            // ليبقى التبويب النشط في المدى المرئي.
+            // إصلاح UX (طلب هذه الجلسة): صفوف التبويبات العلوية كانت تُفتح
+            // بالنقر فقط، فيضطر المستخدم للوصول لشريط بعيد أعلى الشاشة في
+            // كل تبديل. الحل الاحترافي القياسي في الأندرويد: ربط شريط
+            // التبويبات بـ `HorizontalPager` فيصبح بالإمكان أيضًا التنقل
+            // بالسحب يمينًا/يسارًا فوق محتوى أي تبويب — بلا التخلي عن
+            // النقر المباشر على الشريحة لمن يفضّله. الشريط ما زال يُمرَّر
+            // تلقائيًا ليبقى التبويب النشط ظاهرًا (الإصلاح السابق).
             val tabsScrollState = rememberLazyListState()
+            val pagerState = rememberPagerState(
+                initialPage = DetailsTab.entries.indexOf(tab)
+            ) { DetailsTab.entries.size }
+
+            // نقرة على شريحة: تنتقل بحركة سلسة إلى صفحتها في المُصفّح
             LaunchedEffect(tab) {
                 tabsScrollState.animateScrollToItem(DetailsTab.entries.indexOf(tab))
+                val target = DetailsTab.entries.indexOf(tab)
+                if (pagerState.currentPage != target) {
+                    pagerState.animateScrollToPage(target)
+                }
             }
+            // سحب يستقر على صفحة جديدة: يُحدَّث التبويب المحدد ليطابقها
+            // (settledPage لا يتغير أثناء السحب نفسه فلا يتعارض الإسنادان)
+            LaunchedEffect(pagerState) {
+                snapshotFlow { pagerState.settledPage }.collect { page ->
+                    val newTab = DetailsTab.entries.getOrNull(page)
+                    if (newTab != null && newTab != tab) tab = newTab
+                }
+            }
+
             LazyRow(
                 state = tabsScrollState,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -630,18 +654,14 @@ fun SiteDetailsScreen(
                     subtitle = "ربما حُذف للتو"
                 )
             } else {
-                // انتقال التبويبات (اختيارات 2.3 — مقترح 9): الخارج يتلاشى
-                // والجديد تدخل عناصره متتابعة بفاصل 30 مللي ثانية عبر
-                // StaggeredItem داخل كل تبويب.
-                AnimatedContent(
-                    targetState = tab,
-                    transitionSpec = {
-                        fadeIn(animationSpec = tween(180))
-                            .togetherWith(fadeOut(animationSpec = tween(140)))
-                    },
-                    label = "details-tabs"
-                ) { target ->
-                    when (target) {
+                // انتقال التبويبات: سحب أفقي حي بين الصفحات (بدل تلاشي
+                // AnimatedContent السابق) — وعناصر كل تبويب لا تزال تدخل
+                // متتابعة بفاصل 30 مللي ثانية عبر StaggeredItem بداخله.
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxWidth()
+                ) { page ->
+                    when (DetailsTab.entries[page]) {
                         DetailsTab.INFO -> InfoTab(s, categories)
                         DetailsTab.MATERIALS -> MaterialsTab(
                             detail = detail,
@@ -1268,6 +1288,10 @@ private fun WithdrawalsTab(
 ) {
     var showWithdrawDialog by remember { mutableStateOf(false) }
     val openCount = withdrawals.count { it.status != WithdrawalStatus.RETURNED }
+    // إصلاح تعثّر التمرير: نفس حل شاشة المواقع — نتذكر السجلات التي
+    // ظهرت بالفعل خارج عناصر LazyColumn حتى لا يعاد تشغيل تأخير
+    // ظهورها عند كل دخول/خروج من منطقة الرؤية أثناء التمرير.
+    val revealedWithdrawalIds = remember { mutableStateListOf<Long>() }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -1307,7 +1331,12 @@ private fun WithdrawalsTab(
         } else {
             // ظهور متتابع للسجلات عند دخول التبويب (مقترح 9)
             itemsIndexed(withdrawals, key = { _, w -> w.id }) { index, w ->
-                StaggeredItem(index = index, trigger = "withdrawals-tab") {
+                StaggeredItem(
+                    index = index,
+                    trigger = "withdrawals-tab",
+                    alreadyRevealed = w.id in revealedWithdrawalIds,
+                    onRevealed = { revealedWithdrawalIds.add(w.id) }
+                ) {
                     WithdrawalRow(
                         w = w,
                         onStartMaintenance = onStartMaintenance,
@@ -1517,6 +1546,8 @@ private fun WithdrawDialog(
  */
 @Composable
 private fun EmergencyTab(visits: List<EmergencyVisit>) {
+    // إصلاح تعثّر التمرير: نفس حل شاشة المواقع.
+    val revealedVisitIds = remember { mutableStateListOf<Long>() }
     if (visits.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.WarningAmber,
@@ -1542,7 +1573,12 @@ private fun EmergencyTab(visits: List<EmergencyVisit>) {
         }
         // ظهور متتابع للبطاقات عند دخول التبويب (مقترح 9)
         itemsIndexed(visits, key = { _, v -> v.id }) { index, visit ->
-            StaggeredItem(index = index, trigger = "emergency-tab") {
+            StaggeredItem(
+                index = index,
+                trigger = "emergency-tab",
+                alreadyRevealed = visit.id in revealedVisitIds,
+                onRevealed = { revealedVisitIds.add(visit.id) }
+            ) {
                 EmergencyVisitCard(visit)
             }
         }
@@ -2088,6 +2124,10 @@ private fun AttachmentsTab(
     val context = LocalContext.current
     val images = attachments.filter { it.fileType == AttachmentType.IMAGE }
     val files = attachments.filter { it.fileType != AttachmentType.IMAGE }
+    // إصلاح تعثّر التمرير: نفس حل شاشة المواقع، لكل من شبكة الصور
+    // وقائمة الملفات (كلٌ منهما قائمة كسولة منفصلة).
+    val revealedImageIds = remember { mutableStateListOf<Long>() }
+    val revealedFileIds = remember { mutableStateListOf<Long>() }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -2136,7 +2176,12 @@ private fun AttachmentsTab(
                     // وخلف كل صورة شيمر سديمي حتى يكتمل التحميل
                     // (اختيار 43 من الجولة الثالثة)
                     itemsIndexed(images, key = { _, image -> image.id }) { index, image ->
-                        StaggeredItem(index = index, trigger = images.size) {
+                        StaggeredItem(
+                            index = index,
+                            trigger = images.size,
+                            alreadyRevealed = image.id in revealedImageIds,
+                            onRevealed = { revealedImageIds.add(image.id) }
+                        ) {
                             var loaded by remember(image.id) { mutableStateOf(false) }
                             Box(
                                 modifier = Modifier
@@ -2181,7 +2226,12 @@ private fun AttachmentsTab(
         if (files.isNotEmpty()) {
             item { SectionTitle("الملفات (${files.size})") }
             itemsIndexed(files, key = { _, file -> file.id }) { index, file ->
-                StaggeredItem(index = index + 1, trigger = "attachments-tab") {
+                StaggeredItem(
+                    index = index + 1,
+                    trigger = "attachments-tab",
+                    alreadyRevealed = file.id in revealedFileIds,
+                    onRevealed = { revealedFileIds.add(file.id) }
+                ) {
                 GalaxyCard(onClick = {
                     // فتح الملف في عارض خارجي (إجابة الاسئله.md)
                     if (!context.openFileExternally(file.filePath)) {

@@ -29,8 +29,8 @@ android {
         // افتراضية)، توحيد دلالة «متأخر/مستحق اليوم»، رأس قائمة متوازن،
         // تمرير تبويبات مفعّل، أرقام إحصائيات حيّة، رسائل سنابار بدل
         // حوارات، وسلاسة سحب البطاقات.
-        versionCode = 14
-        versionName = "2.9.1"
+        versionCode = 15
+        versionName = "2.9.2"
         vectorDrawables { useSupportLibrary = true }
     }
 
