@@ -3,6 +3,7 @@ package com.majarra.galaxy.domain.usecase
 import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
+import com.majarra.galaxy.domain.repository.SiteRepository
 import com.majarra.galaxy.util.MaterialLines
 import javax.inject.Inject
 
@@ -96,4 +97,27 @@ class DeleteMaterialUseCase @Inject constructor(
     private val repo: MaterialRepository
 ) {
     suspend operator fun invoke(material: Material) = repo.delete(material)
+}
+
+/**
+ * إزالة مادة من قسم «المواد» في موقع واحد (النسخة 2.12 — إعادة تصميم
+ * تفاصيل الموقع): النظافة المهنية لقائمة الجرد؛ إن كان للسحوبات
+ * المفتوحة بند بنفس الاسم فسجلاتها تبقى كما هي في «المسحوبات» للتوثيق
+ * ولا تُحذف معها.
+ */
+class RemoveSiteMaterialUseCase @Inject constructor(
+    private val detailRepo: SiteDetailRepository,
+    private val siteRepo: SiteRepository
+) {
+    suspend operator fun invoke(siteId: Long, materialName: String) {
+        val detail = detailRepo.getBySite(siteId) ?: return
+        val remaining = MaterialLines.parse(detail.availableMaterials)
+            .filterNot { it.text.equals(materialName, ignoreCase = true) }
+        detailRepo.upsert(
+            detail.copy(availableMaterials = MaterialLines.serialize(remaining))
+        )
+        siteRepo.getSite(siteId)?.let {
+            siteRepo.update(it.copy(lastModified = System.currentTimeMillis()))
+        }
+    }
 }

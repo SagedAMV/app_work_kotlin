@@ -207,6 +207,30 @@ interface SiteLinkDao {
     suspend fun deleteBetween(a: Long, b: Long)
 }
 
+/**
+ * طلبات احتياج الموقع (النسخة 2.12) — تُعرض داخل واجهة «الاحتياجات»
+ * في شاشة تفاصيل الموقع. الأحدث طلبًا أولًا؛ ترتيب الحالات في العرض
+ * (بانتظار ← مرفوض ← موافقة) منطق الواجهة لا القاعدة.
+ */
+@Dao
+interface MaterialRequestDao {
+    @Query("SELECT * FROM material_requests WHERE siteId = :siteId ORDER BY requestedDate DESC")
+    fun observeBySite(siteId: Long): Flow<List<MaterialRequest>>
+
+    /** قراءة لحظية لطلبات الموقع — تُستخدم لمنع تكرار الطلبات المفتوحة */
+    @Query("SELECT * FROM material_requests WHERE siteId = :siteId")
+    suspend fun getBySite(siteId: Long): List<MaterialRequest>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(request: MaterialRequest): Long
+
+    @Update
+    suspend fun update(request: MaterialRequest)
+
+    @Delete
+    suspend fun delete(request: MaterialRequest)
+}
+
 /** سجل السحب والإرجاع — يُعرض داخل موقعه ويُعدّ المفتوح منه للإحصائيات */
 @Dao
 interface WithdrawalDao {

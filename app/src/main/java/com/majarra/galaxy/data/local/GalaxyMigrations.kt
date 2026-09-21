@@ -302,8 +302,47 @@ object GalaxyMigrations {
         }
     }
 
+    /**
+     * 7 → 8: ميزات النسخة 2.12 حسب تعليمات إعادة تصميم تفاصيل الموقع:
+     *  - جدول `material_requests`: طلبات احتياج الموقع ودورة الموافقة
+     *    والرفض والاسترجاع (مفتاح خارجي بحذف متسلسل مع موقعه).
+     *  - أعمدة جديدة في `withdrawals`: `withdrawReason` (سبب السحب
+     *    للصيانة) و`fixedNote` (كيف أُصلحت) و`notFixedReason` (سبب عدم
+     *    الإصلاح) — بأمان افتراضي نص فارغ حتى لا تُفقد أي بيانات.
+     *  - عمود جديد في `emergency_visits`: `notes` (ملاحظات النزول).
+     *
+     * ترحيل إضافة فقط: لا يُسقط أي جدول ولا يعدّل أي بيانات قائمة،
+     * لذلك هو غير مدمّر بطبيعته. أسماء الأعمدة والفهارس تطابق حرفيًا
+     * ما يولّده Room من الكيانات وإلا فشل التحقق من المخطط.
+     */
+    val MIGRATION_7_8 = object : Migration(7, 8) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `material_requests` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`siteId` INTEGER NOT NULL, " +
+                    "`materialName` TEXT NOT NULL, " +
+                    "`status` TEXT NOT NULL, " +
+                    "`requestedDate` INTEGER NOT NULL, " +
+                    "`resolvedDate` INTEGER, " +
+                    "FOREIGN KEY(`siteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_material_requests_siteId` ON `material_requests` (`siteId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_material_requests_status` ON `material_requests` (`status`)"
+            )
+            db.execSQL("ALTER TABLE `withdrawals` ADD COLUMN `withdrawReason` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `withdrawals` ADD COLUMN `fixedNote` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `withdrawals` ADD COLUMN `notFixedReason` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE `emergency_visits` ADD COLUMN `notes` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     /** كل الترحيلات بالترتيب — تُمرَّر إلى Room.databaseBuilder */
     val ALL: Array<Migration> = arrayOf(
-        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7
+        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
+        MIGRATION_7_8
     )
 }

@@ -5,6 +5,7 @@ import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.EmergencyVisit
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.Material
+import com.majarra.galaxy.data.local.MaterialRequest
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDetail
 import com.majarra.galaxy.data.local.SiteLink
@@ -93,6 +94,20 @@ interface WithdrawalRepository {
 interface EmergencyVisitRepository {
     fun observeBySite(siteId: Long): Flow<List<EmergencyVisit>>
     suspend fun insert(visit: EmergencyVisit): Long
+}
+
+/**
+ * طلبات احتياج الموقع (النسخة 2.12 — تعليمات إعادة تصميم تفاصيل
+ * الموقع): رفع طلبات من الكتالوج الموحد (أو بإضافة مادة جديدة)،
+ * ثم الموافقة عليها لتُضاف المادة إلى قسم «المواد»، أو رفضها مع
+ * بقاءها معروضة قابلة للاسترجاع أو الحذف النهائي.
+ */
+interface MaterialRequestRepository {
+    fun observeBySite(siteId: Long): Flow<List<MaterialRequest>>
+    suspend fun getBySite(siteId: Long): List<MaterialRequest>
+    suspend fun insert(request: MaterialRequest): Long
+    suspend fun update(request: MaterialRequest)
+    suspend fun delete(request: MaterialRequest)
 }
 
 /** روابط شبكة المجرة بين المواقع (النسخة 2.5) */

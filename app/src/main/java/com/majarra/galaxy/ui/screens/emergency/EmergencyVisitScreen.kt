@@ -117,6 +117,7 @@ class EmergencyVisitViewModel @Inject constructor(
 
     fun save(
         reason: String,
+        notes: String,
         outcome: VisitOutcome,
         problemDescription: String,
         usedMaterials: List<String>,
@@ -130,6 +131,7 @@ class EmergencyVisitViewModel @Inject constructor(
                     EmergencyVisit(
                         siteId = siteId,
                         reason = reason,
+                        notes = notes,
                         outcome = outcome,
                         problemDescription = problemDescription,
                         usedMaterials = usedMaterials.joinToString("\n"),
@@ -156,6 +158,7 @@ fun EmergencyVisitScreen(
     val scope = rememberCoroutineScope()
 
     var reason by rememberSaveable { mutableStateOf("") }
+    var notes by rememberSaveable { mutableStateOf("") }
     var reasonError by remember { mutableStateOf<String?>(null) }
     var outcome by rememberSaveable { mutableStateOf<VisitOutcome?>(null) }
     var outcomeError by remember { mutableStateOf<String?>(null) }
@@ -224,6 +227,7 @@ fun EmergencyVisitScreen(
                             }
                             else -> viewModel.save(
                                 reason = cleanReason,
+                                notes = notes,
                                 outcome = selectedOutcome,
                                 problemDescription = cleanProblem,
                                 usedMaterials = usedMaterials,
@@ -295,6 +299,14 @@ fun EmergencyVisitScreen(
                                 else -> Text("${cleanReason.length}/${EmergencyVisitValidator.MAX_REASON}")
                             }
                         }
+                    )
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("ملاحظات (اختياري)") },
+                        minLines = 2,
+                        maxLines = 4
                     )
 
                     // نتيجة النزول بزر مقسّم بحبة منزلق (اختيار 38 من

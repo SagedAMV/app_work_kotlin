@@ -10,6 +10,8 @@ import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.MaintenanceLogDao
 import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.data.local.MaterialDao
+import com.majarra.galaxy.data.local.MaterialRequest
+import com.majarra.galaxy.data.local.MaterialRequestDao
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDao
 import com.majarra.galaxy.data.local.SiteDetail
@@ -23,6 +25,7 @@ import com.majarra.galaxy.domain.repository.CategoryRepository
 import com.majarra.galaxy.domain.repository.EmergencyVisitRepository
 import com.majarra.galaxy.domain.repository.MaintenanceLogRepository
 import com.majarra.galaxy.domain.repository.MaterialRepository
+import com.majarra.galaxy.domain.repository.MaterialRequestRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteLinkRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
@@ -127,6 +130,18 @@ class EmergencyVisitRepositoryImpl @Inject constructor(
     override fun observeBySite(siteId: Long): Flow<List<EmergencyVisit>> =
         dao.observeBySite(siteId)
     override suspend fun insert(visit: EmergencyVisit): Long = dao.insert(visit)
+}
+
+@Singleton
+class MaterialRequestRepositoryImpl @Inject constructor(
+    private val dao: MaterialRequestDao
+) : MaterialRequestRepository {
+    override fun observeBySite(siteId: Long): Flow<List<MaterialRequest>> =
+        dao.observeBySite(siteId)
+    override suspend fun getBySite(siteId: Long): List<MaterialRequest> = dao.getBySite(siteId)
+    override suspend fun insert(request: MaterialRequest): Long = dao.insert(request)
+    override suspend fun update(request: MaterialRequest) = dao.update(request)
+    override suspend fun delete(request: MaterialRequest) = dao.delete(request)
 }
 
 @Singleton
