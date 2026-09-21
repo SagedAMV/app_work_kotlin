@@ -116,20 +116,15 @@ private val LightColors = lightColorScheme(
 )
 
 /* ============================================================
- * الخطوط (إجابة الاسئله.md: خط مميز للعناوين وخط أبسط للنصوص)
- * - العناوين (العرض/الرؤوس/العناوين): خط «أريف رقعة» المدمج —
- *   طابع عربي رقعي مميز.
- * - النصوص والتسميات: خط «تجوال» المدمج — أبسط وأوضح للقراءة.
- * الخطان مرخصان OFL ومضمّنان في مجلد الخطوط (انظر ملاحظة الترخيص
- * في README).
+ * الخطوط (تحديث هذه الجلسة):
+ * كان التطبيق يستخدم «أريف رقعة» للعناوين، لكنه صعب القراءة على
+ * شاشات الهاتف في كثرة البيانات.
+ *
+ * تم توحيد الخط إلى «تجوال (Tajawal)» كخط عربي عصري وواضح للعناوين
+ * والنصوص مع الحفاظ على تدرجات الأوزان (Regular/Medium/Bold).
  * ============================================================ */
 
-val HeadingFont = FontFamily(
-    Font(R.font.aref_ruqaa_regular, FontWeight.Normal),
-    Font(R.font.aref_ruqaa_bold, FontWeight.Bold)
-)
-
-val BodyFont = FontFamily(
+val AppFont = FontFamily(
     Font(R.font.tajawal_regular, FontWeight.Normal),
     Font(R.font.tajawal_medium, FontWeight.Medium),
     Font(R.font.tajawal_bold, FontWeight.Bold)
@@ -138,21 +133,21 @@ val BodyFont = FontFamily(
 private val defaultTypography = Typography()
 
 private val GalaxyTypography = Typography(
-    displayLarge = defaultTypography.displayLarge.copy(fontFamily = HeadingFont),
-    displayMedium = defaultTypography.displayMedium.copy(fontFamily = HeadingFont),
-    displaySmall = defaultTypography.displaySmall.copy(fontFamily = HeadingFont),
-    headlineLarge = defaultTypography.headlineLarge.copy(fontFamily = HeadingFont),
-    headlineMedium = defaultTypography.headlineMedium.copy(fontFamily = HeadingFont),
-    headlineSmall = defaultTypography.headlineSmall.copy(fontFamily = HeadingFont),
-    titleLarge = defaultTypography.titleLarge.copy(fontFamily = HeadingFont),
-    titleMedium = defaultTypography.titleMedium.copy(fontFamily = HeadingFont),
-    titleSmall = defaultTypography.titleSmall.copy(fontFamily = HeadingFont),
-    bodyLarge = defaultTypography.bodyLarge.copy(fontFamily = BodyFont),
-    bodyMedium = defaultTypography.bodyMedium.copy(fontFamily = BodyFont),
-    bodySmall = defaultTypography.bodySmall.copy(fontFamily = BodyFont),
-    labelLarge = defaultTypography.labelLarge.copy(fontFamily = BodyFont),
-    labelMedium = defaultTypography.labelMedium.copy(fontFamily = BodyFont),
-    labelSmall = defaultTypography.labelSmall.copy(fontFamily = BodyFont)
+    displayLarge = defaultTypography.displayLarge.copy(fontFamily = AppFont),
+    displayMedium = defaultTypography.displayMedium.copy(fontFamily = AppFont),
+    displaySmall = defaultTypography.displaySmall.copy(fontFamily = AppFont),
+    headlineLarge = defaultTypography.headlineLarge.copy(fontFamily = AppFont),
+    headlineMedium = defaultTypography.headlineMedium.copy(fontFamily = AppFont),
+    headlineSmall = defaultTypography.headlineSmall.copy(fontFamily = AppFont),
+    titleLarge = defaultTypography.titleLarge.copy(fontFamily = AppFont),
+    titleMedium = defaultTypography.titleMedium.copy(fontFamily = AppFont),
+    titleSmall = defaultTypography.titleSmall.copy(fontFamily = AppFont),
+    bodyLarge = defaultTypography.bodyLarge.copy(fontFamily = AppFont),
+    bodyMedium = defaultTypography.bodyMedium.copy(fontFamily = AppFont),
+    bodySmall = defaultTypography.bodySmall.copy(fontFamily = AppFont),
+    labelLarge = defaultTypography.labelLarge.copy(fontFamily = AppFont),
+    labelMedium = defaultTypography.labelMedium.copy(fontFamily = AppFont),
+    labelSmall = defaultTypography.labelSmall.copy(fontFamily = AppFont)
 )
 
 @Composable

@@ -75,10 +75,9 @@ import javax.inject.Inject
 
 private enum class DetailsSection(val label: String) {
     MATERIALS("المواد"),
-    DEMAND("احتياج"),
+    DEMAND("احتياج موقع"),
     REQUESTS("الاحتياجات"),
-    WITHDRAWALS("المسحوبات"),
-    EMERGENCY("الطارئ")
+    WITHDRAWALS("المسحوبات")
 }
 
 @HiltViewModel
@@ -89,7 +88,6 @@ class SiteDetailsViewModel @Inject constructor(
     materialRepo: MaterialRepository,
     withdrawalRepo: WithdrawalRepository,
     requestRepo: MaterialRequestRepository,
-    emergencyRepo: EmergencyVisitRepository,
     private val removeMaterial: RemoveSiteMaterialUseCase,
     private val withdrawMaterial: WithdrawMaterialForMaintenanceUseCase,
     private val markFixed: MarkWithdrawalFixedUseCase,
@@ -109,7 +107,6 @@ class SiteDetailsViewModel @Inject constructor(
     val catalog = materialRepo.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val withdrawals = withdrawalRepo.observeBySite(siteId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val requests = requestRepo.observeBySite(siteId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val emergencies = emergencyRepo.observeBySite(siteId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /**
      * مواد الموقع المعروضة: كل ما في «الموجود» عدا ما هو خارج الموقع
@@ -159,7 +156,6 @@ fun SiteDetailsScreen(
     val available by viewModel.available.collectAsStateWithLifecycle()
     val withdrawals by viewModel.withdrawals.collectAsStateWithLifecycle()
     val requests by viewModel.requests.collectAsStateWithLifecycle()
-    val emergencies by viewModel.emergencies.collectAsStateWithLifecycle()
     var section by rememberSaveable { mutableStateOf(DetailsSection.MATERIALS) }
     var menu by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -169,7 +165,11 @@ fun SiteDetailsScreen(
 
     Scaffold(topBar = {
         TopAppBar(
-            title = { Text(site?.name ?: "تفاصيل الموقع") },
+            title = {
+                val base = site?.name ?: "تفاصيل الموقع"
+                val extra = if (section == DetailsSection.MATERIALS) "" else " — ${section.label}"
+                Text(base + extra)
+            },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } },
             actions = {
                 Box {
@@ -206,11 +206,6 @@ fun SiteDetailsScreen(
         )
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            ScrollableTabRow(selectedTabIndex = section.ordinal, edgePadding = 0.dp) {
-                DetailsSection.values().forEach { s ->
-                    Tab(selected = section == s, onClick = { section = s }, text = { Text(s.label) })
-                }
-            }
             when (section) {
                 DetailsSection.MATERIALS -> MaterialsSection(
                     items = available,
@@ -238,10 +233,6 @@ fun SiteDetailsScreen(
                     onNotFixed = { w -> dialog = { DecisionDialog("لم يتم الإصلاح", "سبب عدم الإصلاح", { text, close -> viewModel.notFixed(w, text, close, { error = it }) }, { dialog = null }) } },
                     onReturn = { viewModel.returnItem(it) { message("أعيدت المادة إلى الموقع") } },
                     onDelete = { viewModel.deleteWithdrawal(it) { message("حُذف السجل") } }
-                )
-                DetailsSection.EMERGENCY -> EmergencySummary(
-                    visits = emergencies,
-                    onOpenEmergency = { onOpenEmergency(viewModel.siteId) }
                 )
             }
         }
@@ -455,7 +446,8 @@ private fun WithdrawalsSection(
                                 OutlinedButton(onClick = { onNotFixed(w) }) { Text("لم يتم الإصلاح") }
                             }
                             WithdrawalStatus.FIXED, WithdrawalStatus.NOT_FIXED -> {
-                                Button(onClick = { onReturn(w) }) { Text("إرجاع للموقع") }
+                                val label = if (w.status == WithdrawalStatus.FIXED) "إرجاع للموقع" else "إرجاع المادة"
+                                Button(onClick = { onReturn(w) }) { Text(label) }
                             }
                             WithdrawalStatus.RETURNED -> {
                                 Text("أُعيدت للموقع", style = MaterialTheme.typography.bodyMedium)
@@ -469,36 +461,6 @@ private fun WithdrawalsSection(
     }
 }
 
-/** تبويب «الطارئ»: ملخص السجل + فتح شاشة النزول الطارئ الكاملة */
-@Composable
-private fun EmergencySummary(visits: List<EmergencyVisit>, onOpenEmergency: () -> Unit) {
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item {
-            Button(onClick = onOpenEmergency, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.WarningAmber, null)
-                Spacer(Modifier.width(6.dp))
-                Text("تسجيل نزول طارئ")
-            }
-        }
-        item { SectionTitle("سجل النزول الطارئ (${visits.size})") }
-        if (visits.isEmpty()) {
-            item { EmptyState(Icons.Default.WarningAmber, "لا توجد نزولات", "سجّل أول نزول من الزر أعلاه") }
-        }
-        items(visits, key = { it.id }) { v ->
-            GalaxyCard {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(v.reason, Modifier.weight(1f))
-                        Text(v.outcome.label, color = MaterialTheme.colorScheme.primary)
-                    }
-                    Text(v.visitDate.formatDateTime(), style = MaterialTheme.typography.bodySmall)
-                    if (v.notes.isNotBlank()) Text(v.notes)
-                    if (v.problemDescription.isNotBlank()) Text(v.problemDescription)
-                }
-            }
-        }
-    }
-}
 
 /** حوار سحب مادة للصيانة: سبب إلزامي + ملاحظات اختيارية */
 @Composable
