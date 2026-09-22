@@ -20,8 +20,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -262,8 +265,16 @@ fun StatsScreen(
 ) {
     val stats by viewModel.stats.collectAsStateWithLifecycle()
 
-    // تحديث عند كل ظهور للشاشة (لا مرة واحدة عند أول فتح فقط)
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    // تحديث عند كل ظهور/عودة للشاشة فعليًا (ON_RESUME) حتى عند التنقل
+    // بين التبويبات والعودة لنفس الوجهة دون إعادة تركيب كاملة.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
