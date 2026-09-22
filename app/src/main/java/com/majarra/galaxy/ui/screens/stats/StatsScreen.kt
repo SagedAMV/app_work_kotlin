@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +51,7 @@ import com.majarra.galaxy.ui.components.SectionTitle
 import com.majarra.galaxy.ui.components.formatDateTime
 import com.majarra.galaxy.util.MaterialLines
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -91,6 +93,8 @@ data class OperationLogEntry(
 
 /** بيانات شاشة الإحصائيات — تُحسب من القاعدة عند كل ظهور للشاشة */
 data class StatsUi(
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
     val activeSites: Int = 0,
     /** عدد المواد حاليًا: مواد المواقع النشطة + تبعياتها ناقص المسحوبات المفتوحة */
     val materialsNow: Int = 0,
@@ -124,52 +128,73 @@ class StatsViewModel @Inject constructor(
     /** كل القيم من استعلامات عدّ خفيفة تُنفَّذ عند الفتح */
     private fun load() {
         viewModelScope.launch {
-            val sites = siteRepo.getAll()
-            val siteNameById = sites.associate { it.id to it.name }
-            val activeIds = sites.filter { !it.archived }.map { it.id }.toSet()
+            val prev = _stats.value
+            _stats.value = prev.copy(isLoading = true, errorMessage = null)
 
-            val withdrawals = withdrawalRepo.getAll()
-            val dependencies = dependencyRepo.getAll()
-            val openBySite = withdrawals
-                .filter { it.status.isOpen }
-                .groupBy { it.siteId }
+            try {
+                val space = Regex("\\s+")
+                fun norm(s: String) = s.trim().replace(space, " ").lowercase()
 
-            // عدد المواد حاليًا: أسطر «الموجود» لكل موقع نشط (معقّمة)
-            // ناقص سحوباتها المفتوحة، زائد تبعيات الموقع ناقص سحوباتها
-            // المفتوحة (مطابقة الأم + الاسم كإخفاء الواجهة تمامًا).
-            val details = detailRepo.getAll().filter { it.siteId in activeIds }
-            val materialsNow = details.sumOf { d ->
-                val openMain: Set<String> = openBySite[d.siteId]
-                    ?.filter { it.parentName.isBlank() }
-                    ?.map { it.itemName.trim().lowercase() }
-                    ?.toSet()
-                    ?: emptySet()
-                val openDeps: Set<Pair<String, String>> = openBySite[d.siteId]
-                    ?.filter { it.parentName.isNotBlank() }
-                    ?.map { it.parentName.trim().lowercase() to it.itemName.trim().lowercase() }
-                    ?.toSet()
-                    ?: emptySet()
-                val mainCount: Int = MaterialLines.parse(d.availableMaterials)
-                    .map { it.text.trim().lowercase() }
-                    .filter { it.isNotEmpty() && it !in openMain }
-                    .distinct()
-                    .size
-                val depCount: Int = dependencies
-                    .filter { it.siteId == d.siteId }
-                    .count { dep ->
-                        val pair = dep.parentName.trim().lowercase() to dep.name.trim().lowercase()
-                        pair !in openDeps
-                    }
-                mainCount + depCount
+                val sites = siteRepo.getAll()
+                val siteNameById = sites.associate { it.id to it.name }
+                val activeIds = sites.asSequence().filter { !it.archived }.map { it.id }.toSet()
+
+                val withdrawals = withdrawalRepo.getAll()
+                val openWithdrawals = withdrawals.asSequence().filter { it.status.isOpen }.toList()
+
+                val openMainBySite: Map<Long, Set<String>> =
+                    openWithdrawals
+                        .asSequence()
+                        .filter { it.parentName.isBlank() }
+                        .groupBy { it.siteId }
+                        .mapValues { (_, list) -> list.map { norm(it.itemName) }.toSet() }
+
+                val openDepsBySite: Map<Long, Set<Pair<String, String>>> =
+                    openWithdrawals
+                        .asSequence()
+                        .filter { it.parentName.isNotBlank() }
+                        .groupBy { it.siteId }
+                        .mapValues { (_, list) ->
+                            list.map { norm(it.parentName) to norm(it.itemName) }.toSet()
+                        }
+
+                val dependenciesBySite = dependencyRepo.getAll().groupBy { it.siteId }
+
+                // عدد المواد حاليًا: «الموجود» + «التبعيات» للمواقع النشطة ناقص المسحوبات المفتوحة.
+                val details = detailRepo.getAll().filter { it.siteId in activeIds }
+                val materialsNow = details.sumOf { d ->
+                    val openMain = openMainBySite[d.siteId].orEmpty()
+                    val openDeps = openDepsBySite[d.siteId].orEmpty()
+
+                    val mainCount: Int = MaterialLines.parse(d.availableMaterials)
+                        .map { norm(it.text) }
+                        .filter { it.isNotEmpty() && it !in openMain }
+                        .distinct()
+                        .size
+
+                    val depCount: Int = dependenciesBySite[d.siteId]
+                        .orEmpty()
+                        .count { dep -> (norm(dep.parentName) to norm(dep.name)) !in openDeps }
+
+                    mainCount + depCount
+                }
+
+                val operations = buildOperations(siteNameById, withdrawals)
+
+                _stats.value = StatsUi(
+                    isLoading = false,
+                    errorMessage = null,
+                    activeSites = sites.count { !it.archived },
+                    materialsNow = materialsNow,
+                    operations = operations
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                val message = t.message?.takeIf { it.isNotBlank() }
+                    ?: "حدث خطأ أثناء تحميل الإحصائيات"
+                _stats.value = prev.copy(isLoading = false, errorMessage = message)
             }
-
-            val operations = buildOperations(siteNameById, withdrawals)
-
-            _stats.value = StatsUi(
-                activeSites = sites.count { !it.archived },
-                materialsNow = materialsNow,
-                operations = operations
-            )
         }
     }
 
@@ -282,11 +307,51 @@ fun StatsScreen(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
-            Text(
-                "الإحصائيات",
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
+            Column {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        "الإحصائيات",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    TextButton(onClick = { viewModel.refresh() }) { Text("تحديث") }
+                }
+                if (stats.isLoading) {
+                    Text(
+                        "جاري التحديث…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        stats.errorMessage?.let { msg ->
+            item {
+                GalaxyCard {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                            Text("تعذر تحميل الإحصائيات", style = MaterialTheme.typography.titleSmall)
+                        }
+                        Text(
+                            msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = { viewModel.refresh() }) { Text("إعادة المحاولة") }
+                    }
+                }
+            }
         }
 
         item { SectionTitle("المؤشرات الأساسية") }
@@ -310,11 +375,19 @@ fun StatsScreen(
         item { SectionTitle("سجل آخر العمليات") }
         if (stats.operations.isEmpty()) {
             item {
-                EmptyState(
-                    Icons.Filled.Build,
-                    "لا توجد عمليات بعد",
-                    "ستظهر هنا السحوبات والإرجاعات والنزولات الطارئة والإضافات والصيانة"
-                )
+                if (stats.isLoading) {
+                    EmptyState(
+                        Icons.Filled.Build,
+                        "جاري التحميل…",
+                        "يتم الآن قراءة السحوبات والإرجاعات والنزولات الطارئة والإضافات والصيانة"
+                    )
+                } else {
+                    EmptyState(
+                        Icons.Filled.Build,
+                        "لا توجد عمليات بعد",
+                        "ستظهر هنا السحوبات والإرجاعات والنزولات الطارئة والإضافات والصيانة"
+                    )
+                }
             }
         } else {
             items(stats.operations, key = { it.key }) { op ->

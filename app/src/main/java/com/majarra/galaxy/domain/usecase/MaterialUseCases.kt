@@ -95,9 +95,16 @@ class RenameMaterialUseCase @Inject constructor(
         }
 
         // ترحيل مراجع الأم في التبعيات وسحوباتها (مطابقة بالاسم بلا حالة)
+        // ملاحظة مهمة: لا يجوز إدراج نفس السجل بنفس الـ id القديم لأن @Insert
+        // سيتعارض مع المفتاح الأساسي الموجود ثم يُهمل الإدراج (IGNORE)؛ بعدها
+        // حذف السجل القديم يعني فقدان التبعية بالكامل. لذلك نُنشئ صفًا جديدًا
+        // بـ id = 0 ونحذف القديم بعد محاولة الإدراج.
         dependencyRepo.getAll().forEach { dep ->
             if (dep.parentName.equals(oldName, ignoreCase = true)) {
-                dependencyRepo.insert(dep.copy(parentName = cleanNew))
+                // نحاول إدراج صف جديد بـ id = 0 حتى لا نتعارض مع المفتاح الأساسي الحالي.
+                // إذا كان هناك صف مطابق موجود مسبقًا تحت الاسم الجديد فسيُهمل الإدراج (IGNORE)
+                // ومع ذلك حذف السجل القديم يبقى آمنًا لأنه تكرار فعلي لنفس التبعية.
+                dependencyRepo.insert(dep.copy(id = 0, parentName = cleanNew))
                 dependencyRepo.delete(dep)
             }
         }

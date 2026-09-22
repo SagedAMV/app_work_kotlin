@@ -64,6 +64,8 @@ import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.formatDate
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -94,8 +96,12 @@ class MaterialsViewModel @Inject constructor(
             try {
                 saveMaterial(Material(name = name, type = type))
                 onSaved()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: IllegalArgumentException) {
                 onError(e.message ?: "مدخلات غير صالحة")
+            } catch (t: Throwable) {
+                onError(t.message?.takeIf { it.isNotBlank() } ?: "تعذر حفظ المادة")
             }
         }
     }
@@ -106,15 +112,28 @@ class MaterialsViewModel @Inject constructor(
             try {
                 renameMaterial(material.copy(type = type), newName)
                 onSaved()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: IllegalArgumentException) {
                 onError(e.message ?: "مدخلات غير صالحة")
+            } catch (t: Throwable) {
+                onError(t.message?.takeIf { it.isNotBlank() } ?: "تعذر إعادة تسمية المادة")
             }
         }
     }
 
     /** الحذف من الكتالوج فقط — عناصر المواقع تبقى محفوظة */
-    fun delete(material: Material) {
-        viewModelScope.launch { deleteMaterial(material) }
+    fun delete(material: Material, onDeleted: () -> Unit, onError: (String) -> Unit): Job {
+        return viewModelScope.launch {
+            try {
+                deleteMaterial(material)
+                onDeleted()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (t: Throwable) {
+                onError(t.message?.takeIf { it.isNotBlank() } ?: "تعذر حذف المادة")
+            }
+        }
     }
 }
 
@@ -249,7 +268,10 @@ fun MaterialsCatalogScreen(
                 viewModel.add(
                     name,
                     type,
-                    onSaved = { showAdd = false },
+                    onSaved = {
+                        showAdd = false
+                        scope.launch { snackbarHostState.showSnackbar("تمت إضافة المادة") }
+                    },
                     onError = reportError
                 )
             }
@@ -268,7 +290,10 @@ fun MaterialsCatalogScreen(
                     material,
                     name,
                     type,
-                    onSaved = { materialToRename = null },
+                    onSaved = {
+                        materialToRename = null
+                        scope.launch { snackbarHostState.showSnackbar("تم حفظ التعديلات") }
+                    },
                     onError = reportError
                 )
             }
@@ -287,7 +312,16 @@ fun MaterialsCatalogScreen(
                 materialToDelete = null
                 scope.launch {
                     delay(280)
-                    viewModel.delete(material)
+                    val job = viewModel.delete(
+                        material,
+                        onDeleted = {
+                            scope.launch { snackbarHostState.showSnackbar("تم حذف «${material.name}» من الكتالوج") }
+                        },
+                        onError = { msg ->
+                            scope.launch { snackbarHostState.showSnackbar(msg) }
+                        }
+                    )
+                    job.join()
                     collapsingId = null
                 }
             },
