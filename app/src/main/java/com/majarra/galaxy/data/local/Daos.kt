@@ -181,6 +181,10 @@ interface EmergencyVisitDao {
     @Query("SELECT * FROM emergency_visits WHERE siteId = :siteId ORDER BY visitDate DESC")
     fun observeBySite(siteId: Long): Flow<List<EmergencyVisit>>
 
+    /** كل النزولات — لسجل آخر العمليات في الإحصائيات */
+    @Query("SELECT * FROM emergency_visits")
+    suspend fun getAll(): List<EmergencyVisit>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(visit: EmergencyVisit): Long
 }
@@ -221,6 +225,10 @@ interface MaterialRequestDao {
     @Query("SELECT * FROM material_requests WHERE siteId = :siteId")
     suspend fun getBySite(siteId: Long): List<MaterialRequest>
 
+    /** كل الطلبات — لموافقات «إضافة مادة» في سجل آخر العمليات */
+    @Query("SELECT * FROM material_requests")
+    suspend fun getAll(): List<MaterialRequest>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(request: MaterialRequest): Long
 
@@ -241,6 +249,10 @@ interface WithdrawalDao {
     @Query("SELECT COUNT(*) FROM withdrawals WHERE status != 'RETURNED'")
     suspend fun countOpen(): Int
 
+    /** كل السجلات — لسجل آخر العمليات وحساب المواد الحالية في الإحصائيات */
+    @Query("SELECT * FROM withdrawals")
+    suspend fun getAll(): List<Withdrawal>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(withdrawal: Withdrawal): Long
 
@@ -249,4 +261,35 @@ interface WithdrawalDao {
 
     @Delete
     suspend fun delete(withdrawal: Withdrawal)
+}
+
+/**
+ * تبعيات مادة الاتصال (جلسة تعديلات منطق المواد) — تُراقَب لكل
+ * (موقع + مادة أم) لأن واجهة التبعيات تفتح لمادة واحدة، وقراءة
+ * كاملة لسجل آخر العمليات وحساب عدد المواد الحالية.
+ */
+@Dao
+interface MaterialDependencyDao {
+    /** تبعيات مادة أم واحدة داخل موقع واحد — الأحدث إضافة أولًا */
+    @Query(
+        "SELECT * FROM material_dependencies WHERE siteId = :siteId AND parentName = :parentName " +
+            "ORDER BY createdDate DESC"
+    )
+    fun observeByParent(siteId: Long, parentName: String): Flow<List<MaterialDependency>>
+
+    @Query("SELECT * FROM material_dependencies")
+    suspend fun getAll(): List<MaterialDependency>
+
+    /** قراءة لحظية لتبعيات مادة أم — لفحص التكرار قبل الإضافة */
+    @Query(
+        "SELECT * FROM material_dependencies WHERE siteId = :siteId AND parentName = :parentName"
+    )
+    suspend fun getByParent(siteId: Long, parentName: String): List<MaterialDependency>
+
+    /** @return معرف الصف الجديد، أو -1 إن كانت التبعية موجودة مسبقًا */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insert(dependency: MaterialDependency): Long
+
+    @Delete
+    suspend fun delete(dependency: MaterialDependency)
 }

@@ -53,7 +53,12 @@ private suspend fun touchSite(siteRepo: SiteRepository, siteId: Long) {
  *    وملاحظات اختيارية.
  * 2) المادة تختفي مؤقتًا من قسم «المواد» — العرض في الواجهة يطرح
  *    المواد ذات سحب مفتوح (لم تُرجع بعد)، فلا يُلمس التخزين إطلاقًا،
- *    وعند الإرجاع تعود للظهور تلقائيًا.
+ * وعند الإرجاع تعود للظهور تلقائيًا.
+ *
+ * جلسة تعديلات منطق المواد: المعامل الاختياري `parentName` يميز سحب
+ * تبعية (ملحق مادة اتصال) عن سحب مادة رئيسية — نفس الدورة ونفس
+ * القرارات والإرجاع، لكن التبعية تختفي من قائمة تبعيات أمّها فقط
+ * (الفلترة في الواجهة تطابق parentName + الاسم معًا).
  */
 class WithdrawMaterialForMaintenanceUseCase @Inject constructor(
     private val withdrawalRepo: WithdrawalRepository,
@@ -63,7 +68,8 @@ class WithdrawMaterialForMaintenanceUseCase @Inject constructor(
         siteId: Long,
         itemName: String,
         withdrawReason: String,
-        notes: String
+        notes: String,
+        parentName: String = ""
     ): Long {
         val name = normalizeItemName(itemName)
         val reason = cleanWithdrawalText(withdrawReason)
@@ -72,6 +78,7 @@ class WithdrawMaterialForMaintenanceUseCase @Inject constructor(
             "سبب السحب طويل جدًا (الحد $MAX_WITHDRAWAL_TEXT حرفًا)"
         }
         val cleanNotes = cleanWithdrawalText(notes).take(MAX_WITHDRAWAL_TEXT)
+        val parent = cleanWithdrawalText(parentName).take(MAX_WITHDRAWN_ITEM_NAME)
         val id = withdrawalRepo.insert(
             Withdrawal(
                 siteId = siteId,
@@ -81,7 +88,8 @@ class WithdrawMaterialForMaintenanceUseCase @Inject constructor(
                 itemType = ItemType.OTHER,
                 status = WithdrawalStatus.WITHDRAWN,
                 notes = cleanNotes,
-                withdrawReason = reason
+                withdrawReason = reason,
+                parentName = parent
             )
         )
         touchSite(siteRepo, siteId)

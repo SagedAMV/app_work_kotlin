@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.room.TypeConverter
 import com.majarra.galaxy.domain.model.AttachmentType
 import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.MaterialType
 import com.majarra.galaxy.domain.model.VisitOutcome
 import com.majarra.galaxy.domain.model.WithdrawalStatus
 
@@ -25,6 +26,16 @@ class GalaxyConverters {
             // بل نسجل تحذيرا واضحا ثم نرجع القيمة الافتراضية الآمنة.
             Log.w(TAG, "enum value unknown in db: $v -> default IMAGE")
             AttachmentType.IMAGE
+        }
+
+    @TypeConverter fun materialTypeToDb(v: MaterialType): String = v.name
+
+    @TypeConverter fun materialType(v: String): MaterialType =
+        runCatching { MaterialType.valueOf(v) }.getOrElse {
+            // «مادة عادية» هي الافتراض الآمن لأي نوع مجهول: المادة تبقى
+            // صالحة تمامًا وتفقد الخصائص الخاصة فقط بلا انهيار.
+            Log.w(TAG, "material type unknown in db: $v -> default NORMAL")
+            MaterialType.NORMAL
         }
 
     @TypeConverter fun itemTypeToDb(v: ItemType): String = v.name

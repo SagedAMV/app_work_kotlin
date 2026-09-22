@@ -340,9 +340,46 @@ object GalaxyMigrations {
         }
     }
 
+    /**
+     * 8 → 9: جلسة تعديلات منطق المواد والإحصائيات:
+     *  - عمود `type` في `materials`: نوع المادة (عادية/مادة اتصال)
+     *    بأمان افتراضي NORMAL فتبقى كل المواد القائمة صالحة.
+     *  - جدول `material_dependencies`: تبعيات مادة الاتصال لكل موقع
+     *    بمفتاح خارجي بحذف متسلسل وفهرس فريد يمنع تكرار التبعية.
+     *  - عمود `parentName` في `withdrawals`: فارغ للسحوبات القائمة
+     *    (مواد رئيسية) فيحتفظ تاريخها بمعناها دون أي تغيير.
+     *
+     * ترحيل إضافة فقط: لا يُسقط أي جدول ولا يُعدَّل أي صف قائم،
+     * لذلك هو غير مدمّر بطبيعته. أسماء الأعمدة والفهارس تطابق حرفيًا
+     * ما يولّده Room من الكيانات وإلا فشل التحقق من المخطط.
+     */
+    val MIGRATION_8_9 = object : Migration(8, 9) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE `materials` ADD COLUMN `type` TEXT NOT NULL DEFAULT 'NORMAL'")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `material_dependencies` (" +
+                    "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                    "`siteId` INTEGER NOT NULL, " +
+                    "`parentName` TEXT NOT NULL, " +
+                    "`name` TEXT NOT NULL, " +
+                    "`createdDate` INTEGER NOT NULL, " +
+                    "FOREIGN KEY(`siteId`) REFERENCES `sites`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_material_dependencies_siteId` " +
+                    "ON `material_dependencies` (`siteId`)"
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_material_dependencies_siteId_parentName_name` " +
+                    "ON `material_dependencies` (`siteId`, `parentName`, `name`)"
+            )
+            db.execSQL("ALTER TABLE `withdrawals` ADD COLUMN `parentName` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     /** كل الترحيلات بالترتيب — تُمرَّر إلى Room.databaseBuilder */
     val ALL: Array<Migration> = arrayOf(
         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7,
-        MIGRATION_7_8
+        MIGRATION_7_8, MIGRATION_8_9
     )
 }

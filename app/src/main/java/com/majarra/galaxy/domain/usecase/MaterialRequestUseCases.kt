@@ -3,6 +3,7 @@ package com.majarra.galaxy.domain.usecase
 import com.majarra.galaxy.data.local.Material
 import com.majarra.galaxy.data.local.MaterialRequest
 import com.majarra.galaxy.data.local.SiteDetail
+import com.majarra.galaxy.domain.model.MaterialType
 import com.majarra.galaxy.domain.model.RequestStatus
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.MaterialRequestRepository
@@ -74,6 +75,10 @@ class SubmitMaterialRequestsUseCase @Inject constructor(
  * «احتياج موقع» مباشرة (تعليمات الجلسة): تُسجَّل المادة في الكتالوج
  * الموحد (بلا تكرار إن كانت موجودة بإملاء مختلف في الحالة الكبيرة/
  * الصغيرة) ثم تُرسل فورًا كطلب احتياج إلى واجهة «الاحتياجات».
+ *
+ * جلسة تعديلات منطق المواد: المعامل `type` يحدد نوع المادة عند
+ * إنشائها (عادية/مادة اتصال) — فأي مادة جديدة تُنشأ من أي مكان
+ * تحمل نوعها الصحيح من أول لحظة. الموجود مسبقًا يبقى بنوعه.
  * @return معرف المادة في الكتالوج.
  */
 class AddMaterialAsRequestUseCase @Inject constructor(
@@ -81,7 +86,11 @@ class AddMaterialAsRequestUseCase @Inject constructor(
     private val requestRepo: MaterialRequestRepository,
     private val siteRepo: SiteRepository
 ) {
-    suspend operator fun invoke(siteId: Long, materialName: String): Long {
+    suspend operator fun invoke(
+        siteId: Long,
+        materialName: String,
+        type: MaterialType = MaterialType.NORMAL
+    ): Long {
         val name = cleanRequestName(materialName)
         require(name.isNotEmpty()) { "اسم المادة مطلوب" }
         require(name.length <= MAX_REQUEST_MATERIAL_NAME) {
@@ -90,7 +99,8 @@ class AddMaterialAsRequestUseCase @Inject constructor(
         // الكتالوج فريد الاسم: أعد الموجود بدل تكراره
         val existing = materialRepo.getAll()
             .firstOrNull { it.name.equals(name, ignoreCase = true) }
-        val materialId = existing?.id ?: materialRepo.insert(Material(name = name))
+        val materialId = existing?.id
+            ?: materialRepo.insert(Material(name = name, type = type))
         // لا ترفع طلبًا مكررًا إن كان بانتظار أصلًا
         val duplicate = requestRepo.getBySite(siteId).any {
             it.status == RequestStatus.PENDING && it.materialName.equals(name, ignoreCase = true)

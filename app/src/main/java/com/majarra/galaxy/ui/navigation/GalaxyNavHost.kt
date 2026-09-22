@@ -100,10 +100,16 @@ object Routes {
     const val SETTINGS = "settings"
     const val CATEGORIES = "categories"
     const val MATERIALS = "materials"
-    const val SITE_DETAILS = "site_details/{siteId}"
+    const val SITE_DETAILS = "site_details/{siteId}?section={section}"
     const val EMERGENCY_VISIT = "emergency_visit/{siteId}"
 
-    fun siteDetails(id: Long) = "site_details/$id"
+    /**
+     * جلسة الإحصائيات التفاعلية: وسيط `section` الاختياري يحدد القسم
+     * الذي يُفتح به الموقع (MATERIALS/DEMAND/REQUESTS/WITHDRAWALS) —
+     * النقر على بيان «سحب مادة» في سجل العمليات يفتح الموقع داخل
+     * واجهة المسحوبات مباشرة.
+     */
+    fun siteDetails(id: Long, section: String = "MATERIALS") = "site_details/$id?section=$section"
     fun emergencyVisit(id: Long) = "emergency_visit/$id"
 
     val topLevel = setOf(SITES, GALAXY_NETWORK, STATS, SETTINGS)
@@ -440,7 +446,15 @@ private fun GalaxyNavHost(
                 snackbarHostState = snackbarHostState
             )
         }
-        composable(Routes.STATS) { StatsScreen() }
+        // الإحصائيات التفاعلية (جلسة تعديلات الإحصائيات): النقر على بيان
+        // في سجل العمليات يوجّه إلى واجهة الموقع الفرعية الخاصة به.
+        composable(Routes.STATS) {
+            StatsScreen(
+                onOpenSite = { navController.navigate(Routes.siteDetails(it)) },
+                onOpenWithdrawals = { navController.navigate(Routes.siteDetails(it, "WITHDRAWALS")) },
+                onOpenEmergency = { navController.navigate(Routes.emergencyVisit(it)) }
+            )
+        }
         // الإعدادات تتشارك مضيف السنابار العام حتى تُعرض رسائل نجاحها
         // كسنابار خفيفة بدل حوار يوقف المستخدم
         composable(Routes.SETTINGS) { SettingsScreen(snackbarHostState = snackbarHostState) }
@@ -452,7 +466,13 @@ private fun GalaxyNavHost(
         }
         composable(
             route = Routes.SITE_DETAILS,
-            arguments = listOf(navArgument("siteId") { type = NavType.LongType })
+            arguments = listOf(
+                navArgument("siteId") { type = NavType.LongType },
+                navArgument("section") {
+                    type = NavType.StringType
+                    defaultValue = "MATERIALS"
+                }
+            )
         ) {
             SiteDetailsScreen(
                 onBack = { navController.popBackStack() },

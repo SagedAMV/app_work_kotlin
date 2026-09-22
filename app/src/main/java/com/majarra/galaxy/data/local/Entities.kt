@@ -6,6 +6,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.majarra.galaxy.domain.model.AttachmentType
 import com.majarra.galaxy.domain.model.ItemType
+import com.majarra.galaxy.domain.model.MaterialType
 import com.majarra.galaxy.domain.model.RequestStatus
 import com.majarra.galaxy.domain.model.VisitOutcome
 import com.majarra.galaxy.domain.model.WithdrawalStatus
@@ -157,10 +158,54 @@ data class AppSetting(
  * المواد تُعرَّف هنا مرة واحدة ثم تختارها المواقع من واجهة اختيار،
  * بدل الكتابة النصية في كل موقع. اسم المادة فريد حتى لا تتكرر
  * مواد متطابقة في قوائم الاختيار.
+ *
+ * جلسة تعديلات منطق المواد: أُضيف حقل `type` (نوع المادة) — يحدده
+ * المستخدم عند الإضافة، وقيمته «مادة اتصال» تجعل التطبيق يتعرف
+ * تلقائيًا على المادة كجهاز اتصال فتُتاح لها خاصية «التبعيات».
  */
 @Entity(tableName = "materials", indices = [Index(value = ["name"], unique = true)])
 data class Material(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    /** نوع المادة — «مادة اتصال» تفتح خيار التبعيات داخل المواقع */
+    val type: MaterialType = MaterialType.NORMAL,
+    val createdDate: Long = System.currentTimeMillis()
+)
+
+/**
+ * تبعيات (ملحقات) مادة الاتصال داخل موقع محدد — جلسة تعديلات منطق
+ * المواد: كل صف يمثل مادة ملحقة (واير كهرباء، كواكسل، مايك…) تابعة
+ * لمادة أم («مادة اتصال») في موقع واحد.
+ *
+ * قواعد الاتساق:
+ *  - `parentName` اسم مادة الأم كما هو مخزَّن نصًا في أسطر مواد
+ *    الموقع — الربط بالاسم لأن مواد المواقع نفسها مخزَّنة نصيًا.
+ *  - مفتاح خارجي بحذف متسلسل: حذف الموقع يمسح تبعياته تلقائيًا.
+ *  - فهرس فريد على (siteId, parentName, name) يمنع تكرار تبعية
+ *    بنفس الاسم تحت المادة الأم نفسها في الموقع نفسه.
+ *  - سحب تبعية للصيانة يُسجَّل في جدول withdrawals مع تعبئة
+ *    `parentName` هناك، فتختفي من هذه القائمة (عرض محسوب) حتى
+ *    الإرجاع — بنفس منطق المواد الخارجية تمامًا.
+ */
+@Entity(
+    tableName = "material_dependencies",
+    foreignKeys = [
+        ForeignKey(
+            entity = Site::class, parentColumns = ["id"], childColumns = ["siteId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [
+        Index("siteId"),
+        Index(value = ["siteId", "parentName", "name"], unique = true)
+    ]
+)
+data class MaterialDependency(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val siteId: Long,
+    /** اسم مادة الأم («مادة الاتصال») في هذا الموقع */
+    val parentName: String,
+    /** اسم المادة الملحقة (التبعية) */
     val name: String,
     val createdDate: Long = System.currentTimeMillis()
 )
@@ -205,7 +250,14 @@ data class Withdrawal(
     /** كيف أُصلحت المشكلة — إلزامي عند قرار «تم الإصلاح» (2.12) */
     val fixedNote: String = "",
     /** سبب عدم الإصلاح — إلزامي عند قرار «لم يتم الإصلاح» (2.12) */
-    val notFixedReason: String = ""
+    val notFixedReason: String = "",
+    /**
+     * اسم مادة الأم إذا كان المسحوب تبعية (ملحق مادة اتصال) — جلسة
+     * تعديلات منطق المواد. فارغ = سحب مادة رئيسية عادية. يُستخدم
+     * لإخفاء التبعية من قائمة تبعيات أمّها فقط (لا من قائمة المواد
+     * الرئيسية) ولعرض «تبعية «الأم»» في واجهة المسحوبات.
+     */
+    val parentName: String = ""
 )
 
 /**

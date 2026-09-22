@@ -18,6 +18,14 @@ import androidx.room.TypeConverters
  *     في `emergency_visits`.
  * الترحيل 7 → 8 في GalaxyMigrations إضافة فقط (غير مدمّر إطلاقًا).
  *
+ * الإصدار 9 (جلسة تعديلات منطق المواد والإحصائيات):
+ *   - عمود `type` في `materials`: نوع المادة (عادية/مادة اتصال).
+ *   - جدول جديد `material_dependencies`: تبعيات مادة الاتصال في
+ *     كل موقع (واير، كواكسل، مايك…) بمفتاح خارجي بحذف متسلسل.
+ *   - عمود `parentName` في `withdrawals`: يميز سحب التبعية عن سحب
+ *     المادة الرئيسية فيعاد استخدام دورة السحب نفسها للتبعيات.
+ * الترحيل 8 → 9 في GalaxyMigrations إضافة فقط (غير مدمّر إطلاقًا).
+ *
  * الإصدار 6 (النسخة 2.4): جدول حسب تعليمات جلستها:
  *   - `emergency_visits`: سجل النزول الطارئ/الاستكشاف لكل موقع.
  * الترحيل 5 → 6 إضافة فقط (غير مدمّر إطلاقًا).
@@ -38,9 +46,10 @@ import androidx.room.TypeConverters
         Withdrawal::class,
         EmergencyVisit::class,
         SiteLink::class,
-        MaterialRequest::class
+        MaterialRequest::class,
+        MaterialDependency::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(GalaxyConverters::class)
@@ -57,6 +66,7 @@ abstract class GalaxyDatabase : RoomDatabase() {
     abstract fun emergencyVisitDao(): EmergencyVisitDao
     abstract fun siteLinkDao(): SiteLinkDao
     abstract fun materialRequestDao(): MaterialRequestDao
+    abstract fun materialDependencyDao(): MaterialDependencyDao
 
     companion object {
         const val DB_NAME = "galaxy.db"

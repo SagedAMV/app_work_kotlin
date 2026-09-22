@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ListAlt
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Build
@@ -25,19 +26,24 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.majarra.galaxy.data.local.*
+import com.majarra.galaxy.domain.model.MaterialType
 import com.majarra.galaxy.domain.model.RequestStatus
 import com.majarra.galaxy.domain.model.WithdrawalStatus
 import com.majarra.galaxy.domain.repository.*
 import com.majarra.galaxy.domain.usecase.*
+import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
 import com.majarra.galaxy.ui.components.EmptyState
 import com.majarra.galaxy.ui.components.GalaxyCard
 import com.majarra.galaxy.ui.components.SectionTitle
 import com.majarra.galaxy.ui.components.formatDateTime
 import com.majarra.galaxy.util.MaterialLines
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -73,11 +79,18 @@ import javax.inject.Inject
  * ============================================================
  */
 
-private enum class DetailsSection(val label: String) {
+internal enum class DetailsSection(val label: String) {
     MATERIALS("المواد"),
     DEMAND("احتياج موقع"),
     REQUESTS("الاحتياجات"),
-    WITHDRAWALS("المسحوبات")
+    WITHDRAWALS("المسحوبات"),
+    DEPENDENCIES("التبعيات");
+
+    companion object {
+        /** تحليل اسم القسم القادم من التنقل بأمان — القيمة الافتراضية المواد */
+        fun fromName(name: String?): DetailsSection =
+            entries.firstOrNull { it.name == name } ?: MATERIALS
+    }
 }
 
 @HiltViewModel
@@ -94,6 +107,9 @@ class SiteDetailsViewModel @Inject constructor(
     private val markNotFixed: MarkWithdrawalNotFixedUseCase,
     private val returnItem: ReturnWithdrawnItemUseCase,
     private val deleteWithdrawal: DeleteWithdrawalUseCase,
+    private val dependencyRepo: MaterialDependencyRepository,
+    private val addDependency: AddSiteDependencyUseCase,
+    private val removeDependency: RemoveSiteDependencyUseCase,
     private val submitRequests: SubmitMaterialRequestsUseCase,
     private val addMaterialRequest: AddMaterialAsRequestUseCase,
     private val approveRequest: ApproveMaterialRequestUseCase,
@@ -102,6 +118,11 @@ class SiteDetailsViewModel @Inject constructor(
     private val deleteRequest: DeleteMaterialRequestUseCase
 ) : ViewModel() {
     val siteId: Long = savedStateHandle.get<Long>("siteId") ?: 0L
+
+    /** القسم الذي يُفتح به الموقع — من وسيط التنقل (سجل الإحصائيات التفاعلي) */
+    internal val initialSection: DetailsSection =
+        DetailsSection.fromName(savedStateHandle.get<String>("section"))
+
     val site = observeSite(siteId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val detail = detailRepo.observeBySite(siteId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val catalog = materialRepo.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -112,9 +133,13 @@ class SiteDetailsViewModel @Inject constructor(
      * مواد الموقع المعروضة: كل ما في «الموجود» عدا ما هو خارج الموقع
      * الآن بسبب سحب مفتوح (لم يُرجع بعد)، ومعقّمة من التكرار حتى لا
      * تتكرر مفاتيح القائمة في الشاشة.
+     *
+     * جلسة التبعيات: الفلترة تحصر السحب المفتوح في المواد الرئيسية
+     * فقط (parentName فارغ) — فسحب تبعية باسم مشابه لمادة رئيسية
+     * لا يخفي المادة الرئيسية من قائمتها.
      */
     val available: StateFlow<List<String>> = combine(detail, withdrawals) { d, ws ->
-        val open = ws.filter { it.status.isOpen }
+        val open = ws.filter { it.status.isOpen && it.parentName.isBlank() }
             .map { it.itemName.trim().lowercase() }
             .toSet()
         MaterialLines.parse(d?.availableMaterials.orEmpty())
@@ -124,14 +149,50 @@ class SiteDetailsViewModel @Inject constructor(
             .distinctBy { it.lowercase() }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** مادة الأم الحالية لواجهة التبعيات — يضبطها فتح القسم */
+    private val dependencyParent = MutableStateFlow("")
+
+    /**
+     * تبعيات مادة الأم الحالية: كل ما سُجل تحت الأم عدا ما هو خارج
+     * الموقع الآن بسحب مفتوح (تطابق parentName + الاسم معًا) —
+     * بنفس منطق إخفاء المواد المسحوبة من قائمة «المواد».
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val dependencies: StateFlow<List<MaterialDependency>> = dependencyParent
+        .flatMapLatest { parent ->
+            if (parent.isBlank()) flowOf(emptyList<MaterialDependency>())
+            else combine(
+                dependencyRepo.observeByParent(siteId, parent),
+                withdrawals
+            ) { deps, ws ->
+                val open = ws.filter { it.status.isOpen && it.parentName.equals(parent, ignoreCase = true) }
+                    .map { it.itemName.trim().lowercase() }
+                    .toSet()
+                deps.filterNot { it.name.trim().lowercase() in open }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** مزامنة مادة الأم مع حالة الشاشة عند فتح/تغيير قسم التبعيات */
+    fun setDependencyParent(parent: String) {
+        dependencyParent.value = parent.trim()
+    }
+
+    /** هل المادة «مادة اتصال» في الكتالوج الموحد (فتظهر لها التبعيات)؟ */
+    fun isCommunicationMaterial(name: String, catalog: List<Material>): Boolean =
+        catalog.any { it.name.equals(name.trim(), ignoreCase = true) && it.type == MaterialType.COMMUNICATION }
+
     fun remove(name: String, done: () -> Unit) = action(done) { removeMaterial(siteId, name) }
     fun withdraw(name: String, reason: String, notes: String, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { withdrawMaterial(siteId, name, reason, notes) }
+    fun withdrawDependency(parent: String, name: String, reason: String, notes: String, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { withdrawMaterial(siteId, name, reason, notes, parent) }
+    fun addDep(parent: String, name: String, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { addDependency(siteId, parent, name) }
+    fun removeDep(dep: MaterialDependency, done: () -> Unit) = action(done) { removeDependency(dep) }
     fun fixed(w: Withdrawal, text: String, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { markFixed(w, text) }
     fun notFixed(w: Withdrawal, text: String, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { markNotFixed(w, text) }
     fun returnItem(w: Withdrawal, done: () -> Unit) = action(done) { returnItem(w) }
     fun deleteWithdrawal(w: Withdrawal, done: () -> Unit) = action(done) { deleteWithdrawal(w) }
     fun submit(names: List<String>, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { submitRequests(siteId, names) }
-    fun addRequest(name: String, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { addMaterialRequest(siteId, name) }
+    fun addRequest(name: String, type: MaterialType, done: () -> Unit, error: (String) -> Unit) = safe(done, error) { addMaterialRequest(siteId, name, type) }
     fun approve(r: MaterialRequest, done: () -> Unit) = action(done) { approveRequest(r) }
     fun reject(r: MaterialRequest, done: () -> Unit) = action(done) { rejectRequest(r) }
     fun restore(r: MaterialRequest, done: () -> Unit) = action(done) { restoreRequest(r) }
@@ -156,8 +217,18 @@ fun SiteDetailsScreen(
     val available by viewModel.available.collectAsStateWithLifecycle()
     val withdrawals by viewModel.withdrawals.collectAsStateWithLifecycle()
     val requests by viewModel.requests.collectAsStateWithLifecycle()
-    var section by rememberSaveable { mutableStateOf(DetailsSection.MATERIALS) }
+    val dependencies by viewModel.dependencies.collectAsStateWithLifecycle()
+    // القسم الابتدائي من وسيط التنقل — النقر على بيان «سحب مادة» في
+    // سجل الإحصائيات يفتح الموقع داخل واجهة المسحوبات مباشرة.
+    var section by rememberSaveable { mutableStateOf(viewModel.initialSection) }
+    var depsParent by rememberSaveable { mutableStateOf("") }
+    var showAddDependency by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
+
+    // مزامنة مادة الأم في الـViewModel مع حالة الشاشة المحفوظة
+    LaunchedEffect(section, depsParent) {
+        if (section == DetailsSection.DEPENDENCIES) viewModel.setDependencyParent(depsParent)
+    }
     var error by remember { mutableStateOf<String?>(null) }
     var dialog by remember { mutableStateOf<@Composable (() -> Unit)?>(null) }
     val scope = rememberCoroutineScope()
@@ -167,7 +238,11 @@ fun SiteDetailsScreen(
         TopAppBar(
             title = {
                 val base = site?.name ?: "تفاصيل الموقع"
-                val extra = if (section == DetailsSection.MATERIALS) "" else " — ${section.label}"
+                val extra = when (section) {
+                    DetailsSection.MATERIALS -> ""
+                    DetailsSection.DEPENDENCIES -> " — تبعيات «$depsParent»"
+                    else -> " — ${section.label}"
+                }
                 Text(base + extra)
             },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") } },
@@ -180,6 +255,13 @@ fun SiteDetailsScreen(
                             leadingIcon = { Icon(Icons.Default.Inventory2, null) },
                             onClick = { section = DetailsSection.MATERIALS; menu = false }
                         )
+                        if (section == DetailsSection.DEPENDENCIES && depsParent.isNotBlank()) {
+                            DropdownMenuItem(
+                                text = { Text("التبعيات («$depsParent»)") },
+                                leadingIcon = { Icon(Icons.Default.AccountTree, null) },
+                                onClick = { menu = false }
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("احتياج موقع") },
                             leadingIcon = { Icon(Icons.Default.AddShoppingCart, null) },
@@ -204,19 +286,41 @@ fun SiteDetailsScreen(
                 }
             }
         )
-    }) { padding ->
+        },
+        floatingActionButton = {
+            // زر الإضافة (+) أسفل واجهة التبعيات فقط — لإضافة مواد
+            // ملحقة (واير كهرباء، كواكسل، مايك…) لمادة الأم المفتوحة
+            if (section == DetailsSection.DEPENDENCIES && depsParent.isNotBlank()) {
+                GalaxyExpandingFab(
+                    icon = Icons.Default.Add,
+                    primaryLabel = "إضافة تبعية",
+                    onPrimary = { showAddDependency = true }
+                )
+            }
+        }
+    ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             when (section) {
                 DetailsSection.MATERIALS -> MaterialsSection(
                     items = available,
+                    catalog = catalog,
+                    isCommunication = { name -> viewModel.isCommunicationMaterial(name, catalog) },
                     onRemove = { name -> viewModel.remove(name) { message("تم حذف المادة") } },
-                    onWithdraw = { name -> dialog = { WithdrawDialog(name, { reason, notes, close -> viewModel.withdraw(name, reason, notes, close, { error = it }) }, { dialog = null }) } }
+                    onWithdraw = { name -> dialog = { WithdrawDialog(name, { reason, notes, close -> viewModel.withdraw(name, reason, notes, close, { error = it }) }, { dialog = null }) } },
+                    onOpenDependencies = { name -> depsParent = name; section = DetailsSection.DEPENDENCIES }
+                )
+                DetailsSection.DEPENDENCIES -> DependenciesSection(
+                    parent = depsParent,
+                    items = dependencies,
+                    onBack = { section = DetailsSection.MATERIALS },
+                    onRemove = { dep -> viewModel.removeDep(dep) { message("تم حذف التبعية") } },
+                    onWithdraw = { name -> dialog = { WithdrawDialog(name, { reason, notes, close -> viewModel.withdrawDependency(depsParent, name, reason, notes, close, { error = it }) }, { dialog = null }) } }
                 )
                 DetailsSection.DEMAND -> DemandSection(
                     catalog = catalog,
                     pendingCount = requests.count { it.status == RequestStatus.PENDING },
                     onSubmit = { names -> viewModel.submit(names, { message("تم رفع الاحتياج") }, { error = it }) },
-                    onAdd = { name -> viewModel.addRequest(name, { message("تمت إضافة المادة ورفع الطلب") }, { error = it }) },
+                    onAdd = { name, type -> viewModel.addRequest(name, type, { message("تمت إضافة المادة ورفع الطلب") }, { error = it }) },
                     onOpenRequests = { section = DetailsSection.REQUESTS }
                 )
                 DetailsSection.REQUESTS -> RequestsSection(
@@ -237,6 +341,15 @@ fun SiteDetailsScreen(
             }
         }
     }
+    if (showAddDependency && depsParent.isNotBlank()) {
+        AddDependencyDialog(
+            parent = depsParent,
+            onSave = { name ->
+                viewModel.addDep(depsParent, name, { message("تمت إضافة التبعية") }, { error = it })
+            },
+            onCancel = { showAddDependency = false }
+        )
+    }
     error?.let { msg ->
         AlertDialog(
             onDismissRequest = { error = null },
@@ -248,9 +361,20 @@ fun SiteDetailsScreen(
     dialog?.invoke()
 }
 
-/** قسم «المواد»: مواد هذا الموقع فقط + سحب للصيانة + حذف */
+/**
+ * قسم «المواد»: مواد هذا الموقع فقط + سحب للصيانة + حذف.
+ * جلسة التبعيات: بطاقة «مادة اتصال» (المحددة بنوعها في الكتالوج)
+ * يظهر بجانبها خيار «التبعيات» — للمواد الأخرى لا يظهر إطلاقًا.
+ */
 @Composable
-private fun MaterialsSection(items: List<String>, onRemove: (String) -> Unit, onWithdraw: (String) -> Unit) {
+private fun MaterialsSection(
+    items: List<String>,
+    catalog: List<Material>,
+    isCommunication: (String) -> Boolean,
+    onRemove: (String) -> Unit,
+    onWithdraw: (String) -> Unit,
+    onOpenDependencies: (String) -> Unit
+) {
     val unique = remember(items) { items.distinctBy { it.lowercase() } }
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { SectionTitle("المواد (${unique.size})") }
@@ -258,11 +382,64 @@ private fun MaterialsSection(items: List<String>, onRemove: (String) -> Unit, on
             item { EmptyState(Icons.Default.Inventory2, "لا توجد مواد", "أضف المواد من «احتياج موقع» ثم وافق عليها في «الاحتياجات»") }
         }
         items(unique, key = { it.lowercase() }) { name ->
+            // التعرف التلقائي على مادة الاتصال بمطابقة اسمها مع الكتالوج؛
+            // المادة المحذوفة من الكتالوج تُعامل عادية فلا يظهر لها التبعيات
+            val comm = remember(catalog, name) { isCommunication(name) }
             GalaxyCard {
                 Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(name, Modifier.weight(1f))
+                    if (comm) {
+                        OutlinedButton(onClick = { onOpenDependencies(name) }) { Text("التبعيات") }
+                        Spacer(Modifier.width(6.dp))
+                    }
                     OutlinedButton(onClick = { onWithdraw(name) }) { Text("سحب للصيانة") }
                     IconButton(onClick = { onRemove(name) }) { Icon(Icons.Default.Delete, "حذف") }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * واجهة «التبعيات» (جلسة تعديلات منطق المواد): مادة ملحقة تحت مادة
+ * اتصال واحدة — بنفس منطق المواد الخارجية تمامًا: بطاقة لكل تبعية
+ * مع زر «سحب للصيانة» الخاص بها وزر حذف، والإضافة من الزر (+)
+ * العائم أسفل الواجهة.
+ */
+@Composable
+private fun DependenciesSection(
+    parent: String,
+    items: List<MaterialDependency>,
+    onBack: () -> Unit,
+    onRemove: (MaterialDependency) -> Unit,
+    onWithdraw: (String) -> Unit
+) {
+    LazyColumn(contentPadding = PaddingValues(16.dp, 16.dp, 16.dp, 96.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("المواد")
+                }
+            }
+        }
+        item { SectionTitle("تبعيات «$parent» (${items.size})") }
+        if (items.isEmpty()) {
+            item {
+                EmptyState(
+                    Icons.Default.AccountTree,
+                    "لا توجد تبعيات",
+                    "أضف الملحقات (واير كهرباء، كواكسل، مايك…) من زر «+» بالأسفل"
+                )
+            }
+        }
+        items(items, key = { it.id }) { dep ->
+            GalaxyCard {
+                Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(dep.name, Modifier.weight(1f))
+                    OutlinedButton(onClick = { onWithdraw(dep.name) }) { Text("سحب للصيانة") }
+                    IconButton(onClick = { onRemove(dep) }) { Icon(Icons.Default.Delete, "حذف") }
                 }
             }
         }
@@ -278,7 +455,7 @@ private fun DemandSection(
     catalog: List<Material>,
     pendingCount: Int,
     onSubmit: (List<String>) -> Unit,
-    onAdd: (String) -> Unit,
+    onAdd: (String, MaterialType) -> Unit,
     onOpenRequests: () -> Unit
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -307,7 +484,7 @@ private fun DemandSection(
                 GalaxyCard {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("«$cleanQuery» غير موجودة في المواد المحفوظة")
-                        Button(onClick = { onAdd(cleanQuery); query = "" }, modifier = Modifier.fillMaxWidth()) {
+                        Button(onClick = { addDialog = true }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.Add, null); Spacer(Modifier.width(6.dp)); Text("إضافة مادة ورفع الطلب")
                         }
                     }
@@ -347,8 +524,65 @@ private fun DemandSection(
         }
     }
     if (addDialog) {
-        TextInputDialog("إضافة مادة ورفع طلب", "اسم المادة", { onAdd(it) }, { addDialog = false })
+        AddMaterialWithTypeDialog(
+            title = "إضافة مادة ورفع طلب",
+            onSave = { name, type -> onAdd(name, type); addDialog = false },
+            onCancel = { addDialog = false }
+        )
     }
+}
+
+/**
+ * حوار إضافة مادة مع تحديد «نوع المادة» (جلسة تعديلات منطق المواد):
+ * المستخدم يحدد إن كانت المادة «مادة اتصال» (جهاز اتصال ثابت، يدوي،
+ * محطة…) أو مادة عادية، فيتعرف عليها التطبيق لاحقًا تلقائيًا.
+ */
+@Composable
+private fun AddMaterialWithTypeDialog(
+    title: String,
+    onSave: (String, MaterialType) -> Unit,
+    onCancel: () -> Unit
+) {
+    var text by remember { mutableStateOf("") }
+    var type by remember { mutableStateOf(MaterialType.NORMAL) }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    text,
+                    { text = it },
+                    label = { Text("اسم المادة") },
+                    singleLine = true
+                )
+                Text("نوع المادة", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = type == MaterialType.NORMAL,
+                        onClick = { type = MaterialType.NORMAL },
+                        label = { Text(MaterialType.NORMAL.label) }
+                    )
+                    FilterChip(
+                        selected = type == MaterialType.COMMUNICATION,
+                        onClick = { type = MaterialType.COMMUNICATION },
+                        label = { Text(MaterialType.COMMUNICATION.label) }
+                    )
+                }
+                if (type == MaterialType.COMMUNICATION) {
+                    Text(
+                        "مادة الاتصال يظهر لها خيار «التبعيات» داخل المواقع",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(enabled = text.isNotBlank(), onClick = { onSave(text, type) }) { Text("حفظ") }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("إلغاء") } }
+    )
 }
 
 /** قسم «الاحتياجات»: طلبات الاحتياج ودورة الموافقة/الرفض/الحذف/الاسترجاع */
@@ -436,6 +670,14 @@ private fun WithdrawalsSection(
                         Text(w.itemName, Modifier.weight(1f))
                         Text(w.status.label, color = MaterialTheme.colorScheme.primary)
                     }
+                    // سحب تبعية: يُظهر أمّها حتى يبقى السياق واضحًا في القائمة
+                    if (w.parentName.isNotBlank()) {
+                        Text(
+                            "تبعية «${w.parentName}»",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     if (w.withdrawReason.isNotBlank()) Text("سبب السحب: ${w.withdrawReason}")
                     if (w.fixedNote.isNotBlank()) Text("كيف أُصلحت: ${w.fixedNote}")
                     if (w.notFixedReason.isNotBlank()) Text("سبب عدم الإصلاح: ${w.notFixedReason}")
@@ -481,6 +723,33 @@ private fun WithdrawDialog(name: String, onSave: (String, String, () -> Unit) ->
     )
 }
 
+/**
+ * حوار إضافة تبعية (ملحق) لمادة الاتصال المفتوحة — اسم إلزامي،
+ * والتكرار تحت نفس الأم يُرفض من حالة الاستخدام برسالة عربية.
+ */
+@Composable
+private fun AddDependencyDialog(parent: String, onSave: (String) -> Unit, onCancel: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        title = { Text("إضافة تبعية إلى «$parent»") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    text,
+                    { text = it },
+                    label = { Text("اسم المادة الملحقة (واير كهرباء، كواكسل، مايك…)") },
+                    singleLine = true
+                )
+            }
+        },
+        confirmButton = {
+            Button(enabled = text.isNotBlank(), onClick = { onSave(text); onCancel() }) { Text("حفظ") }
+        },
+        dismissButton = { TextButton(onClick = onCancel) { Text("إلغاء") } }
+    )
+}
+
 /** حوار قرار الإصلاح: كيف أُصلحت المشكلة (إلزامي) أو سبب عدم الإصلاح (إلزامي) */
 @Composable
 private fun DecisionDialog(title: String, label: String, onSave: (String, () -> Unit) -> Unit, onCancel: () -> Unit) {
@@ -494,18 +763,4 @@ private fun DecisionDialog(title: String, label: String, onSave: (String, () -> 
     )
 }
 
-/** حوار إدخال نصي بسيط (إضافة مادة مباشرة من واجهة احتياج الموقع) */
-@Composable
-private fun TextInputDialog(title: String, label: String, onSave: (String) -> Unit, onCancel: () -> Unit) {
-    var text by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onCancel,
-        title = { Text(title) },
-        text = { OutlinedTextField(text, { text = it }, label = { Text(label) }) },
-        confirmButton = {
-            Button(enabled = text.isNotBlank(), onClick = { onSave(text); onCancel() }) { Text("حفظ") }
-        },
-        dismissButton = { TextButton(onClick = onCancel) { Text("إلغاء") } }
-    )
-}
 

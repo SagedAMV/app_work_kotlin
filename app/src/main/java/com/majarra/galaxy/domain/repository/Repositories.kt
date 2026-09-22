@@ -5,6 +5,7 @@ import com.majarra.galaxy.data.local.Category
 import com.majarra.galaxy.data.local.EmergencyVisit
 import com.majarra.galaxy.data.local.MaintenanceLog
 import com.majarra.galaxy.data.local.Material
+import com.majarra.galaxy.data.local.MaterialDependency
 import com.majarra.galaxy.data.local.MaterialRequest
 import com.majarra.galaxy.data.local.Site
 import com.majarra.galaxy.data.local.SiteDetail
@@ -81,6 +82,8 @@ interface MaterialRepository {
 interface WithdrawalRepository {
     fun observeBySite(siteId: Long): Flow<List<Withdrawal>>
     suspend fun countOpen(): Int
+    /** كل السجلات — لسجل آخر العمليات وحساب المواد الحالية في الإحصائيات */
+    suspend fun getAll(): List<Withdrawal>
     suspend fun insert(withdrawal: Withdrawal): Long
     suspend fun update(withdrawal: Withdrawal)
     suspend fun delete(withdrawal: Withdrawal)
@@ -93,6 +96,8 @@ interface WithdrawalRepository {
  */
 interface EmergencyVisitRepository {
     fun observeBySite(siteId: Long): Flow<List<EmergencyVisit>>
+    /** كل النزولات — لسجل آخر العمليات في الإحصائيات */
+    suspend fun getAll(): List<EmergencyVisit>
     suspend fun insert(visit: EmergencyVisit): Long
 }
 
@@ -105,9 +110,28 @@ interface EmergencyVisitRepository {
 interface MaterialRequestRepository {
     fun observeBySite(siteId: Long): Flow<List<MaterialRequest>>
     suspend fun getBySite(siteId: Long): List<MaterialRequest>
+    /** كل الطلبات — لموافقات «إضافة مادة» في سجل آخر العمليات */
+    suspend fun getAll(): List<MaterialRequest>
     suspend fun insert(request: MaterialRequest): Long
     suspend fun update(request: MaterialRequest)
     suspend fun delete(request: MaterialRequest)
+}
+
+/**
+ * تبعيات (ملحقات) مادة الاتصال داخل المواقع — جلسة تعديلات منطق
+ * المواد: تُراقَب لكل (موقع + مادة أم) في واجهة التبعيات، وقراءة
+ * كاملة لعدّ المواد الحالية في الإحصائيات.
+ */
+interface MaterialDependencyRepository {
+    fun observeByParent(siteId: Long, parentName: String): Flow<List<MaterialDependency>>
+    suspend fun getAll(): List<MaterialDependency>
+
+    /** قراءة لحظية لتبعيات مادة أم — لفحص التكرار قبل الإضافة */
+    suspend fun getByParent(siteId: Long, parentName: String): List<MaterialDependency>
+
+    /** @return معرف الصف الجديد، أو -1 إن كانت التبعية موجودة مسبقًا */
+    suspend fun insert(dependency: MaterialDependency): Long
+    suspend fun delete(dependency: MaterialDependency)
 }
 
 /** روابط شبكة المجرة بين المواقع (النسخة 2.5) */

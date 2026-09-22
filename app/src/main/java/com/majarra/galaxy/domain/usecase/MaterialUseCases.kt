@@ -1,9 +1,11 @@
 package com.majarra.galaxy.domain.usecase
 
 import com.majarra.galaxy.data.local.Material
+import com.majarra.galaxy.domain.repository.MaterialDependencyRepository
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.repository.SiteDetailRepository
 import com.majarra.galaxy.domain.repository.SiteRepository
+import com.majarra.galaxy.domain.repository.WithdrawalRepository
 import com.majarra.galaxy.util.MaterialLines
 import javax.inject.Inject
 
@@ -52,9 +54,16 @@ class SaveMaterialUseCase @Inject constructor(
  * أسطر تفاصيلها، تُرحَّل التسمية الجديدة إلى كل أعمدة المواد في كل
  * المواقع (الموجودة/الاحتياج/تحتاج صيانة/المسحوبة) فتبقى المواد
  * موحدة عبر التطبيق كله، لا في الكتالوج فقط.
+ *
+ * جلسة تعديلات منطق المواد: الترحيل يشمل الآن مراجع الاسم في
+ * `material_dependencies.parentName` وفي `withdrawals.parentName`
+ * (سحوبات التبعيات) — وإلا بقيت تبعيات وسحوبات تشير إلى أم قديم
+ * الاسم فتضيع من واجهة التبعيات.
  */
 class RenameMaterialUseCase @Inject constructor(
     private val detailRepo: SiteDetailRepository,
+    private val dependencyRepo: MaterialDependencyRepository,
+    private val withdrawalRepo: WithdrawalRepository,
     private val saveMaterial: SaveMaterialUseCase
 ) {
     suspend operator fun invoke(material: Material, newName: String): Long {
@@ -82,6 +91,19 @@ class RenameMaterialUseCase @Inject constructor(
                         withdrawnMaterials = withdrawn
                     )
                 )
+            }
+        }
+
+        // ترحيل مراجع الأم في التبعيات وسحوباتها (مطابقة بالاسم بلا حالة)
+        dependencyRepo.getAll().forEach { dep ->
+            if (dep.parentName.equals(oldName, ignoreCase = true)) {
+                dependencyRepo.insert(dep.copy(parentName = cleanNew))
+                dependencyRepo.delete(dep)
+            }
+        }
+        withdrawalRepo.getAll().forEach { w ->
+            if (w.parentName.equals(oldName, ignoreCase = true)) {
+                withdrawalRepo.update(w.copy(parentName = cleanNew))
             }
         }
         return id

@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +50,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.majarra.galaxy.data.local.Material
+import com.majarra.galaxy.domain.model.MaterialType
 import com.majarra.galaxy.domain.repository.MaterialRepository
 import com.majarra.galaxy.domain.usecase.DeleteMaterialUseCase
 import com.majarra.galaxy.domain.usecase.MAX_MATERIAL_NAME
@@ -86,11 +88,11 @@ class MaterialsViewModel @Inject constructor(
     val materials: StateFlow<List<Material>> = materialRepo.observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    /** إضافة مادة جديدة للكتالوج */
-    fun add(name: String, onSaved: () -> Unit, onError: (String) -> Unit) {
+    /** إضافة مادة جديدة للكتالوج بنوعها (عادية/مادة اتصال) */
+    fun add(name: String, type: MaterialType, onSaved: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                saveMaterial(Material(name = name))
+                saveMaterial(Material(name = name, type = type))
                 onSaved()
             } catch (e: IllegalArgumentException) {
                 onError(e.message ?: "مدخلات غير صالحة")
@@ -98,11 +100,11 @@ class MaterialsViewModel @Inject constructor(
         }
     }
 
-    /** إعادة تسمية مادة — تنعكس على كل المواقع المستخدمة لها */
-    fun rename(material: Material, newName: String, onSaved: () -> Unit, onError: (String) -> Unit) {
+    /** إعادة تسمية مادة (مع إمكانية تغيير نوعها) — تنعكس على كل المواقع المستخدمة لها */
+    fun rename(material: Material, newName: String, type: MaterialType, onSaved: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                renameMaterial(material, newName)
+                renameMaterial(material.copy(type = type), newName)
                 onSaved()
             } catch (e: IllegalArgumentException) {
                 onError(e.message ?: "مدخلات غير صالحة")
@@ -198,7 +200,16 @@ fun MaterialsCatalogScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text(material.name, style = MaterialTheme.typography.titleSmall)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(material.name, style = MaterialTheme.typography.titleSmall)
+                                    if (material.type == MaterialType.COMMUNICATION) {
+                                        Text(
+                                            "مادة اتصال",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                                 Text(
                                     "أُضيفت: ${material.createdDate.formatDate()}",
                                     style = MaterialTheme.typography.labelSmall,
@@ -231,11 +242,13 @@ fun MaterialsCatalogScreen(
         MaterialEditDialog(
             title = "مادة جديدة",
             initialName = "",
+            initialType = MaterialType.NORMAL,
             note = null,
             onDismiss = { showAdd = false },
-            onSave = { name, reportError ->
+            onSave = { name, type, reportError ->
                 viewModel.add(
                     name,
+                    type,
                     onSaved = { showAdd = false },
                     onError = reportError
                 )
@@ -247,12 +260,14 @@ fun MaterialsCatalogScreen(
         MaterialEditDialog(
             title = "إعادة تسمية المادة",
             initialName = material.name,
+            initialType = material.type,
             note = "ستنعكس التسمية الجديدة على كل المواقع التي تستخدم هذه المادة.",
             onDismiss = { materialToRename = null },
-            onSave = { name, reportError ->
+            onSave = { name, type, reportError ->
                 viewModel.rename(
                     material,
                     name,
+                    type,
                     onSaved = { materialToRename = null },
                     onError = reportError
                 )
@@ -281,16 +296,23 @@ fun MaterialsCatalogScreen(
     }
 }
 
-/** حوار إضافة/إعادة تسمية مادة — أخطاء التحقق تظهر داخل الحوار */
+/**
+ * حوار إضافة/إعادة تسمية مادة — أخطاء التحقق تظهر داخل الحوار.
+ * جلسة تعديلات منطق المواد: أُضيف تحديد «نوع المادة» (عادية /
+ * مادة اتصال) — «مادة اتصال» تجعل التطبيق يتعرف على المادة
+ * تلقائيًا ويُتيح لها خيار «التبعيات» داخل المواقع.
+ */
 @Composable
 private fun MaterialEditDialog(
     title: String,
     initialName: String,
+    initialType: MaterialType,
     note: String?,
     onDismiss: () -> Unit,
-    onSave: (name: String, reportError: (String) -> Unit) -> Unit
+    onSave: (name: String, type: MaterialType, reportError: (String) -> Unit) -> Unit
 ) {
     var name by remember { mutableStateOf(initialName) }
+    var type by remember { mutableStateOf(initialType) }
     var error by remember { mutableStateOf<String?>(null) }
     val normalizedName = remember(name) { name.trim().replace(Regex("\\s+"), " ") }
     val isTooLong = normalizedName.length > MAX_MATERIAL_NAME
@@ -326,6 +348,33 @@ private fun MaterialEditDialog(
                         }
                     }
                 )
+                // «نوع المادة» — اختيار إلزامي بقيمة افتراضية «مادة عادية»
+                Text("نوع المادة", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = type == MaterialType.NORMAL,
+                        onClick = {
+                            type = MaterialType.NORMAL
+                            error = null
+                        },
+                        label = { Text(MaterialType.NORMAL.label) }
+                    )
+                    FilterChip(
+                        selected = type == MaterialType.COMMUNICATION,
+                        onClick = {
+                            type = MaterialType.COMMUNICATION
+                            error = null
+                        },
+                        label = { Text(MaterialType.COMMUNICATION.label) }
+                    )
+                }
+                if (type == MaterialType.COMMUNICATION) {
+                    Text(
+                        "مادة الاتصال يظهر لها خيار «التبعيات» داخل المواقع",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 if (note != null) {
                     Text(
                         note,
@@ -340,7 +389,7 @@ private fun MaterialEditDialog(
                 ) {
                     TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
                     Button(
-                        onClick = { onSave(name) { message -> error = message } },
+                        onClick = { onSave(name, type) { message -> error = message } },
                         enabled = normalizedName.isNotBlank() && !isTooLong
                     ) { Text("حفظ") }
                 }
