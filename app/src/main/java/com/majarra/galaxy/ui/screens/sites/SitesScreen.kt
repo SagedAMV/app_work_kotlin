@@ -11,6 +11,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -103,7 +104,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.boundsInRoot
@@ -457,7 +460,7 @@ fun SitesScreen(
     val spinAngle by spinTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(1000), LinearEasing),
+        animationSpec = infiniteRepeatable(animation = tween(1000, easing = LinearEasing)),
         label = "orbit-angle"
     )
     // اكتمال التحديث: وصول بيانات جديدة أو مهلة أمان إن تساوت النتيجة
@@ -681,6 +684,8 @@ fun SitesScreen(
                 // الخط المتوهج المنزلق أسفل الشريحة النشطة
                 if (indicatorTarget != null && indicatorW.value > 1f) {
                     val indicatorWidthDp = with(density) { indicatorW.value.toDp() }
+                    // قراءة اللون عملية تركيبية: تُلتقط هنا خارج نطاق الرسم
+                    val indicatorColor = MaterialTheme.colorScheme.primary
                     Box(
                         modifier = Modifier
                             .offset {
@@ -692,9 +697,9 @@ fun SitesScreen(
                             .requiredSize(indicatorWidthDp, 3.dp)
                             .clip(RoundedCornerShape(2.dp))
                             .drawBehind {
-                                drawRect(color = MaterialTheme.colorScheme.primary)
+                                drawRect(color = indicatorColor)
                                 drawRect(
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                                    color = indicatorColor.copy(alpha = 0.35f),
                                     style = Stroke(width = 3.dp.toPx())
                                 )
                             }
@@ -779,9 +784,12 @@ fun SitesScreen(
                                             }
                                         } else {
                                             val dy = change.position.y - change.previousPosition.y
-                                            pull.snapTo(
-                                                (pull.value + dy * 0.55f).coerceIn(0f, 130f)
-                                            )
+                                            // النطاق الحالي مقيّد التعليق (awaitEachGesture) فلا
+                                            // يُستدعى snapTo المعلّق فيه مباشرة؛ القفزة تُطلق من
+                                            // نطاق التركيب وتتسلسل على نفس المُرسِل فلا تضيع دلتا.
+                                            scope.launch {
+                                                pull.snapTo((pull.value + dy * 0.55f).coerceIn(0f, 130f))
+                                            }
                                             change.consume()
                                         }
                                     }
@@ -804,7 +812,7 @@ fun SitesScreen(
                             // نتائج البحث يبقى في قائمة الاتحاد ويخرج
                             // بتلاشٍ وتقليص لطيفين بدل الاختفاء اللحظي
                             val alive = !activeMode || site.id in currentSiteIds
-                            AnimatedVisibility(
+                            androidx.compose.animation.AnimatedVisibility(
                                 visible = alive,
                                 enter = fadeIn(tween(160)),
                                 exit = fadeOut(tween(240)) + scaleOut(
@@ -820,7 +828,7 @@ fun SitesScreen(
                                     trigger = staggerTrigger,
                                     immediate = listState.isScrollInProgress
                                 ) {
-                                    AnimatedVisibility(
+                                    androidx.compose.animation.AnimatedVisibility(
                                         visible = collapsingId != site.id,
                                         enter = expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)) + fadeIn(tween(200)),
                                         exit = shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(240)) + fadeOut(tween(200))
@@ -1856,9 +1864,11 @@ private fun AddSiteDialog(
                             GlowButton(
                                 onClick = {
                                     saving = true
+                                    // نوع الدالة لا يقبل وسائط مسماة — الترتيب:
+                                    // الاسم، الملاحظات، التصنيف، نجاح الحفظ، خطأ الحفظ
                                     onSave(
                                         name, notes, categoryId,
-                                        onSaved = {
+                                        {
                                             // مواقع-25: نجوم النجاح ثم الإغلاق
                                             // المتحرك بعد اكتمالها
                                             burst++
@@ -1867,7 +1877,7 @@ private fun AddSiteDialog(
                                                 requestClose(onDismiss)
                                             }
                                         },
-                                        onError = { message ->
+                                        { message ->
                                             error = message
                                             saving = false
                                         }

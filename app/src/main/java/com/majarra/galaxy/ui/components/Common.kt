@@ -7,7 +7,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -72,12 +71,14 @@ fun Long.formatDate(): String = DateFormats.date(this)
  * جلسة اختيارات واجهة المواقع (مواقع-05): معامل `interactionSource`
  * اختياري يسمح للمستمع الخارجي بقراءة حالة الضغط (انكماش اللمس)
  * دون اعتراض النقر — الافتراضي مصدر داخلي يحفظ السلوك السابق.
+ * نوعه `MutableInteractionSource` لأن بطاقة Material3 القابلة للنقر
+ * تشترط النوع القابل للتغيير منذ الإصدار 1.2.0 (لم تعد تقبل الواجهة العامة وحدها).
  */
 @Composable
 fun GalaxyCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    interactionSource: InteractionSource? = null,
+    interactionSource: MutableInteractionSource? = null,
     content: @Composable () -> Unit
 ) {
     val shape = RoundedCornerShape(16.dp)
