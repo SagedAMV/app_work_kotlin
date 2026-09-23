@@ -1,19 +1,35 @@
 package com.majarra.galaxy.ui.screens.sites
 
+import android.graphics.Paint
+import android.graphics.Picture
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,13 +39,17 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
@@ -54,34 +74,53 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.shape.RoundedCornerShape
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.sin
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -100,6 +139,7 @@ import com.majarra.galaxy.ui.anim.BreathingDueBadge
 import com.majarra.galaxy.ui.anim.DueCountdownRing
 import com.majarra.galaxy.ui.anim.GalaxyExpandingFab
 import com.majarra.galaxy.ui.anim.GalaxyRevealDialog
+import com.majarra.galaxy.ui.anim.GalaxyStarBurst
 import com.majarra.galaxy.ui.anim.GlowButton
 import com.majarra.galaxy.ui.anim.StaggeredItem
 import com.majarra.galaxy.ui.anim.rememberAlertPulse
@@ -111,6 +151,7 @@ import com.majarra.galaxy.ui.components.formatDate
 import com.majarra.galaxy.util.daysFromNow
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -172,10 +213,27 @@ class SitesViewModel @Inject constructor(
     private val _dueSites = MutableStateFlow<List<DueSite>>(emptyList())
     val dueSites: StateFlow<List<DueSite>> = _dueSites
 
+    /**
+     * معرّف الموقع المُضاف للتو (اختيارا مواقع-01 و04): تلتقطه البطاقة
+     * لتشغيل نبض الوصول ولمعة الاكتشاف ثم تطلب مسحه. الحفظ يعيد معرّف
+     * الصف الجديد من `SaveSiteUseCase` مباشرة.
+     */
+    private val _justAddedId = MutableStateFlow<Long?>(null)
+    val justAddedId: StateFlow<Long?> = _justAddedId
+
     init {
+        refreshDue()
+    }
+
+    /** (إعادة) حساب الاستحقاق — البداية والسحب المداري للتحديث (مواقع-28) */
+    fun refreshDue() {
         viewModelScope.launch {
             runCatching { _dueSites.value = checkMaintenanceDue() }
         }
+    }
+
+    fun clearJustAdded() {
+        _justAddedId.value = null
     }
 
     fun setQuery(q: String) {
@@ -194,7 +252,8 @@ class SitesViewModel @Inject constructor(
     fun addSite(name: String, notes: String, categoryId: Long?, onSaved: () -> Unit, onError: (String) -> Unit) {
         viewModelScope.launch {
             try {
-                saveSite(Site(name = name, notes = notes, categoryId = categoryId))
+                val id = saveSite(Site(name = name, notes = notes, categoryId = categoryId))
+                _justAddedId.value = id
                 onSaved()
             } catch (e: IllegalArgumentException) {
                 onError(e.message ?: "مدخلات غير صالحة")
@@ -207,7 +266,7 @@ class SitesViewModel @Inject constructor(
         viewModelScope.launch { archiveSite(site, archived = false) }
     }
 
-    /** أرشفة موقع من القائمة مباشرة (سحب البطاقة — اختيار 42) */
+    /** أرشفة موقع — تُستدعى بعد اكتمال الطيران المداري (مواقع-09) */
     fun archive(site: Site) {
         viewModelScope.launch { archiveSite(site, archived = true) }
     }
@@ -218,7 +277,19 @@ class SitesViewModel @Inject constructor(
     }
 }
 
-/** شاشة قائمة المواقع: شريط مستحق + بحث + فلاتر تصنيف/أرشيف + قائمة */
+/**
+ * شاشة قائمة المواقع — جلسة تنفيذ اختيارات واجهة المواقع
+ * (اختيارات_واجهة_المواقع.md): نُفذت الاختيارات التسعة عشر على بنية
+ * الشاشة القائمة دون تغيير قاعدة البيانات أو منطق الأعمال:
+ * 01 نبض الوصول + 04 لمعة الاكتشاف (معًا على البطاقة الجديدة)،
+ * 02 الشريط الجانبي النامي، 03 تنفس إطار المتأخر، 05 انكماش اللمس،
+ * 09 الأرشفة المدارية نحو شريحة «المؤرشفة»، 10 خط التقدم الزمني،
+ * 13 العداد القلابي (في `BreathingDueBadge`)، 16 طي الشريط لحبة،
+ * 17 حقل البحث المتحول، 18 المؤشر المنزلق بين الشرائح،
+ * 20 التلاشي السياقي للنتائج (قائمة الاتحاد أدناه)، 22 موجة المسح،
+ * 24 حقول الحوار المتتابعة، 25 نجوم الحفظ، 26 دخول الزر المزدوج،
+ * 28 السحب المداري للتحديث، 29 كوكبة الحالة الفارغة، 30 سديم الخلفية.
+ */
 @Composable
 fun SitesScreen(
     onOpenSite: (Long) -> Unit,
@@ -231,6 +302,7 @@ fun SitesScreen(
     val filter by viewModel.filter.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val dueSites by viewModel.dueSites.collectAsStateWithLifecycle()
+    val justAddedId by viewModel.justAddedId.collectAsStateWithLifecycle()
     var showAdd by rememberSaveable { mutableStateOf(false) }
 
     // نسخة محلية: الخصائص المفوّضة (by) لا تدعم الإسناد الذكي في
@@ -238,12 +310,9 @@ fun SitesScreen(
     val currentFilter = filter
     val showArchived = currentFilter is ListFilter.Archived
 
-    // ── حالة انيميشنات الإصدار 2.3 (اختيارات المستخدم) ──
-    // ملاحظة (تنفيذ تعليمات هذه الجلسة): «تحول الحاوية» السابق كان يمدد
-    // البطاقة حتى تملأ الشاشة ثم يحدث التنقل بانتقاله الخاص — انميشنان
-    // متتابعان مع اختفاء مفاجئ. أُزيل بالكامل: فتح الموقع الآن يتم
-    // بانميشن واحد فقط (انتقال التنقل في المضيف).
-    // انهيار ارتفاع العنصر قبل إزالته من البيانات (مقترح 14)
+    // ── حالة الانيميشنات ──
+    // انهيار ارتفاع العنصر قبل إزالته من البيانات (مقترح 14 — مسار
+    // الاستعادة فقط؛ الأرشفة صارت طيرانًا مداريًا اختيار مواقع-09)
     var collapsingId by remember { mutableStateOf<Long?>(null) }
     val scope = rememberCoroutineScope()
     // أيام الاستحقاق لكل موقع — للحلقات العدّادة وشارات الحالة على
@@ -253,28 +322,171 @@ fun SitesScreen(
     }
     // موقع بانتظار تأكيد الحذف بعد سحبه (اختيار 42)
     var siteToDelete by remember { mutableStateOf<Site?>(null) }
-    // مفتاح الظهور المتتابع: يتغير مع البحث/الفلتر فتعاد حركة الدخول (مقترح 13)
-    val staggerTrigger = "$query|" + when (currentFilter) {
+    // مفتاح الظهور المتتابع: يتغير مع الفلتر فتعاد حركة الدخول.
+    // ملاحظة (اختيار مواقع-20): النص لم يعد جزءًا من المفتاح — مع
+    // التلاشي السياقي للنتائج لا معنى لإعادة إدخال البطاقات الباقية
+    // مع كل ضغطة مفتاح؛ البطاقات الجديدة تدخل بحركتها تلقائيًا.
+    val staggerTrigger = when (currentFilter) {
         is ListFilter.Active -> "all"
         is ListFilter.ByCategory -> "cat-${currentFilter.categoryId}"
         is ListFilter.Archived -> "archived"
     }
     // إصلاح تعثّر التمرير (2.9.3): حالة القائمة تُقرأ منها
     // `isScrollInProgress` — أي عنصر يُركَّب أثناء تمرير نشط يظهر
-    // فورًا في `StaggeredItem` بلا تأخير ولا حركة (تتبّع «العناصر
-    // الظاهرة» القديم في مجموعة خارجية صار غير ضروري وحُذف).
+    // فورًا في `StaggeredItem` بلا تأخير ولا حركة.
     val listState = rememberLazyListState()
+
+    // ── إشارة التمرير (اختيارا مواقع-16 و17): انهيار الرأس عند
+    // النزول وعودته عند الصعود أو بلوغ القمة ──
+    var headerCompact by remember { mutableStateOf(false) }
+    var lastScroll by remember { mutableStateOf(0 to 0) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offsetPx) ->
+                val (prevIndex, prevOffset) = lastScroll
+                // إشارة الاتجاه من فرق الفهرس أولًا ثم الإزاحة
+                val delta = if (index != prevIndex) {
+                    (index - prevIndex) * 4000 + (offsetPx - prevOffset)
+                } else {
+                    offsetPx - prevOffset
+                }
+                if (delta > 30) headerCompact = true
+                else if (delta < -30 || index == 0) headerCompact = false
+                lastScroll = index to offsetPx
+            }
+    }
+
+    // ── الأرشفة المدارية (مواقع-09): موضع شريحة «المؤرشفة» ونبضها ──
+    var archiveTarget by remember { mutableStateOf<Offset?>(null) }
+    // حد الطيران: قمة القائمة (الـ LazyColumn يقصّ ما يخرج عن حدوده،
+    // فيُقصَد أعلى نقطة داخل الحدود وتكمل نبضة الشريحة القصة)
+    var listTopY by remember { mutableStateOf(0f) }
+    var chipPulse by remember { mutableIntStateOf(0) }
+    val chipPulseScale = remember { Animatable(1f) }
+    LaunchedEffect(chipPulse) {
+        if (chipPulse > 0) {
+            chipPulseScale.snapTo(1.22f)
+            chipPulseScale.animateTo(
+                1f,
+                spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
+            )
+        }
+    }
+
+    // ── المؤشر المنزلق بين الشرائح (مواقع-18) ──
+    val chipBounds = remember { mutableStateMapOf<String, Rect>() }
+    var chipsOrigin by remember { mutableStateOf(Offset.Zero) }
+    val selectedChipKey = when (currentFilter) {
+        is ListFilter.Active -> "all"
+        is ListFilter.ByCategory -> "cat-${currentFilter.categoryId}"
+        is ListFilter.Archived -> "archived"
+    }
+    val indicatorX = remember { Animatable(0f) }
+    val indicatorW = remember { Animatable(0f) }
+    val indicatorTarget = chipBounds[selectedChipKey]
+    LaunchedEffect(indicatorTarget, chipsOrigin) {
+        val target = indicatorTarget ?: return@LaunchedEffect
+        coroutineScope {
+            launch {
+                indicatorX.animateTo(
+                    target.left - chipsOrigin.x,
+                    spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium)
+                )
+            }
+            launch {
+                indicatorW.animateTo(
+                    target.width,
+                    spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMedium)
+                )
+            }
+        }
+    }
+    val density = LocalDensity.current
+
+    // ── التلاشي السياقي للنتائج (مواقع-20): قائمة الاتحاد تحتفظ
+    // بالعناصر الخارجة من البحث 420 مللي ثانية تتلاشى فيها بمكانها
+    // قبل إزالتها فعليًا — الغربلة تُرى ولا تقفز. الباقون يحافظون
+    // على ترتيبهم السابق والجديد يُلحق بالنهاية. يسري في وضع «الكل»
+    // فقط؛ تبديل الفلتر يبقى بظهوره المتتابع المعتاد. ──
+    var unionSites by remember { mutableStateOf<List<Site>>(emptyList()) }
+    val activeMode = currentFilter is ListFilter.Active
+    LaunchedEffect(sites, activeMode) {
+        if (!activeMode || sites.isEmpty() && unionSites.isEmpty()) {
+            unionSites = sites
+            return@LaunchedEffect
+        }
+        val currentIds = sites.mapTo(HashSet()) { it.id }
+        val prev = unionSites
+        if (prev.isEmpty()) {
+            unionSites = sites
+            return@LaunchedEffect
+        }
+        val dying = prev.filter { it.id !in currentIds }
+        if (dying.isEmpty()) {
+            unionSites = sites
+            return@LaunchedEffect
+        }
+        val prevOrder = HashMap<Long, Int>(prev.size)
+        prev.forEachIndexed { i, s -> prevOrder[s.id] = i }
+        unionSites = (sites + dying).distinctBy { it.id }
+            .sortedBy { prevOrder[it.id] ?: Int.MAX_VALUE }
+        delay(420)
+        // التنظيف بعد اكتمال التلاشي — إن لم تُلغِ الحلقةَ ضغطةٌ جديدة
+        val latestIds = sites.mapTo(HashSet()) { it.id }
+        unionSites = unionSites.filter { it.id in latestIds }
+    }
+    // `ifEmpty`: الإطار الأول قبل امتلاء الاتحاد يعرض القائمة الفعلية
+    // فلا تومض الحالة الفارغة عند فتح الشاشة
+    val displaySites = if (activeMode) unionSites.ifEmpty { sites } else sites
+    val currentSiteIds = remember(sites) { sites.mapTo(HashSet()) { it.id } }
+
+    // ── موجة مسح البحث (مواقع-22) ──
+    var clearWave by remember { mutableIntStateOf(0) }
+    val waveProgress = remember { Animatable(2f) }
+    LaunchedEffect(clearWave) {
+        if (clearWave > 0) {
+            waveProgress.snapTo(-0.6f)
+            waveProgress.animateTo(1.6f, tween(700, easing = FastOutSlowInEasing))
+        }
+    }
+
+    // ── السحب المداري للتحديث (مواقع-28) ──
+    val pull = remember { Animatable(0f) }
+    var refreshing by remember { mutableStateOf(false) }
+    val spinTransition = rememberInfiniteTransition(label = "orbit-spin")
+    val spinAngle by spinTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(1000), LinearEasing),
+        label = "orbit-angle"
+    )
+    // اكتمال التحديث: وصول بيانات جديدة أو مهلة أمان إن تساوت النتيجة
+    LaunchedEffect(refreshing, dueSites) {
+        if (refreshing) {
+            delay(700)
+            refreshing = false
+            pull.animateTo(0f, tween(240))
+        }
+    }
+
+    // ── سديم الخلفية المتفاعل (مواقع-30): إزاحة النجوم من حالة
+    // التمرير مباشرة — القراءة في طور الرسم فقط ──
+    val nebulaOffset by remember {
+        derivedStateOf { -(listState.firstVisibleItemScrollOffset * 0.15f) }
+    }
 
     Scaffold(
         floatingActionButton = {
             if (!showArchived) {
-                // زر إضافة متمدّد: نقرة تفتح شريطه ونقرة تنفّذ (مقترح 2)
+                // زر إضافة متمدّد بدخول نابض (مواقع-26): نقرة تفتح شريطه
+                // ونقرة تنفّذ (مقترح 2)
                 GalaxyExpandingFab(
                     icon = Icons.Filled.Add,
                     primaryLabel = "موقع جديد",
                     onPrimary = { showAdd = true },
                     secondaryLabel = "المواد الموحدة",
-                    onSecondary = onOpenMaterials
+                    onSecondary = onOpenMaterials,
+                    entrance = true
                 )
             }
         }
@@ -285,10 +497,7 @@ fun SitesScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            // إصلاح واجهة: كان العنوان وزرّا الرأس أبناءَ Row مباشرين مع
-            // SpaceBetween، فيتوزع الثلاثة على كامل العرض ويبقى أحد الزرين
-            // معلقًا في منتصف الشاشة. الآن الزرّان مجموعة واحدة في النهاية
-            // والعنوان في البداية — صف رأس متوازن على أي عرض شاشة.
+            // صف رأس متوازن على أي عرض شاشة (إصلاح 2.9.0)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -315,140 +524,341 @@ fun SitesScreen(
                 }
             }
 
-            // الشريط العلوي للمواقع المستحقة (إجابة الاسئله.md)
+            // الشريط العلوي للمواقع المستحقة — ينطوي لحبة عند النزول
+            // (مواقع-16) ويعود عند الصعود
             DueSitesBanner(
                 dueSites = dueSites,
                 visible = !showArchived,
-                onOpenSite = onOpenSite
+                compact = headerCompact,
+                onOpenSite = onOpenSite,
+                onExpand = {
+                    scope.launch { listState.animateScrollToItem(0) }
+                }
             )
 
             val searchEnabled = currentFilter is ListFilter.Active
-            OutlinedTextField(
-                value = query,
-                onValueChange = viewModel::setQuery,
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = {
-                    Text(
-                        when {
-                            showArchived -> "البحث غير متاح داخل المؤرشفة"
-                            currentFilter is ListFilter.ByCategory -> "البحث متاح في تبويب «الكل» فقط"
-                            else -> "ابحث بالاسم…"
+            // حقل البحث المتحول (مواقع-17): ينضغط لدائرة عدسة عند
+            // النزول ويتمدد عند الصعود أو لمسه (النقر يعيد للقمة)
+            Box(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+                AnimatedContent(
+                    targetState = headerCompact && searchEnabled && query.isBlank(),
+                    label = "search-mode",
+                    transitionSpec = { fadeIn(tween(180)).togetherWith(fadeOut(tween(150))) }
+                ) { collapsed ->
+                    if (collapsed) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            Surface(
+                                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                modifier = Modifier.size(44.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Filled.Search,
+                                        contentDescription = "ابحث بالاسم",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
-                    )
-                },
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchEnabled && query.isNotBlank()) {
-                        IconButton(onClick = { viewModel.setQuery("") }) {
-                            Icon(Icons.Filled.Close, contentDescription = "مسح البحث")
-                        }
-                    }
-                },
-                singleLine = true,
-                enabled = searchEnabled
-            )
-
-            // شرائح الفلترة: الكل + التصنيفات + المؤرشفة
-            LazyRow(
-                modifier = Modifier.padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    FilterChip(
-                        selected = currentFilter is ListFilter.Active,
-                        onClick = { viewModel.setFilter(ListFilter.Active) },
-                        label = { Text("الكل") }
-                    )
-                }
-                items(categories, key = { "cat-${it.id}" }) { category ->
-                    FilterChip(
-                        selected = currentFilter is ListFilter.ByCategory && currentFilter.categoryId == category.id,
-                        onClick = { viewModel.setFilter(ListFilter.ByCategory(category.id)) },
-                        label = { Text(category.name) },
-                        leadingIcon = { ColorDot(category.colorHex) }
-                    )
-                }
-                item {
-                    FilterChip(
-                        selected = showArchived,
-                        onClick = { viewModel.setFilter(ListFilter.Archived) },
-                        label = { Text("المؤرشفة") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Filled.Archive,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                    } else {
+                        // موجة المسح (مواقع-22) تُرسم خلف الحقل نفسه —
+                        // حاوية الحقل شفافة فتظهر الموجة من خلالها
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .drawBehind {
+                                    val f = waveProgress.value
+                                    if (f > -0.5f && f < 1.6f) {
+                                        val band = size.width * 0.55f
+                                        val x = size.width * f - band / 2f
+                                        drawRect(
+                                            brush = Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    Color.Transparent,
+                                                    Color(0x3393A4BD),
+                                                    Color.Transparent
+                                                ),
+                                                startX = x,
+                                                endX = x + band
+                                            )
+                                        )
+                                    }
+                                }
+                        ) {
+                            OutlinedTextField(
+                                value = query,
+                                onValueChange = viewModel::setQuery,
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = {
+                                    Text(
+                                        when {
+                                            showArchived -> "البحث غير متاح داخل المؤرشفة"
+                                            currentFilter is ListFilter.ByCategory -> "البحث متاح في تبويب «الكل» فقط"
+                                            else -> "ابحث بالاسم…"
+                                        }
+                                    )
+                                },
+                                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                                trailingIcon = {
+                                    if (searchEnabled && query.isNotBlank()) {
+                                        IconButton(onClick = {
+                                            viewModel.setQuery("")
+                                            clearWave++
+                                        }) {
+                                            Icon(Icons.Filled.Close, contentDescription = "مسح البحث")
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                enabled = searchEnabled
                             )
                         }
+                    }
+                }
+            }
+
+            // شرائح الفلترة + المؤشر المنزلق (مواقع-18)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 14.dp)
+                    .onGloballyPositioned { chipsOrigin = it.positionInRoot() }
+            ) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = currentFilter is ListFilter.Active,
+                            onClick = { viewModel.setFilter(ListFilter.Active) },
+                            label = { Text("الكل") },
+                            modifier = Modifier.onGloballyPositioned {
+                                chipBounds["all"] = it.boundsInRoot()
+                            }
+                        )
+                    }
+                    items(categories, key = { "cat-${it.id}" }) { category ->
+                        FilterChip(
+                            selected = currentFilter is ListFilter.ByCategory && currentFilter.categoryId == category.id,
+                            onClick = { viewModel.setFilter(ListFilter.ByCategory(category.id)) },
+                            label = { Text(category.name) },
+                            leadingIcon = { ColorDot(category.colorHex) },
+                            modifier = Modifier.onGloballyPositioned {
+                                chipBounds["cat-${category.id}"] = it.boundsInRoot()
+                            }
+                        )
+                    }
+                    item {
+                        // شريحة المؤرشفة — هدف الطيران المداري (مواقع-09):
+                        // يُقاس مركزها وتتلقى نبضة الاستقبال
+                        Box(
+                            modifier = Modifier
+                                .onGloballyPositioned {
+                                    archiveTarget = it.positionInRoot() +
+                                        Offset(it.size.width / 2f, it.size.height / 2f)
+                                    chipBounds["archived"] = it.boundsInRoot()
+                                }
+                                .graphicsLayer {
+                                    scaleX = chipPulseScale.value
+                                    scaleY = chipPulseScale.value
+                                }
+                        ) {
+                            FilterChip(
+                                selected = showArchived,
+                                onClick = { viewModel.setFilter(ListFilter.Archived) },
+                                label = { Text("المؤرشفة") },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Filled.Archive,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+                // الخط المتوهج المنزلق أسفل الشريحة النشطة
+                if (indicatorTarget != null && indicatorW.value > 1f) {
+                    val indicatorWidthDp = with(density) { indicatorW.value.toDp() }
+                    Box(
+                        modifier = Modifier
+                            .offset {
+                                IntOffset(
+                                    indicatorX.value.roundToInt(),
+                                    (indicatorTarget.bottom - chipsOrigin.y).roundToInt() + 2.dp.roundToPx()
+                                )
+                            }
+                            .requiredSize(indicatorWidthDp, 3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .drawBehind {
+                                drawRect(color = MaterialTheme.colorScheme.primary)
+                                drawRect(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                                    style = Stroke(width = 3.dp.toPx())
+                                )
+                            }
                     )
                 }
             }
 
-            if (sites.isEmpty()) {
-                EmptyState(
-                    icon = if (showArchived) Icons.Filled.Archive else Icons.Filled.CellTower,
-                    title = when {
-                        showArchived -> "لا توجد مواقع مؤرشفة"
-                        query.isBlank() -> "لا توجد مواقع هنا بعد"
-                        else -> "لا توجد مواقع مطابقة"
-                    },
-                    subtitle = when {
-                        showArchived -> "المواقع المؤرشفة تظهر هنا ويمكن استعادتها"
-                        query.isBlank() -> "أضف موقعًا جديدًا بزر «موقع جديد»"
-                        else -> "غيّر كلمة البحث"
-                    }
-                )
-            } else {
-                LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            // مؤشر السحب المداري للتحديث (مواقع-28) — ارتفاعه يتبع
+            // مسافة السحب ويتموضع بين الشرائح والقائمة
+            if (!showArchived) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(with(density) { pull.value.toDp() }),
+                    contentAlignment = Alignment.Center
                 ) {
-                    itemsIndexed(sites, key = { _, site -> site.id }) { index, site ->
-                        // ظهور متتابع عند الفتح/البحث (مقترح 13)، وانهيار
-                        // ارتفاع عند الاستعادة قبل خروج العنصر (مقترح 14).
-                        // `immediate`: أثناء التمرير النشط يظهر العنصر فورًا —
-                        // لا تأخير ولا انيميشن (إصلاح تعثّر التمرير 2.9.3).
-                        StaggeredItem(
-                            index = index,
-                            trigger = staggerTrigger,
-                            immediate = listState.isScrollInProgress
-                        ) {
+                    if (pull.value > 8f) {
+                        OrbitalRefreshIndicator(
+                            angle = pull.value * 2.6f + if (refreshing) spinAngle else 0f,
+                            armed = pull.value > 64f || refreshing
+                        )
+                    }
+                }
+            }
+
+            if (displaySites.isEmpty()) {
+                when {
+                    showArchived -> EmptyState(
+                        icon = Icons.Filled.Archive,
+                        title = "لا توجد مواقع مؤرشفة",
+                        subtitle = "المواقع المؤرشفة تظهر هنا ويمكن استعادتها"
+                    )
+                    query.isNotBlank() -> EmptyState(
+                        icon = Icons.Filled.CellTower,
+                        title = "لا توجد مواقع مطابقة",
+                        subtitle = "غيّر كلمة البحث"
+                    )
+                    else -> ConstellationEmptyState(
+                        title = "لا توجد مواقع هنا بعد",
+                        subtitle = "أضف موقعًا جديدًا بزر «موقع جديد»"
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { listTopY = it.positionInRoot().y }
+                ) {
+                    // سديم الخلفية (مواقع-30) خلف القائمة — نجوم ثابتة
+                    // الإحداثيات تنزلق عكس التمرير بعمق خفيف
+                    NebulaStars(offsetY = nebulaOffset)
+                    LazyColumn(
+                        state = listState,
+                        contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        // السحب المداري (مواقع-28): يُعترض السحب للأسفل
+                        // عند القمة فقط، وكل حركة أخرى تصل للقائمة كاملة
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .pointerInput(Unit) {
+                                val touchSlop = viewConfiguration.touchSlop
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    var accX = 0f
+                                    var accY = 0f
+                                    var pulling = false
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change = event.changes.firstOrNull { it.id == down.id }
+                                            ?: break
+                                        if (!change.pressed) break
+                                        if (!pulling) {
+                                            if (change.isConsumed) break
+                                            accX += change.position.x - change.previousPosition.x
+                                            accY += change.position.y - change.previousPosition.y
+                                            val atTop = !listState.canScrollBackward
+                                            if (atTop && !refreshing && accY > touchSlop && accY > abs(accX)) {
+                                                pulling = true
+                                                change.consume()
+                                            } else if (abs(accX) > touchSlop || accY < -touchSlop) {
+                                                break
+                                            }
+                                        } else {
+                                            val dy = change.position.y - change.previousPosition.y
+                                            pull.snapTo(
+                                                (pull.value + dy * 0.55f).coerceIn(0f, 130f)
+                                            )
+                                            change.consume()
+                                        }
+                                    }
+                                    if (pulling) {
+                                        if (pull.value > 64f && !refreshing) {
+                                            refreshing = true
+                                            viewModel.refreshDue()
+                                            scope.launch { pull.animateTo(56f, tween(180)) }
+                                        } else if (!refreshing) {
+                                            scope.launch { pull.animateTo(0f, tween(220)) }
+                                        } else {
+                                            scope.launch { pull.animateTo(56f, tween(180)) }
+                                        }
+                                    }
+                                }
+                            }
+                    ) {
+                        itemsIndexed(displaySites, key = { _, site -> site.id }) { index, site ->
+                            // التلاشي السياقي (مواقع-20): العنصر الخارج من
+                            // نتائج البحث يبقى في قائمة الاتحاد ويخرج
+                            // بتلاشٍ وتقليص لطيفين بدل الاختفاء اللحظي
+                            val alive = !activeMode || site.id in currentSiteIds
                             AnimatedVisibility(
-                                visible = collapsingId != site.id,
-                                enter = expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)) + fadeIn(tween(200)),
-                                exit = shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(240)) + fadeOut(tween(200))
-                            ) {
-                                SiteRow(
-                                    site = site,
-                                    categories = categories,
-                                    archived = showArchived,
-                                    dueDays = if (showArchived) null else dueDaysById[site.id],
-                                    onClick = {
-                                        // فتح التفاصيل مباشرة — انميشن واحد هو انتقال
-                                        // التنقل نفسه (إصلاح الانميشن المزدوج)
-                                        onOpenSite(site.id)
-                                    },
-                                    onRestore = {
-                                        collapsingId = site.id
-                                        scope.launch {
-                                            delay(280)
-                                            viewModel.restore(site)
-                                            collapsingId = null
-                                        }
-                                    },
-                                    // سحب البطاقة (اختيار 42): يسارًا أرشفة،
-                                    // يمينًا حذف بعد تأكيد
-                                    onSwipeArchive = {
-                                        collapsingId = site.id
-                                        scope.launch {
-                                            delay(260)
-                                            viewModel.archive(site)
-                                            collapsingId = null
-                                        }
-                                    },
-                                    onSwipeDelete = { siteToDelete = site }
+                                visible = alive,
+                                enter = fadeIn(tween(160)),
+                                exit = fadeOut(tween(240)) + scaleOut(
+                                    targetScale = 0.97f,
+                                    animationSpec = tween(240)
                                 )
+                            ) {
+                                // ظهور متتابع عند الفتح/تبديل الفلتر، وانهيار
+                                // ارتفاع عند الاستعادة قبل خروج العنصر.
+                                // `immediate`: أثناء التمرير النشط يظهر فورًا.
+                                StaggeredItem(
+                                    index = index,
+                                    trigger = staggerTrigger,
+                                    immediate = listState.isScrollInProgress
+                                ) {
+                                    AnimatedVisibility(
+                                        visible = collapsingId != site.id,
+                                        enter = expandVertically(expandFrom = Alignment.Top, animationSpec = tween(200)) + fadeIn(tween(200)),
+                                        exit = shrinkVertically(shrinkTowards = Alignment.Top, animationSpec = tween(240)) + fadeOut(tween(200))
+                                    ) {
+                                        SiteRow(
+                                            site = site,
+                                            categories = categories,
+                                            archived = showArchived,
+                                            dueDays = if (showArchived) null else dueDaysById[site.id],
+                                            entryIndex = index,
+                                            immediateEntry = listState.isScrollInProgress,
+                                            justAdded = !showArchived && justAddedId == site.id,
+                                            onJustAddedShown = viewModel::clearJustAdded,
+                                            archiveTarget = archiveTarget,
+                                            listTopY = listTopY,
+                                            onArchivePulse = { chipPulse++ },
+                                            onClick = {
+                                                // فتح التفاصيل مباشرة — انميشن واحد هو انتقال
+                                                // التنقل نفسه (إصلاح الانميشن المزدوج)
+                                                onOpenSite(site.id)
+                                            },
+                                            onRestore = {
+                                                collapsingId = site.id
+                                                scope.launch {
+                                                    delay(280)
+                                                    viewModel.restore(site)
+                                                    collapsingId = null
+                                                }
+                                            },
+                                            // الأرشفة المدارية (مواقع-09): تلتزم البطاقة
+                                            // الطيران ثم تُؤرشف — لا انهيار رأسي هنا
+                                            onSwipeArchive = { doomed ->
+                                                viewModel.archive(doomed)
+                                            },
+                                            onSwipeDelete = { siteToDelete = site }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -461,13 +871,13 @@ fun SitesScreen(
         AddSiteDialog(
             categories = categories,
             onDismiss = { showAdd = false },
-            onSave = { name, notes, categoryId, reportError ->
+            onSave = { name, notes, categoryId, onSaved, onError ->
                 viewModel.addSite(
                     name = name,
                     notes = notes,
                     categoryId = categoryId,
-                    onSaved = { showAdd = false },
-                    onError = reportError
+                    onSaved = onSaved,
+                    onError = onError
                 )
             }
         )
@@ -488,19 +898,24 @@ fun SitesScreen(
     }
 }
 
-/* ═══════════════════ الشريط العلوي للصيانة المستحقة ═══════════════════ */
+/* ═══════════════ الشريط العلوي للصيانة المستحقة ═══════════════ */
 
 /**
  * شريط علوي يعرض المواقع المتأخرة والقريبة الصيانة (إجابة الاسئله.md).
  * الأحمر = متأخر، الكهرماني = قريب. النقر يفتح الموقع مباشرة.
  * انيميشن 2.3 (مقترح 11): ينزلق من الأعلى ثم ينبض مرة واحدة بهالة
- * حمراء إن وُجد موقع متجاوز للموعد، وشارات الأيام تتنفس لونيًا (مقترح 16).
+ * حمراء إن وُجد موقع متجاوز للموعد، وشارات الأيام تتنفس لونيًا
+ * (مقترح 16). جلسة الاختيارات (مواقع-16): ينطوي عند النزول في
+ * التمرير إلى حبة عائمة بعدّاد المستحقين، والنقر عليها يعيد للقمة
+ * ويتمدد الشريط كاملًا.
  */
 @Composable
 private fun DueSitesBanner(
     dueSites: List<DueSite>,
     visible: Boolean,
-    onOpenSite: (Long) -> Unit
+    compact: Boolean,
+    onOpenSite: (Long) -> Unit,
+    onExpand: () -> Unit
 ) {
     val bannerVisible = visible && dueSites.isNotEmpty()
     val hasOverdue = dueSites.any { it.dueDate.daysFromNow() < 0 }
@@ -510,81 +925,125 @@ private fun DueSitesBanner(
         enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
     ) {
-        GalaxyCard(
+        Box(
             modifier = Modifier
+                .fillMaxWidth()
                 .padding(bottom = 10.dp)
-                .drawBehind {
-                    if (pulseAlpha > 0f) {
-                        drawRoundRect(
-                            color = Color(0xFFFF5A5A).copy(alpha = 0.6f * pulseAlpha),
-                            cornerRadius = CornerRadius(16.dp.toPx()),
-                            style = Stroke(width = 2.5.dp.toPx())
-                        )
-                    }
-                }
+                .animateContentSize(animationSpec = tween(260))
         ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(
-                        Icons.Filled.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Text("صيانة مستحقة", style = MaterialTheme.typography.titleMedium)
-                }
-                dueSites.take(4).forEach { due ->
-                    val days = due.dueDate.daysFromNow()
-                    Row(
-                        // النقر يفتح الموقع مباشرة (السلوك الموثق في تعليق
-                        // الشريط — كان المعطل غير موصولًا قبل 2.6)
+            AnimatedContent(
+                targetState = compact,
+                label = "banner-mode",
+                transitionSpec = { fadeIn(tween(180)).togetherWith(fadeOut(tween(150))) }
+            ) { compacted ->
+                if (compacted) {
+                    // الحبة العائمة: عدّاد المستحقين بلون الخطورة
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        Surface(
+                            onClick = onExpand,
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(7.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = if (hasOverdue) MaterialTheme.colorScheme.error
+                                    else MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    "صيانة مستحقة: ${dueSites.size}",
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    GalaxyCard(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onOpenSite(due.siteId) },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .drawBehind {
+                                if (pulseAlpha > 0f) {
+                                    drawRoundRect(
+                                        color = Color(0xFFFF5A5A).copy(alpha = 0.6f * pulseAlpha),
+                                        cornerRadius = CornerRadius(16.dp.toPx()),
+                                        style = Stroke(width = 2.5.dp.toPx())
+                                    )
+                                }
+                            }
                     ) {
-                        // حلقة عد تنازلي تستنزف وتتغير ألوانها حسب
-                        // الخطورة (اختيار 37 من الجولة الثالثة)
-                        DueCountdownRing(days = days, size = 38.dp)
-                        Text(
-                            due.siteName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 8.dp)
-                        )
-                        // شارة تتنفس لونيًا للمتأخر (مقترح 16)
-                        BreathingDueBadge(days)
+                        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Text("صيانة مستحقة", style = MaterialTheme.typography.titleMedium)
+                            }
+                            dueSites.take(4).forEach { due ->
+                                val days = due.dueDate.daysFromNow()
+                                Row(
+                                    // النقر يفتح الموقع مباشرة (السلوك الموثق في تعليق
+                                    // الشريط — كان المعطل غير موصولًا قبل 2.6)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onOpenSite(due.siteId) },
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // حلقة عد تنازلي تستنزف وتتغير ألوانها حسب
+                                    // الخطورة (اختيار 37 من الجولة الثالثة)
+                                    DueCountdownRing(days = days, size = 38.dp)
+                                    Text(
+                                        due.siteName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(horizontal = 8.dp)
+                                    )
+                                    // الشارة تتنفس لونيًا للمتأخر (مقترح 16) مع
+                                    // العداد القلابي للأيام (مواقع-13)
+                                    BreathingDueBadge(days)
+                                }
+                            }
+                            if (dueSites.size > 4) {
+                                Text(
+                                    "و${dueSites.size - 4} مواقع أخرى…",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
-                }
-                if (dueSites.size > 4) {
-                    Text(
-                        "و${dueSites.size - 4} مواقع أخرى…",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
             }
         }
     }
 }
 
-/* ═══════════════════ صف موقع في القائمة ═══════════════════ */
+/* ═══════════════ صف موقع في القائمة ═══════════════ */
 
 /* ألوان الخلفية المنكشفة أثناء السحب — ثوابت ملف لأنها تُستعمل في
  * صندوقَي الكشف وفي توهج إطار الموقع المتأخر معًا. */
 private val SwipeDeleteColor = Color(0xFFFF5A5A)
 private val SwipeArchiveColor = Color(0xFFFFC857)
+/* لون اللمعة والخط الزمني البعيد — سماوي الهوية (مواقع-04 و10) */
+private val DiscoverySky = Color(0xFF38BDF8)
 
 /* ── ثوابت سحب بطاقة الموقع (إصلاح 2.10.3 الجذري) ──
- * العتبة: 28٪ من عرض البطاقة بحدّ أقصى 110dp — سحبة قصيرة مريحة تكفي
- * لتفعيل الفعل (كانت 120dp ثابتة، ومع تعثر تتبع الإصبع كانت المسافة
- * الفعلية المطلوبة تتضاعف فلا يُنفَّذ الأمر إلا بسحب شبه كامل).
+ * العتبة: 28٪ من عرض البطاقة بحدّ أقصى 110dp.
  * النفضة: حركة سريعة (600dp/s) تتجاوز 8٪ من العرض في اتجاه الفعل
- * تفعّله فورًا دون إكمال مسافة العتبة (كانت 750dp/s فوق 12٪). */
+ * تفعّله فورًا دون إكمال مسافة العتبة. */
 private const val SWIPE_THRESHOLD_FRACTION = 0.28f
 private val SWIPE_THRESHOLD_CAP = 110.dp
 private val SWIPE_FLING_VELOCITY = 600.dp
@@ -657,33 +1116,19 @@ private fun RowScope.SwipeArchiveReveal(offsetX: MutableFloatState) {
 }
 
 /**
- * صف موقع — النسخة 2.10.3 (إصلاح جذري لمشكلتَي السحب المزمنتين):
- * - **السبب الجذري المكتشف أخيرًا (الاهتزاز + مسافة السحب الطويلة):**
- *   معالج الإيماءة كان معلّقًا على نفس العقدة التي تتحرك —
- *   `pointerInput` على الـ`Box` الذي يُزاح بـ`absoluteOffset`. Compose
- *   يحسب مواضع اللمس بالنسبة لموضع التخطيط الحالي للعقدة في كل حدث،
- *   فحين تنزاح البطاقة تنزلق «أرضية القياس» تحت الإصبع: الدلتا المقيسة
- *   يُخصم منها ما تحركته البطاقة نفسها (dx_k = حركة_الإصبع − dx_{k−1}).
- *   النتيجتان هما تمامًا ما شُكي منه: سرعة البطاقة نصف سرعة الإصبع
- *   تقريبًا فيلزم سحب شبه كامل للشاشة رغم عتبة 120dp، وتضخيم أي رجفة
- *   إصبع طبيعية إلى اهتزاز يمين/يسار مستمر طوال اللمس يزول برفعه.
- *   (إصلاح 2.9.4 عالج كتابة الحالة سنكرونيًا — وهو صحيح لكنه ثانوي؛
- *   الإطار المرجعي المتحرك بقي، فبقيت العرضان.)
- * - **الحل — فصل القياس عن الحركة** (نفس نمط مكوّنات المكتبة نفسها
- *   مثل SwipeToDismiss: كاشف الإيماءة على حاوية ثابتة والمحتوى
- *   المنزلق داخلها):
- *   1. `pointerInput` على الحاوية الخارجية الثابتة التي لا تتحرك —
- *      الدلتات تُقاس في إطار مرجعي ثابت فتلتصق البطاقة بالإصبع 1:1.
- *   2. تحريك البطاقة بـ`graphicsLayer` (طور الرسم) بدل `absoluteOffset`
- *      (طور التخطيط): لا إعادة تخطيط ولا إعادة تركيب لكل حدث لمس —
- *      كل تحديثات السحب في طور الرسم فقط.
- *   3. سرعة إفلات قياسية بـ`VelocityTracker` لكشف النفضة السريعة.
- *   4. عتبة أقصر: 28٪ من عرض البطاقة بحد أقصى 110dp، ونفضة عند
- *      600dp/s فوق 8٪ من العرض، وعودة بعد الإفلات بلا نوابض ارتدادية.
- * - ثوابت الإصدارات السابقة: قفل المحور الأفقي (2.7) فالحركة العمودية
- *   تصل كاملة لقائمة `LazyColumn`، البطاقة بززاجية خفيفة (اختيار 45)،
- *   شريط جانبي بلون التصنيف، إطار متوهج للمتأخر، حلقة عد تنازلي
- *   (اختيار 37)، والمؤرشفة بلا سحب (زر استعادة فقط).
+ * صف موقع — جلسة اختيارات واجهة المواقع فوق إصلاح 2.10.3 الجذري
+ * (كاشف الإيماءة على الحاوية الثابتة، `graphicsLayer` بدل
+ * `absoluteOffset`، قفل المحور الأفقي، عتبة 28٪/نفضة 600dp/s).
+ *
+ * المضاف في هذه الجلسة:
+ * - مواقع-01/04: نبض الوصول (هبوط نابض + هالة التصنيف) ولمعة
+ *   الاكتشاف للمسح الضوئي لمرة واحدة — على البطاقة الجديدة فقط.
+ * - مواقع-02: الشريط الجانبي ينمو من الأعلى عند الدخول بتتابع.
+ * - مواقع-03: إطار المتأخر يتنفس بين ألفا 0.25 و0.75.
+ * - مواقع-05: انكماش اللمس 97.5٪ بإطار سماوي خافت.
+ * - مواقع-09: سحبة اليسار تُطلق طيرانًا مداريًا نحو شريحة
+ *   «المؤرشفة» (مسار مقوس + دوران + تصغير) بدل الانزلاق الأفقي.
+ * - مواقع-10: خط تقدم زمني أسفل البطاقة بنافذة الثلاثين يومًا.
  */
 @Composable
 private fun SiteRow(
@@ -691,9 +1136,16 @@ private fun SiteRow(
     categories: List<Category>,
     archived: Boolean,
     dueDays: Long?,
+    entryIndex: Int,
+    immediateEntry: Boolean,
+    justAdded: Boolean,
+    onJustAddedShown: () -> Unit,
+    archiveTarget: Offset?,
+    listTopY: Float,
+    onArchivePulse: () -> Unit,
     onClick: () -> Unit,
     onRestore: () -> Unit,
-    onSwipeArchive: () -> Unit,
+    onSwipeArchive: (Site) -> Unit,
     onSwipeDelete: () -> Unit
 ) {
     val category = categories.firstOrNull { it.id == site.categoryId }
@@ -701,9 +1153,7 @@ private fun SiteRow(
         runCatching { Color(android.graphics.Color.parseColor(c.colorHex)) }
             .getOrDefault(MaterialTheme.colorScheme.primary)
     } ?: MaterialTheme.colorScheme.outline
-    // إصلاح اتساق: «مستحق اليوم» ليس «متأخرًا». الشريط العلوي وتبويب
-    // الصيانة يعتبران التأخر بسبب سالب فقط، أما البطاقة فكانت تصبغ
-    // اليوم الحالي بالأحمر وتُشعل التنبيه. الآن الأحمر للتأخر الفعلي
+    // إصلاح اتساق: «مستحق اليوم» ليس «متأخرًا». الأحمر للتأخر الفعلي
     // فقط، والاستحقاق القريب يبقى بالكهرماني (حلقة العدّاد).
     val overdue = dueDays != null && dueDays < 0
 
@@ -722,79 +1172,144 @@ private fun SiteRow(
     }
 
     // ── حالة السحب (2.10.3) ──
-    // كائن الحالة يُقرأ من كتل الرسم/الطبقات خارج التركيب مباشرة، فكل
-    // تحديث إصبع يُبطل الرسم فقط — لا إعادة تخطيط ولا إعادة تركيب.
     val offsetXState = remember(site.id) { mutableFloatStateOf(0f) }
     var settleJob by remember(site.id) { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
 
     val layoutDirection = LocalLayoutDirection.current
 
+    // ── مواقع-01/04: الوصول واللمعة — البطاقة الجديدة فقط ──
+    val arrival = remember(site.id) { Animatable(if (justAdded) 0f else 1f) }
+    val halo = remember(site.id) { Animatable(0f) }
+    val sweep = remember(site.id) { Animatable(-1f) }
+    LaunchedEffect(justAdded) {
+        if (justAdded) {
+            arrival.snapTo(0f)
+            sweep.snapTo(-1f)
+            arrival.animateTo(
+                1f,
+                spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium)
+            )
+            // الهالة واللمعة معًا بعد الاستقرار
+            launch {
+                halo.animateTo(1f, tween(480))
+                halo.animateTo(0f, tween(420))
+            }
+            sweep.animateTo(1.6f, tween(900, easing = FastOutSlowInEasing))
+            onJustAddedShown()
+        }
+    }
+
+    // ── مواقع-02: نمو الشريط الجانبي بتتابع الدخول ──
+    var barStarted by remember(site.id) { mutableStateOf(immediateEntry) }
+    LaunchedEffect(site.id) {
+        if (!barStarted) {
+            delay(minOf(entryIndex, 7) * 60L)
+            barStarted = true
+        }
+    }
+    val barFraction by animateFloatAsState(
+        targetValue = if (barStarted) 1f else 0f,
+        animationSpec = tween(420, easing = FastOutSlowInEasing),
+        label = "side-bar"
+    )
+
+    // ── مواقع-03: تنفس إطار المتأخر ──
+    val breathTransition = rememberInfiniteTransition(label = "overdue-breath")
+    val breathAlpha by breathTransition.animateFloat(
+        initialValue = 0.25f,
+        targetValue = 0.75f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "breath-alpha"
+    )
+
+    // ── مواقع-05: انكماش اللمس العميق ──
+    val pressInteraction = remember { MutableInteractionSource() }
+    val pressed by pressInteraction.collectIsPressedAsState()
+    val pressScale by animateFloatAsState(
+        targetValue = if (pressed) 0.975f else 1f,
+        animationSpec = tween(120),
+        label = "press-scale"
+    )
+
+    // ── مواقع-09: الطيران المداري نحو شريحة المؤرشفة ──
+    val flight = remember(site.id) { Animatable(0f) }
+    var launching by remember(site.id) { mutableStateOf(false) }
+    var cardCenter by remember(site.id) { mutableStateOf(Offset.Zero) }
+
+    // ── مواقع-10: خط التقدم الزمني (نافذة 30 يومًا كلون الحلقة) ──
+    val lineColor = when {
+        dueDays == null -> Color.Transparent
+        dueDays < 0 -> SwipeDeleteColor
+        dueDays <= 7 -> SwipeArchiveColor
+        else -> DiscoverySky
+    }
+    val lineFraction = if (dueDays == null) 0f
+    else (dueDays.coerceAtLeast(0).toFloat() / 30f).coerceIn(0f, 1f)
+    var lineStarted by remember(site.id) { mutableStateOf(false) }
+    LaunchedEffect(site.id) {
+        delay(200)
+        lineStarted = true
+    }
+    val lineReveal by animateFloatAsState(
+        targetValue = if (lineStarted) 1f else 0f,
+        animationSpec = tween(700, easing = FastOutSlowInEasing),
+        label = "due-line"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            // ═══ الإصلاح الجذري 2.10.3 ═══
-            // كاشف الإيماءة على الحاوية الخارجية الثابتة التي لا تتحرك
-            // أبدًا: مواضع اللمس هنا في إطار مرجعي ثابت، فالدلتات حقيقية
-            // 1:1 مع الإصبع مهما انزاحت البطاقة فوقها. (كان معلقًا على
-            // البطاقة نفسها، فكان إطار القياس ينزلق معها ويُخصم تحركها
-            // من الحركة المقيسة — الاهتزاز ومسافة السحب المضاعفة.)
+            .onGloballyPositioned {
+                cardCenter = it.positionInRoot() + Offset(it.size.width / 2f, it.size.height / 2f)
+            }
+            // ═══ إصلاح السحب الجذري 2.10.3 (كاشف الإيماءة على الحاوية
+            // الثابتة) — يُعلَّق أثناء الطيران المداري ═══
             .pointerInput(site.id) {
-                // قفل المحور الأفقي (ثابت من 2.7): السحب الجانبي يبدأ
-                // فقط بعد أن تتجاوز الحركة الأفقية عتبة النظام وهي
-                // الغالبة؛ أي حركة عمودية لا تُستهلك هنا أبدًا فتصل
-                // كاملة لقائمة التمرير وتنزل القائمة طبيعيًا.
                 val touchSlop = viewConfiguration.touchSlop
                 awaitEachGesture {
+                    if (launching) return@awaitEachGesture
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    // لمسة جديدة: أوقف أي حركة استقرار جارية (عودة أو
-                    // انزلاق إتمام) فنُمسك البطاقة حيث هي فورًا
+                    // لمسة جديدة: أوقف أي حركة استقرار جارية فنُمسك
+                    // البطاقة حيث هي فورًا
                     settleJob?.cancel()
                     var accX = 0f
                     var accY = 0f
                     var dragging = false
                     var lastX = down.position.x
-                    // سرعة الإفلات بمتتبّع المكتبة القياسي — أدق من
-                    // التنعيم اليدوي السابق وأدق قياسًا للنفضة
                     val velocityTracker = VelocityTracker()
                     while (true) {
                         val event = awaitPointerEvent()
-                        // نتابع إصبع البداية فقط ونهمل أي أصابع أخرى
                         val change = event.changes.firstOrNull { it.id == down.id }
                             ?: break
                         if (!change.pressed) break
+                        if (launching) break
                         if (!dragging) {
-                            // قبل التسليح: إن خطفت جهة أخرى الحدث
-                            // (القائمة بدأت تمريرًا) ننسحب بلا أثر
                             if (change.isConsumed) break
                             accX += change.position.x - change.previousPosition.x
                             accY += change.position.y - change.previousPosition.y
                             if (abs(accX) > touchSlop && abs(accX) > abs(accY)) {
-                                // غلبة أفقية: بدأ سحب البطاقة
                                 dragging = true
                                 lastX = change.position.x
                                 velocityTracker.resetTracking()
                                 change.consume()
                             } else if (abs(accY) > touchSlop) {
-                                // غلبة عمودية: الإيماءة للقائمة نهائيًا
                                 break
                             }
                         } else {
-                            // الدلتا في الإطار الثابت: تتبع حقيقي للإصبع
-                            // لا يُخصم منه تحرك البطاقة نفسها
                             val dx = change.position.x - lastX
                             lastX = change.position.x
                             velocityTracker.addPosition(change.uptimeMillis, change.position)
-                            // سقف إزاحة 60٪ من عرض البطاقة
                             val limit = size.width * 0.6f
                             offsetXState.floatValue =
                                 (offsetXState.floatValue + dx).coerceIn(-limit, limit)
                             change.consume()
                         }
                     }
-                    if (dragging) {
-                        // نهاية السحب: عتبة مسافة قصيرة أو نفضة سريعة —
-                        // الاتجاه الموجب حذف والسالب أرشفة كما قبل.
+                    if (dragging && !launching) {
                         val x = offsetXState.floatValue
                         val width = size.width.toFloat()
                         val threshold = swipeThresholdPx(width, this)
@@ -809,24 +1324,24 @@ private fun SiteRow(
                                         offsetXState.floatValue = value
                                     }
                                     onSwipeDelete()
-                                    // عودة سلسة فور فتح حوار التأكيد: إن
-                                    // أُلغي الحوار تكون البطاقة في مكانها
-                                    // بلا قفزة (كانت قفزة `= 0f` لحظية)
                                     animate(offsetXState.floatValue, 0f, animationSpec = tween(220)) { value, _ ->
                                         offsetXState.floatValue = value
                                     }
                                 }
                                 x < -threshold || flingArchive -> {
-                                    animate(x, -width * 0.85f, animationSpec = tween(180)) { value, _ ->
-                                        offsetXState.floatValue = value
-                                    }
-                                    onSwipeArchive()
+                                    // ═══ مواقع-09: الأرشفة المدارية ═══
+                                    // بدل الانزلاق الأفقي: البطاقة تطير في
+                                    // مسار مقوس نحو شريحة «المؤرشفة»
+                                    offsetXState.floatValue = 0f
+                                    launching = true
+                                    flight.snapTo(0f)
+                                    flight.animateTo(1f, tween(560, easing = FastOutSlowInEasing))
+                                    onArchivePulse()
+                                    onSwipeArchive(site)
                                 }
                                 else -> animate(
                                     x,
                                     0f,
-                                    // بلا ارتداد نابضي: عودة حاسمة لا
-                                    // تُقرأ كاهتزاز إضافي بعد الإفلات
                                     animationSpec = spring(
                                         dampingRatio = Spring.DampingRatioNoBouncy,
                                         stiffness = Spring.StiffnessMedium
@@ -840,13 +1355,7 @@ private fun SiteRow(
                 }
             }
     ) {
-        // الخلفية المنكشفة — ترتيب نصفيها حسب اتجاه التخطيط (ثابت من 2.7):
-        // السحب يمينًا (موجب) يزيح البطاقة يمينًا فيكشف النصف الأيسر
-        // فيزيائيًا، وعتبة السحب الموجبة تعني «حذفًا» — فيحمل النصف
-        // الأيسر صندوق الحذف. الأيسر هو آخر أبناء `Row` في الاتجاه
-        // العربي وأولهم في اللاتيني، لذا يُعكس الترتيب هنا. السحب يسارًا
-        // يكشف الأرشفة بالتماثل. تحديث الانكشاف في طور الرسم قراءةً
-        // مباشرة من حالة الإزاحة — بلا إعادة تركيب أثناء السحب.
+        // الخلفية المنكشفة — ترتيب نصفيها حسب اتجاه التخطيط (ثابت من 2.7)
         Row(
             modifier = Modifier
                 .matchParentSize()
@@ -861,45 +1370,125 @@ private fun SiteRow(
             }
         }
 
-        // البطاقة الأمامية المنزلقة — إزاحة طور-الرسم (translationX):
-        // تتبع الإصبع 1:1 بلا أي إعادة تخطيط لكل إطار، وهي فيزيائية
-        // لا تنعكس في اتجاه RTL (كما كانت `absoluteOffset` المطلقة).
-        // كاشف الإيماءة ليس هنا بل على الحاوية الثابتة أعلاه —
-        // الإصلاح الجذري 2.10.3.
+        // البطاقة الأمامية — إزاحة طور-الرسم. تُدمج في نفس الطبقة:
+        // إزاحة السحب، انكماش اللمس (مواقع-05)، هبوط الوصول
+        // (مواقع-01)، ومسار الطيران المداري (مواقع-09).
         Box(
             modifier = Modifier.graphicsLayer {
-                translationX = offsetXState.floatValue
+                val t = flight.value
+                if (launching && t > 0f) {
+                    val target = archiveTarget
+                    if (target != null) {
+                        val dx = target.x - cardCenter.x
+                        // لا نتجاوز قمة القائمة (القص) — نبضة الشريحة
+                        // المنفصلة تكمل الإحساس بالوصول
+                        val targetY = maxOf(target.y, listTopY + 10.dp.toPx())
+                        val dy = targetY - cardCenter.y
+                        translationX = dx * t
+                        // قوس صاعد: رفع في منتصف المسار فوق الخط المستقيم
+                        translationY = dy * t - 54.dp.toPx() * sin(PI.toFloat() * t).toFloat()
+                        val s = 1f - 0.6f * t
+                        scaleX = s
+                        scaleY = s
+                        rotationZ = -9f * t
+                        alpha = 1f - 0.45f * t
+                    } else {
+                        // هدف غير مُقاس (حالة نادرة): خروج أفقي بسيط
+                        translationX = -size.width * t
+                        alpha = 1f - t
+                    }
+                } else {
+                    translationX = offsetXState.floatValue
+                    val drop = (1f - arrival.value) * -26.dp.toPx()
+                    translationY = drop
+                    val s = (0.97f + 0.03f * arrival.value.coerceAtMost(1f)) * pressScale
+                    scaleX = s
+                    scaleY = s
+                }
             }
         ) {
             GalaxyCard(
                 onClick = onClick,
-                modifier = Modifier.drawBehind {
-                    // زجاجية خفيفة من لون التصنيف (اختيار 45)
-                    drawRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(categoryColor.copy(alpha = 0.10f), Color.Transparent),
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width * 0.65f, size.height)
+                interactionSource = pressInteraction,
+                modifier = Modifier
+                    .drawBehind {
+                        // زجاجية خفيفة من لون التصنيف (اختيار 45)
+                        drawRect(
+                            brush = Brush.linearGradient(
+                                colors = listOf(categoryColor.copy(alpha = 0.10f), Color.Transparent),
+                                start = Offset(0f, 0f),
+                                end = Offset(size.width * 0.65f, size.height)
+                            )
                         )
-                    )
-                    // شريط جانبي بلون التصنيف على جهة البداية
-                    // (يمين البطاقة في الاتجاه العربي)
-                    val barWidth = 4.dp.toPx()
-                    drawRoundRect(
-                        color = categoryColor,
-                        topLeft = Offset(size.width - barWidth, 10.dp.toPx()),
-                        size = Size(barWidth, (size.height - 20.dp.toPx()).coerceAtLeast(0f)),
-                        cornerRadius = CornerRadius(barWidth / 2f)
-                    )
-                    // توهج إطار أحمر للمتأخر عن موعده
-                    if (overdue) {
+                        // مواقع-02: الشريط الجانبي النامي على جهة البداية
+                        // (يمين البطاقة في الاتجاه العربي)
+                        val barWidth = 4.dp.toPx()
+                        val barHeight = (size.height - 20.dp.toPx()).coerceAtLeast(0f) * barFraction
                         drawRoundRect(
-                            color = SwipeDeleteColor.copy(alpha = 0.55f),
-                            cornerRadius = CornerRadius(16.dp.toPx()),
-                            style = Stroke(width = 1.8.dp.toPx())
+                            color = categoryColor,
+                            topLeft = Offset(size.width - barWidth, 10.dp.toPx()),
+                            size = Size(barWidth, barHeight),
+                            cornerRadius = CornerRadius(barWidth / 2f)
                         )
+                        // مواقع-03: إطار المتأخر يتنفس بدل التوهج الثابت
+                        if (overdue) {
+                            drawRoundRect(
+                                color = SwipeDeleteColor.copy(alpha = breathAlpha),
+                                cornerRadius = CornerRadius(16.dp.toPx()),
+                                style = Stroke(width = 1.8.dp.toPx())
+                            )
+                        }
+                        // مواقع-05: إطار سماوي خافت لحظة الضغط
+                        if (pressed) {
+                            drawRoundRect(
+                                color = DiscoverySky.copy(alpha = 0.30f),
+                                cornerRadius = CornerRadius(16.dp.toPx()),
+                                style = Stroke(width = 1.6.dp.toPx())
+                            )
+                        }
+                        // مواقع-01: هالة الوصول بلون التصنيف — مرة واحدة
+                        val haloP = halo.value
+                        if (haloP > 0f) {
+                            drawRoundRect(
+                                color = categoryColor.copy(alpha = 0.65f * (1f - haloP)),
+                                cornerRadius = CornerRadius((16.dp + 3.dp * haloP).toPx()),
+                                style = Stroke(width = 2.4.dp.toPx())
+                            )
+                        }
+                        // مواقع-10: خط التقدم الزمني — يبدأ من جهة
+                        // البداية (اليمين في RTL) بلون الخطورة نفسه
+                        if (dueDays != null && lineReveal > 0f && lineFraction > 0f) {
+                            val lineW = size.width * lineFraction * lineReveal
+                            drawRoundRect(
+                                color = lineColor.copy(alpha = 0.85f),
+                                topLeft = Offset(size.width - lineW, size.height - 3.dp.toPx()),
+                                size = Size(lineW, 3.dp.toPx()),
+                                cornerRadius = CornerRadius(1.5.dp.toPx())
+                            )
+                        }
                     }
-                }
+                    // مواقع-04: لمعة الاكتشاف — مسح ضوئي واحد فوق المحتوى
+                    .drawWithContent {
+                        drawContent()
+                        val f = sweep.value
+                        if (f > -0.6f && f < 1.7f) {
+                            val band = size.width * 0.45f
+                            val x = size.width * f - band / 2f
+                            drawRect(
+                                brush = Brush.linearGradient(
+                                    colors = listOf(
+                                        Color.Transparent,
+                                        DiscoverySky.copy(alpha = 0.16f),
+                                        DiscoverySky.copy(alpha = 0.30f),
+                                        DiscoverySky.copy(alpha = 0.16f),
+                                        Color.Transparent
+                                    ),
+                                    start = Offset(x, 0f),
+                                    end = Offset(x + band, size.height * 0.4f)
+                                )
+                            )
+                        }
+                    }
             ) {
                 SiteCardContent(
                     site = site,
@@ -922,10 +1511,7 @@ private fun SiteCardContent(
     archived: Boolean,
     onRestore: (() -> Unit)?
 ) {
-    // إصلاح اتساق: «مستحق اليوم» ليس «متأخرًا». الشريط العلوي وتبويب
-    // الصيانة يعتبران التأخر بسبب سالب فقط، أما البطاقة فكانت تصبغ
-    // اليوم الحالي بالأحمر وتُشعل التنبيه. الآن الأحمر للتأخر الفعلي
-    // فقط، والاستحقاق القريب يبقى بالكهرماني (حلقة العدّاد).
+    // الأحمر للتأخر الفعلي فقط، ومستحق اليوم كهرماني (حلقة العدّاد).
     val overdue = dueDays != null && dueDays < 0
     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -977,25 +1563,190 @@ private fun SiteCardContent(
     }
 }
 
-/* ═══════════════════ حوار إضافة موقع ═══════════════════ */
+/* ═══════════════ مؤشر السحب المداري للتحديث (مواقع-28) ═══════════════ */
+
+/**
+ * نجمة مركزية يدور حولها كوكب صغير — الزاوية تتبع مسافة السحب أثناء
+ * الجرّ ثم تدور ذاتيًا أثناء التحديث الفعلي.
+ */
+@Composable
+private fun OrbitalRefreshIndicator(angle: Float, armed: Boolean) {
+    Canvas(modifier = Modifier.size(34.dp)) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        // هالة النجمة المركزية
+        drawCircle(
+            color = Color(0xFFFFC857).copy(alpha = if (armed) 0.35f else 0.18f),
+            radius = 8.dp.toPx(),
+            center = center
+        )
+        drawCircle(color = Color(0xFFFFC857), radius = 3.6.dp.toPx(), center = center)
+        // الكوكب على مداره
+        val rad = angle * PI.toFloat() / 180f
+        val orbitR = 12.dp.toPx()
+        drawCircle(
+            color = DiscoverySky,
+            radius = 2.4.dp.toPx(),
+            center = Offset(
+                center.x + kotlin.math.cos(rad) * orbitR,
+                center.y + sin(rad) * orbitR
+            )
+        )
+    }
+}
+
+/* ═══════════════ كوكبة الحالة الفارغة (مواقع-29) ═══════════════ */
+
+/**
+ * برج اتصالات من نقاط تضيء متتابعة وتُمد الخطوط بينها تدريجيًا —
+ * إحداثيات ثابتة بلا عشوائية كعادة التطبيق. النصوص تظهر بعد اكتمال
+ * الرسم بنمط `EmptyState` نفسه.
+ */
+@Composable
+private fun ConstellationEmptyState(title: String, subtitle: String) {
+    // نقاط البرج في صندوق 120×120 (قمة البرج، الكتف، المنتصف، القاعدة)
+    val points = remember {
+        listOf(
+            Offset(60f, 14f), Offset(42f, 44f), Offset(78f, 44f),
+            Offset(60f, 64f), Offset(44f, 98f), Offset(76f, 98f)
+        )
+    }
+    // أضلاع البرج: قمة-كتفان-مثلث علوي، عمود فقري، وقاعدة
+    val edges = remember {
+        listOf(0 to 1, 0 to 2, 1 to 2, 0 to 3, 3 to 4, 3 to 5, 4 to 5)
+    }
+    var lit by remember { mutableIntStateOf(0) }
+    val lineProgress = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        // إشعال النقاط متتابعة ثم مدّ الخطوط
+        while (lit < points.size) {
+            delay(230)
+            lit++
+        }
+        lineProgress.animateTo(1f, tween(1300, easing = FastOutSlowInEasing))
+    }
+    val measure = remember { PathMeasure() }
+
+    var textsShown by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(1200)
+        textsShown = true
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Canvas(modifier = Modifier.size(120.dp)) {
+            val scaleF = size.width / 120f
+            // المسار يُبنى بإحداثيات مقيّسة مباشرة — بلا مصفوفات
+            val scaledPath = Path().apply {
+                edges.forEach { (a, b) ->
+                    moveTo(points[a].x * scaleF, points[a].y * scaleF)
+                    lineTo(points[b].x * scaleF, points[b].y * scaleF)
+                }
+            }
+            // الخطوط التدريجية عبر قياس المسار
+            val fraction = lineProgress.value
+            if (fraction > 0f) {
+                measure.setPath(scaledPath, false)
+                val segment = Path()
+                measure.getSegment(0f, measure.length * fraction, segment, true)
+                drawPath(
+                    path = segment,
+                    color = DiscoverySky.copy(alpha = 0.4f),
+                    style = Stroke(width = 1.2.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                )
+            }
+            // النقاط: تُشعل واحدة تلو الأخرى بهالة خفيفة
+            points.forEachIndexed { i, p ->
+                if (i < lit) {
+                    val c = Offset(p.x * scaleF, p.y * scaleF)
+                    drawCircle(color = DiscoverySky.copy(alpha = 0.25f), radius = 6f * scaleF, center = c)
+                    drawCircle(color = DiscoverySky, radius = 3f * scaleF, center = c)
+                }
+            }
+        }
+        AnimatedVisibility(visible = textsShown, enter = fadeIn(tween(350))) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+                if (subtitle.isNotBlank()) {
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+/* ═══════════════ سديم الخلفية المتفاعل (مواقع-30) ═══════════════ */
+
+/**
+ * نجوم خافتة ثابتة الإحداثيات (بلا عشوائية) تُسجَّل مرة واحدة في
+ * `Picture` ثم تُزاح عكس التمرير بعمق خفيف — القراءة من حالة التمرير
+ * في طور الرسم فقط فلا إعادة تركيب أثناء التمرير.
+ */
+@Composable
+private fun NebulaStars(offsetY: Float) {
+    val picture = remember {
+        Picture().apply {
+            val canvas = beginRecording(1080, 2600)
+            val paint = Paint().apply { isAntiAlias = true }
+            for (i in 0 until 72) {
+                val x = ((i * 149 + 37) % 1080).toFloat()
+                val y = ((i * 263 + 91) % 2600).toFloat()
+                val radius = 1.1f + (i % 3) * 0.7f
+                paint.color = when (i % 6) {
+                    0 -> 0x5538BDF8 // سماوي خافت
+                    1 -> 0x443DFB7F // أخضر خافت
+                    2 -> 0x44FFC857 // كهرماني خافت
+                    else -> 0x33FFFFFF // أبيض خافت
+                }
+                canvas.drawCircle(x, y, radius, paint)
+            }
+            endRecording()
+        }
+    }
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        drawIntoCanvas { canvas ->
+            canvas.nativeCanvas.save()
+            canvas.nativeCanvas.translate(0f, offsetY)
+            canvas.nativeCanvas.drawPicture(picture)
+            canvas.nativeCanvas.restore()
+        }
+    }
+}
+
+/* ═══════════════ حوار إضافة موقع ═══════════════ */
 
 /**
  * حوار إضافة موقع — الاسم إلزامي، والملاحظات والتصنيف اختياريان.
  * أخطاء التحقق تظهر داخل الحوار بدل إغلاقه.
- * يظهر بكشف دائري يتمدد من أسفل الشاشة (اختيار 32 من الجولة
- * الثالثة) عبر `GalaxyRevealDialog` بدل الظهور المفاجئ.
+ * يظهر بكشف دائري يتمدد من أسفل الشاشة (اختيار 32) عبر
+ * `GalaxyRevealDialog`. جلسة الاختيارات: عناصره تظهر متتابعة
+ * (مواقع-24) مع تركيز تلقائي على حقل الاسم بعد اكتمال الدخول،
+ * وعند نجاح الحفظ تتطاير 12 نجمة من زر الحفظ (مواقع-25) قبل
+ * الإغلاق المتحرك.
  */
 @Composable
 private fun AddSiteDialog(
     categories: List<Category>,
     onDismiss: () -> Unit,
-    onSave: (name: String, notes: String, categoryId: Long?, reportError: (String) -> Unit) -> Unit
+    onSave: (name: String, notes: String, categoryId: Long?, onSaved: () -> Unit, onError: (String) -> Unit) -> Unit
 ) {
     var name by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable { mutableStateOf("") }
     var categoryId by rememberSaveable { mutableStateOf<Long?>(null) }
     var showCategoryMenu by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var saving by remember { mutableStateOf(false) }
+    var burst by remember { mutableIntStateOf(0) }
+    val nameFocus = remember { FocusRequester() }
+    val dialogScope = rememberCoroutineScope()
 
     val cleanName = remember(name) { name.trim().replace(Regex("\\s+"), " ") }
     val cleanNotes = remember(notes) { notes.trim().replace(Regex("\\s+"), " ") }
@@ -1016,84 +1767,125 @@ private fun AddSiteDialog(
                     .padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("موقع جديد", style = MaterialTheme.typography.headlineSmall)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = {
-                        name = it
-                        error = null
-                    },
-                    label = { Text("اسم الموقع") },
-                    singleLine = true,
-                    isError = error != null || nameTooLong,
-                    supportingText = {
-                        when {
-                            error != null -> Text(error!!)
-                            nameTooLong -> Text("الحد الأقصى ${SiteInputValidator.MAX_NAME} حرفًا")
-                            else -> Text("${cleanName.length}/${SiteInputValidator.MAX_NAME}")
-                        }
-                    }
-                )
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    label = { Text("ملاحظات (اختياري)") },
-                    minLines = 2,
-                    maxLines = 4,
-                    isError = notesTooLong,
-                    supportingText = {
-                        if (notesTooLong) Text("الحد الأقصى ${SiteInputValidator.MAX_NOTES} حرفًا")
-                        else Text("${cleanNotes.length}/${SiteInputValidator.MAX_NOTES}")
-                    }
-                )
-                // اختيار التصنيف (اختياري) — القائمة تظهر فوق الزر
-                OutlinedButton(onClick = { showCategoryMenu = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        if (selectedCategory != null) "التصنيف: ${selectedCategory.name}"
-                        else "التصنيف: بلا تصنيف"
-                    )
+                // مواقع-24: كل عنصر يصعد بعد سابقه — نفس مكوّن الظهور
+                // المتتابع للقوائم بمفاتيح تركيبه الأولى
+                StaggeredItem(index = 0, trigger = "dlg") {
+                    Text("موقع جديد", style = MaterialTheme.typography.headlineSmall)
                 }
-                DropdownMenu(
-                    expanded = showCategoryMenu,
-                    onDismissRequest = { showCategoryMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("بلا تصنيف") },
-                        onClick = {
-                            categoryId = null
-                            showCategoryMenu = false
-                        }
-                    )
-                    categories.forEach { category ->
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    ColorDot(category.colorHex)
-                                    Text(category.name)
-                                }
-                            },
-                            onClick = {
-                                categoryId = category.id
-                                showCategoryMenu = false
+                StaggeredItem(index = 1, trigger = "dlg") {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = {
+                            name = it
+                            error = null
+                        },
+                        label = { Text("اسم الموقع") },
+                        singleLine = true,
+                        isError = error != null || nameTooLong,
+                        supportingText = {
+                            when {
+                                error != null -> Text(error!!)
+                                nameTooLong -> Text("الحد الأقصى ${SiteInputValidator.MAX_NAME} حرفًا")
+                                else -> Text("${cleanName.length}/${SiteInputValidator.MAX_NAME}")
                             }
-                        )
+                        },
+                        modifier = Modifier.focusRequester(nameFocus)
+                    )
+                }
+                StaggeredItem(index = 2, trigger = "dlg") {
+                    OutlinedTextField(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        label = { Text("ملاحظات (اختياري)") },
+                        minLines = 2,
+                        maxLines = 4,
+                        isError = notesTooLong,
+                        supportingText = {
+                            if (notesTooLong) Text("الحد الأقصى ${SiteInputValidator.MAX_NOTES} حرفًا")
+                            else Text("${cleanNotes.length}/${SiteInputValidator.MAX_NOTES}")
+                        }
+                    )
+                }
+                StaggeredItem(index = 3, trigger = "dlg") {
+                    // اختيار التصنيف (اختياري) — القائمة تظهر فوق الزر
+                    Box {
+                        OutlinedButton(onClick = { showCategoryMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                if (selectedCategory != null) "التصنيف: ${selectedCategory.name}"
+                                else "التصنيف: بلا تصنيف"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showCategoryMenu,
+                            onDismissRequest = { showCategoryMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("بلا تصنيف") },
+                                onClick = {
+                                    categoryId = null
+                                    showCategoryMenu = false
+                                }
+                            )
+                            categories.forEach { category ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            ColorDot(category.colorHex)
+                                            Text(category.name)
+                                        }
+                                    },
+                                    onClick = {
+                                        categoryId = category.id
+                                        showCategoryMenu = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
-                }
-                // أزرار الحوار — توهج الضغط على الحفظ (مقترح 1)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
-                    GlowButton(
-                        onClick = { onSave(name, notes, categoryId) { message -> error = message } },
-                        enabled = cleanName.isNotBlank() && !nameTooLong && !notesTooLong
-                    ) { Text("حفظ") }
+                StaggeredItem(index = 4, trigger = "dlg") {
+                    // أزرار الحوار — توهج الضغط على الحفظ (مقترح 1)
+                    // ونجوم النجاح فوقه (مواقع-25)
+                    Box(contentAlignment = Alignment.CenterEnd) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = { requestClose(onDismiss) }) { Text("إلغاء") }
+                            GlowButton(
+                                onClick = {
+                                    saving = true
+                                    onSave(
+                                        name, notes, categoryId,
+                                        onSaved = {
+                                            // مواقع-25: نجوم النجاح ثم الإغلاق
+                                            // المتحرك بعد اكتمالها
+                                            burst++
+                                            dialogScope.launch {
+                                                delay(620)
+                                                requestClose(onDismiss)
+                                            }
+                                        },
+                                        onError = { message ->
+                                            error = message
+                                            saving = false
+                                        }
+                                    )
+                                },
+                                enabled = cleanName.isNotBlank() && !nameTooLong && !notesTooLong && !saving
+                            ) { Text("حفظ") }
+                        }
+                        GalaxyStarBurst(trigger = burst, modifier = Modifier.matchParentSize())
+                    }
                 }
             }
+        }
+
+        // التركيز على الاسم بعد استقرار الحقول المتتابعة
+        LaunchedEffect(Unit) {
+            delay(480)
+            runCatching { nameFocus.requestFocus() }
         }
     }
 }

@@ -7,6 +7,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.interaction.InteractionSource
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -65,19 +67,32 @@ fun Long.formatDateTime(): String = DateFormats.dateTime(this)
 
 fun Long.formatDate(): String = DateFormats.date(this)
 
-/** بطاقة عامة بخلفية السطح */
+/**
+ * بطاقة عامة بخلفية السطح.
+ * جلسة اختيارات واجهة المواقع (مواقع-05): معامل `interactionSource`
+ * اختياري يسمح للمستمع الخارجي بقراءة حالة الضغط (انكماش اللمس)
+ * دون اعتراض النقر — الافتراضي مصدر داخلي يحفظ السلوك السابق.
+ */
 @Composable
 fun GalaxyCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    interactionSource: InteractionSource? = null,
     content: @Composable () -> Unit
 ) {
     val shape = RoundedCornerShape(16.dp)
     val colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    val source = interactionSource ?: remember { MutableInteractionSource() }
     if (onClick != null) {
         // بطاقة قابلة للنقر فقط عند وجود فعل حقيقي — تمرير onClick فارغًا
         // يجعل كل بطاقة تستهلك النقرات وتُظهر تأثيرًا وهميًا.
-        Card(modifier = modifier.fillMaxWidth(), shape = shape, colors = colors, onClick = onClick) {
+        Card(
+            modifier = modifier.fillMaxWidth(),
+            shape = shape,
+            colors = colors,
+            interactionSource = source,
+            onClick = onClick
+        ) {
             content()
         }
     } else {

@@ -5,15 +5,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -50,7 +45,6 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarDuration
@@ -76,12 +70,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -120,7 +110,13 @@ import kotlin.math.sin
  *  و35/36/38/42/45/46 تصاميم منفذة داخل شاشاتها مباشرة)
  * ============================================================
  * ملاحظة: «تحول الحاوية» القديم (مقترح 8) أُزيل سابقًا حسب
- * تعليمات إصلاح الانميشن المزدوج — فتح الموقع انميشن واحد. */
+ * تعليمات إصلاح الانميشن المزدوج — فتح الموقع انميشن واحد.
+ * ------------------------------------------------------------
+ * تنظيف هذه الجلسة (فحص يدوي لدوال ميتة): حُذفت أربعة مكوّنات
+ * عامة بلا أي استدعاء في التطبيق أو الاختبارات — `MorphingActionButton`
+ * (+ نوع `MorphPhase`) و`DrawnCheck` و`GalaxyNumberMorph` و
+ * `GalaxyShimmerBox` — مع استيراداتها التي يتمت بها. المسوحات
+ * السابقة كانت تفحص الدوال الخاصة/الداخلية فقط فهذه عامة. */
 
 /* ═══════════════ 1) نبض توهج — توهج سماوي حول الزر أثناء الضغط ═══════════════ */
 
@@ -171,6 +167,10 @@ fun GlowButton(
  * زر إضافة يبدأ مكتومًا بأيقونته، ونقرة واحدة تمده عرضيًا كاشفًا
  * الفعل الرئيسي (وزرًا ثانويًا اختياريًا) بدل أي قائمة منبثقة
  * (اختيار 2-3). النقر بعد التمدد ينفّذ الفعل الرئيسي.
+ * جلسة اختيارات واجهة المواقع (مواقع-26): معامل `entrance` الاختياري
+ * يضيف دخولًا نابضًا (صعود + دوران 6° + تكبير بنوابض 0.55 يتبعه
+ * الجزء الثانوي بعد 120 مللي ثانية) — معطّل افتراضيًا حتى لا تتأثر
+ * الشاشات الأخرى الملتزمة بنطاقها.
  */
 @Composable
 fun GalaxyExpandingFab(
@@ -179,9 +179,24 @@ fun GalaxyExpandingFab(
     onPrimary: () -> Unit,
     modifier: Modifier = Modifier,
     secondaryLabel: String? = null,
-    onSecondary: (() -> Unit)? = null
+    onSecondary: (() -> Unit)? = null,
+    entrance: Boolean = false
 ) {
     var expanded by remember { mutableStateOf(false) }
+    // دخول الزر الرئيسي ثم الثانوي متتابعين (مواقع-26)
+    val enter = remember { Animatable(if (entrance) 0f else 1f) }
+    val labelsEnter = remember { Animatable(if (entrance) 0f else 1f) }
+    LaunchedEffect(entrance) {
+        if (entrance && enter.value < 1f) {
+            enter.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium))
+        }
+    }
+    LaunchedEffect(entrance) {
+        if (entrance && labelsEnter.value < 1f) {
+            delay(120)
+            labelsEnter.animateTo(1f, spring(dampingRatio = 0.55f, stiffness = Spring.StiffnessMedium))
+        }
+    }
     Surface(
         onClick = {
             if (!expanded) {
@@ -191,7 +206,13 @@ fun GalaxyExpandingFab(
                 onPrimary()
             }
         },
-        modifier = modifier,
+        modifier = modifier.graphicsLayer {
+            translationY = (1f - enter.value) * 24.dp.toPx()
+            rotationZ = (1f - enter.value) * 6f
+            val s = 0.85f + 0.15f * enter.value
+            scaleX = s
+            scaleY = s
+        },
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.primary,
         contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -210,7 +231,11 @@ fun GalaxyExpandingFab(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.graphicsLayer {
+                        translationY = (1f - labelsEnter.value) * 14.dp.toPx()
+                        alpha = labelsEnter.value.coerceIn(0f, 1f)
+                    }
                 ) {
                     Text(primaryLabel, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
                     if (secondaryLabel != null && onSecondary != null) {
@@ -238,74 +263,10 @@ fun GalaxyExpandingFab(
 
 /* ═══════════════ 3) زر الحالة المتدرج — تحول لدائرة تحميل ═══════════════ */
 
-private enum class MorphPhase { IDLE, LOADING, DONE }
-
-/**
- * زر يغيّر حالة عنصر (بدء صيانة/إرجاع): عند النقر ينكمش لدائرة
- * تدور أثناء المعالجة، ثم يتلون بالأخضر مع علامة نجاح قبل أن يعود
- * (اختيار 3-2). الارتفاع ثابت حتى لا تقفز البطاقة أثناء التحول.
- */
-@Composable
-fun MorphingActionButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    outlined: Boolean = false
-) {
-    var phase by remember { mutableStateOf(MorphPhase.IDLE) }
-    val scope = rememberCoroutineScope()
-    val rotation = remember { Animatable(0f) }
-
-    LaunchedEffect(phase) {
-        if (phase == MorphPhase.LOADING) {
-            rotation.snapTo(0f)
-            rotation.animateTo(540f, tween(900))
-        }
-    }
-
-    Box(modifier = modifier.height(40.dp), contentAlignment = Alignment.Center) {
-        when (phase) {
-            MorphPhase.IDLE -> {
-                val start: () -> Unit = {
-                    phase = MorphPhase.LOADING
-                    onClick()
-                    scope.launch {
-                        delay(480)
-                        phase = MorphPhase.DONE
-                        delay(700)
-                        phase = MorphPhase.IDLE
-                    }
-                }
-                if (outlined) {
-                    OutlinedButton(onClick = start) { Text(label) }
-                } else {
-                    Button(onClick = start) { Text(label) }
-                }
-            }
-            MorphPhase.LOADING -> Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .graphicsLayer { rotationZ = rotation.value }
-                    .border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
-            )
-            MorphPhase.DONE -> Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.secondary),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "✓",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSecondary
-                )
-            }
-        }
-    }
-}
-
 /* ═══════════════ 4+47) شاشة القفل — كوكبة الرمز ═══════════════ */
+/* ملاحظة هذه الجلسة: «زر الحالة المتحول» (اختيار 3-2) حُذف مكوّنه
+ * `MorphingActionButton` ونوعه الخاص `MorphPhase` كميتين — صفر
+ * استدعاءات في التطبيق كله بعد التحقق اليدوي. */
 
 /**
  * خانات الرمز السري على هيئة كوكبة (اختيار 4-2 ثم ترقية اختيار 47
@@ -395,113 +356,11 @@ fun PinDots(pin: String, modifier: Modifier = Modifier, maxLen: Int = 8) {
     }
 }
 
-/* ═══════════════ 5) علامات الصح — رسم الخط ═══════════════ */
-
-/**
- * مربع تحديد تُرسم داخله علامة الصح خطًا متحركًا كأنها كُتبت
- * باليد (اختيار 5-1) — بديل بصري لـ Checkbox الافتراضي.
- *
- * ترقية الجولة الثالثة (اختيار 41 — جزيئات): عند اكتمال رسم الصح
- * تتطاير 6 شظايا نجمية صغيرة بألوان الهوية من مركز المربع. الجزيئات
- * تعمل فقط عند التحوّل من غير محدد إلى محدد (وليس عند أول تركيب
- * لعنصر محدد مسبقًا). `celebrate = false` يعطّل الجزيئات لمن يريد
- * العلامة المرسومة وحدها.
- */
-@Composable
-fun DrawnCheck(
-    checked: Boolean,
-    modifier: Modifier = Modifier,
-    onToggle: ((Boolean) -> Unit)? = null,
-    celebrate: Boolean = true
-) {
-    val fraction by animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = tween(240),
-        label = "check-draw"
-    )
-    // جزيئات الاحتفال (اختيار 41): تقدم 0→1 عند اكتمال التحديد
-    val burst = remember { Animatable(0f) }
-    val composedOnce = remember { mutableStateOf(false) }
-    LaunchedEffect(checked) {
-        val firstComposition = !composedOnce.value
-        composedOnce.value = true
-        if (checked && !firstComposition && celebrate) {
-            burst.snapTo(0f)
-            burst.animateTo(1f, animationSpec = tween(420))
-        } else if (!checked) {
-            burst.snapTo(0f)
-        }
-    }
-    val borderColor by animateColorAsState(
-        targetValue = if (checked) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.outline,
-        animationSpec = tween(180),
-        label = "check-border"
-    )
-    val checkColor = MaterialTheme.colorScheme.secondary
-    val sparkColors = listOf(
-        MaterialTheme.colorScheme.primary,
-        MaterialTheme.colorScheme.secondary,
-        MaterialTheme.colorScheme.tertiary
-    )
-    val path = remember {
-        Path().apply {
-            moveTo(4.5f, 11f)
-            lineTo(9.5f, 16f)
-            lineTo(17.5f, 5.5f)
-        }
-    }
-    val measure = remember { PathMeasure() }
-
-    Box(
-        modifier = modifier
-            .size(24.dp)
-            .clip(RoundedCornerShape(7.dp))
-            .border(2.dp, borderColor, RoundedCornerShape(7.dp))
-            .background(
-                if (checked) checkColor.copy(alpha = 0.12f) else Color.Transparent,
-                RoundedCornerShape(7.dp)
-            )
-            .then(if (onToggle != null) Modifier.clickable { onToggle(!checked) } else Modifier)
-            .padding(2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            if (fraction > 0f) {
-                measure.setPath(path, false)
-                val segment = Path()
-                measure.getSegment(0f, measure.length * fraction, segment, true)
-                drawPath(
-                    path = segment,
-                    color = checkColor,
-                    style = Stroke(
-                        width = 2.6.dp.toPx(),
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
-                )
-            }
-            // جزيئات الاختيار 41: 6 شظايا تنطلق من المركز بزوايا ثابتة
-            if (burst.value > 0f && burst.value < 1f) {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val maxRadius = 16.dp.toPx()
-                repeat(6) { i ->
-                    val angle = (i * 60f + 18f) * PI.toFloat() / 180f
-                    val radius = maxRadius * burst.value
-                    drawCircle(
-                        color = sparkColors[i % 3].copy(alpha = 1f - burst.value),
-                        radius = 1.4.dp.toPx() * (1f - burst.value * 0.5f),
-                        center = Offset(
-                            x = center.x + cos(angle) * radius,
-                            y = center.y + sin(angle) * radius
-                        )
-                    )
-                }
-            }
-        }
-    }
-}
-
 /* ═══════════════ 6) لوحة الألوان — حلقة منزلقة ═══════════════ */
+/* ملاحظة هذه الجلسة: «علامة الصح المرسومة» (اختيارا 5-1 و41) حُذف
+ * مكوّنها `DrawnCheck` كميت — استُبدلت وظيفتها في تبويب المواد
+ * برقاقات الحالة الدلالية منذ النسخة 2.8.0 وبقي تعريفه بلا أي
+ * استدعاء. */
 
 /**
  * لوحة ألوان التصنيف: حلقة بيضاء تنزلق بسلاسة من اللون السابق
@@ -772,16 +631,18 @@ fun OdometerNumber(
 /**
  * شارة «متأخر N يوم» تتنفس بين درجة باهتة ومشبعة من الأحمر بهدوء
  * (اختيار 16-2)؛ القريب من الموعد يبقى بلون ثابت بلا حركة.
+ * جلسة اختيارات واجهة المواقع (مواقع-13): رقم الأيام وحده ينقلب
+ * رأسيًا كلوح قلاب عند تغيّر قيمته (`AnimatedContent` بانزلاق رأسي
+ * متقاطع)، والتنفس اللوني يبقى على كامل الشارة.
  */
 @Composable
 fun BreathingDueBadge(days: Long, modifier: Modifier = Modifier) {
     val overdue = days < 0
-    val text = when {
-        overdue -> "متأخر ${-days} يوم"
-        days == 0L -> "اليوم"
-        else -> "بعد $days يوم"
-    }
     if (!overdue) {
+        val text = when {
+            days == 0L -> "اليوم"
+            else -> "بعد $days يوم"
+        }
         Text(
             text,
             modifier = modifier,
@@ -810,12 +671,31 @@ fun BreathingDueBadge(days: Long, modifier: Modifier = Modifier) {
             .background(bg)
             .padding(horizontal = 10.dp, vertical = 2.dp)
     ) {
-        Text(
-            text,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.error,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.graphicsLayer { alpha = 0.75f + 0.25f * breath.value }
-        )
+        ) {
+            Text("متأخر", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            AnimatedContent(
+                targetState = -days,
+                transitionSpec = {
+                    (slideInVertically(animationSpec = tween(260)) { it } + fadeIn(tween(220)))
+                        .togetherWith(
+                            slideOutVertically(animationSpec = tween(220)) { -it } + fadeOut(tween(180))
+                        )
+                },
+                label = "due-flip"
+            ) { value ->
+                Text(
+                    value.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            Text("يوم", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+        }
     }
 }
 
@@ -918,37 +798,10 @@ fun GalaxyRevealDialog(
     }
 }
 
-/* ═══════════════ 34) مروف الأرقام عند تغيّر القيم ═══════════════ */
-
-/**
- * رقم ينزلق قديمه للأعلى ويدخل الجديد من الأسفل عند تغيّر القيمة
- * (اختيار 34 = خيار 6) — حياة في البيانات دون عجلة العدّاد الكاملة
- * (تلك لظهور الشاشة أول مرة في `OdometerNumber`).
- */
-@Composable
-fun GalaxyNumberMorph(
-    value: Int,
-    style: TextStyle,
-    color: Color,
-    modifier: Modifier = Modifier,
-    suffix: String = ""
-) {
-    AnimatedContent(
-        targetState = value,
-        modifier = modifier,
-        transitionSpec = {
-            (slideInVertically(animationSpec = tween(260)) { it } + fadeIn(tween(220)))
-                .togetherWith(
-                    slideOutVertically(animationSpec = tween(220)) { -it } + fadeOut(tween(180))
-                )
-        },
-        label = "number-morph"
-    ) { v ->
-        Text(v.toString() + suffix, style = style, color = color)
-    }
-}
-
 /* ═══════════════ 37) حلقة عد تنازلي لاستحقاق الصيانة ═══════════════ */
+/* ملاحظة هذه الجلسة: «مروف الأرقام» (اختيار 34) حُذف مكوّنه
+ * `GalaxyNumberMorph` كميت — عرّف في جلسة 2.6 ولم يُستدعَ في أي
+ * شاشة (الحيّ المستخدم فعليًا هو `OdometerNumber`). */
 
 /**
  * حلقة تستنزف مع اقتراب موعد الصيانة وتتلون حسب الخطورة:
@@ -1191,45 +1044,11 @@ fun GalaxySunMoonSwitch(
     }
 }
 
-/* ═══════════════ 43) شيمر سديمي أثناء التحميل ═══════════════ */
-
-/**
- * هيكل تحميل «سديمي»: سطح بلون متغير يلمع عليه تدرج منجرف بلا
- * نهاية بألوان الهوية (اختيار 43 = خيار 18) — الانتظار يبقى داخل
- * عالم المجرة بدل السبينر العام.
- */
-@Composable
-fun GalaxyShimmerBox(modifier: Modifier = Modifier) {
-    val transition = rememberInfiniteTransition(label = "shimmer")
-    val shift by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmer-shift"
-    )
-    val base = MaterialTheme.colorScheme.surfaceVariant
-    val glowA = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
-    val glowB = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)
-    Box(
-        modifier = modifier.drawBehind {
-            drawRect(color = base)
-            val bandWidth = this.size.width * 0.9f
-            val startX = -bandWidth + (this.size.width + bandWidth * 2f) * shift
-            drawRect(
-                brush = Brush.linearGradient(
-                    colors = listOf(Color.Transparent, glowA, glowB, Color.Transparent),
-                    start = Offset(startX, 0f),
-                    end = Offset(startX + bandWidth, this.size.height * 0.5f)
-                )
-            )
-        }
-    )
-}
-
 /* ═══════════════ 44) انفجار نجوم عند نجاح العمليات ═══════════════ */
+/* ملاحظة هذه الجلسة: «الشيمر السديمي» (اختيار 43) حُذف مكوّنه
+ * `GalaxyShimmerBox` لأنه مات — عُدَّ في جلسة 2.6 منفَّذًا لكنه لم
+ * يُستدعَ في أي شاشة قط (المسح السابق كان يفحص الدوال الخاصة
+ * فقط). الحذف بعد تحقق يدوي: صفر استدعاءات في الكود والاختبارات. */
 
 /**
  * طبقة نجوم تتطاير من المركز لحظة نجاح عملية مهمة (اختيار 44 =
